@@ -93,7 +93,9 @@ anything useful, and the schema is stable enough to build on.
 
 **Exit criteria**
 
-- [ ] Signing up then dumping the entire D1 database shows no readable field
+- [x] Signing up then dumping the entire D1 database shows no readable field
+      (verified 2026-08-26; the email is ciphertext too, though under a
+      server-held key — see ADR-014)
 - [~] `prelogin` timing for a known vs unknown email differs by under 5 ms
       across 100 samples — holds under `next dev`, but only because the dev D1
       proxy costs more than the constant-time budget and does so symmetrically.

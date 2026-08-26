@@ -13,16 +13,16 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| ZK-01 | Client-side-only encryption; plaintext never crosses the network | P1 | TODO |
-| ZK-02 | Master password never sent to the server in any form | P1 | TODO |
+| ZK-01 | Client-side-only encryption; plaintext never crosses the network | P1 | DONE |
+| ZK-02 | Master password never sent to the server in any form | P1 | DONE |
 | ZK-03 | AES-256-GCM for all vault data, fresh IV per operation | P1 | DONE |
 | ZK-04 | Argon2id key derivation, tuned to ~500 ms client-side | P1 | DONE |
 | ZK-05 | Two independent derived keys (auth vs encryption) | P1 | DONE |
 | ZK-06 | Random per-user Account Key wrapped by the Master Key | P1 | DONE |
 | ZK-07 | Master-password change re-wraps only the Account Key | P1 | DONE |
 | ZK-08 | ECDH P-256 key pair per user for encrypted sharing | P1 | DONE |
-| ZK-09 | Server secrets are irrelevant to data confidentiality | P1 | TODO |
-| ZK-10 | Encrypted metadata: titles, URLs, folder names, ENV keys | P1 | TODO |
+| ZK-09 | Server secrets are irrelevant to data confidentiality | P1 | DONE |
+| ZK-10 | Encrypted metadata: titles, URLs, folder names, ENV keys | P1 | DONE |
 | ZK-11 | Blind index (HMAC) for server-side equality lookups | P1 | DONE |
 | ZK-12 | Versioned ciphertext envelope (`v1.iv.ct`) for future migration | P1 | DONE |
 | ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | DONE |
@@ -34,7 +34,7 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| AUTH-01 | Signup with client-side key generation and Emergency Kit | P2 | TODO |
+| AUTH-01 | Signup with client-side key generation and Emergency Kit | P2 | DONE |
 | AUTH-02 | Login via derived Auth Key, peppered verifier on server | P2 | TODO |
 | AUTH-03 | Constant-time verifier comparison | P2 | TODO |
 | AUTH-04 | Prelogin salt endpoint with deterministic fake salts | P2 | DONE |

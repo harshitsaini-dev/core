@@ -14,6 +14,10 @@ read stored passwords, secrets, notes, `.env` values, item titles, URLs, folder
 names or project names. All of it is ciphertext by the time it leaves your
 device.
 
+The one exception is your email address, which the server must be able to read
+in order to send to it. That is covered under what Core does *not* protect,
+below.
+
 ### A full database compromise
 An attacker who dumps the entire D1 database obtains encrypted blobs and
 authentication verifiers. Each verifier is `HMAC-SHA256(pepper, authKey)`, and
@@ -69,6 +73,13 @@ If your master password is short or reused, the design cannot save you.
 
 **Forgetting your master password.** There is no recovery path other than your
 Emergency Kit. This is deliberate.
+
+**Your email address.** The operator can read it. Core has to be able to send
+you magic links, login alerts and new-device codes, and a server that cannot
+read an address cannot send to it. The address is encrypted at rest under a
+server-held key, so a database dump alone does not expose it — but the operator
+holds that key. Everything else in your vault stays unreadable to them. If this
+matters to you, self-host. See ADR-014.
 
 **Traffic analysis.** The operator cannot read your data but can observe that
 you synced, roughly how much data you hold, and when you were active.

@@ -1,7 +1,14 @@
 import { DEFAULT_KDF_PARAMS, SIZES } from '@core/shared';
-import type { KdfParams } from '@core/shared';
+import type { Encrypted, KdfParams } from '@core/shared';
 import type { Bytes } from '@core/crypto';
-import { base64UrlToBytes, bytesToBase64Url, utf8ToBytes } from '@core/crypto';
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  decryptString,
+  encryptString,
+  importAesKey,
+  utf8ToBytes,
+} from '@core/crypto';
 
 /**
  * Server-side key material, all derived from one secret.
@@ -26,6 +33,8 @@ const INFO = {
   uaHash: 'core.server.ua-hash.v1',
   /** Hashes session tokens before storage. */
   sessionToken: 'core.server.session-token.v1',
+  /** Encrypts email addresses at rest. See the note on emailEncrypt. */
+  emailAtRest: 'core.server.email-at-rest.v1',
 } as const;
 
 export type ServerKeyPurpose = keyof typeof INFO;
@@ -134,6 +143,49 @@ export async function decoyKdfParams(pepper: Bytes, email: string): Promise<KdfP
   const iterations = MIN + ((signature[0] as number) % SPREAD);
 
   return { ...DEFAULT_KDF_PARAMS, iterations };
+}
+
+/**
+ * Encrypt an email address for storage — under a **server** key, not the user's.
+ *
+ * This is the one piece of user data the operator can read, and pretending
+ * otherwise would be dishonest. The server has to send magic links, login alerts
+ * and new-device codes; an address encrypted under the user's Account Key would
+ * be unreadable to it, and all of those features would simply not exist.
+ *
+ * So the choice is between "the operator can email you" and "the operator does
+ * not know your address", and this project picks the former. What the encryption
+ * still buys is real but narrower: a database dump on its own yields no
+ * addresses, because the key lives in the Worker secret store rather than in D1.
+ * An attacker needs both.
+ *
+ * Nothing else in the vault works this way. Titles, passwords, notes and `.env`
+ * values are encrypted under keys the server never holds, and remain unreadable
+ * even to someone holding the pepper.
+ */
+async function emailAtRestKey(pepper: Bytes): Promise<CryptoKey> {
+  const hkdfKey = await crypto.subtle.importKey('raw', pepper, 'HKDF', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(0),
+      info: utf8ToBytes(INFO.emailAtRest),
+    },
+    hkdfKey,
+    SIZES.key * 8,
+  );
+  return importAesKey(new Uint8Array(bits) as Bytes);
+}
+
+const EMAIL_AAD = 'core.email.v1';
+
+export async function emailEncrypt(pepper: Bytes, email: string): Promise<Encrypted> {
+  return encryptString(await emailAtRestKey(pepper), normalizeEmail(email), EMAIL_AAD);
+}
+
+export async function emailDecrypt(pepper: Bytes, envelope: string): Promise<string> {
+  return decryptString(await emailAtRestKey(pepper), envelope, EMAIL_AAD);
 }
 
 /** Hash an IP for the audit log. Never store the address itself. */

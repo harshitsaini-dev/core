@@ -268,3 +268,42 @@ across columns. The strings become part of the on-disk format, so changing one
 breaks existing data; they are covered by the published test vectors. Binding to
 a specific *row id* rather than a role would be stronger still, and remains open
 for Phase 2 once the schema exists.
+
+---
+
+## ADR-014 — The email address is readable by the operator
+
+**Date:** 2026-08-26 · **Status:** Accepted · **Qualifies** ADR-002
+
+**Context.** The schema originally described `users.email_enc` as encrypted like
+every other user field. Building signup made the contradiction obvious: Core is
+supposed to send magic links, login alerts and new-device codes, and a server
+that cannot read an address cannot send to it. Encrypting the email under the
+user's Account Key would have silently made every one of those features
+impossible — or, worse, quietly invited a later change that stored the address
+in plaintext beside the ciphertext.
+
+**Decision.** The email address is encrypted at rest under a **server-held** key
+derived from `AUTH_PEPPER`, not under the user's Account Key. The operator can
+decrypt it. This is stated plainly in the threat model rather than left for
+someone to discover in the schema.
+
+**What this still buys.** A database dump on its own yields no addresses,
+because the key lives in the Worker secret store rather than in D1. An attacker
+needs both the database and the secret store.
+
+**What it costs.** Core is no longer zero-knowledge with respect to *who its
+users are* — only with respect to what they store. The operator can enumerate
+addresses. Anyone who considers that unacceptable should self-host, which is one
+of the reasons self-hosting is a first-class goal rather than a nice-to-have.
+
+**Rejected alternative.** Dropping email entirely and identifying accounts by a
+random handle would preserve the stronger property, but it removes account
+recovery, breach alerts and new-device verification — protections that matter
+more, in practice, than hiding an address from a server the user chose to trust
+enough to hold their vault.
+
+**Consequences.** `email_enc` is the single field in the schema encrypted under a
+server key. It is commented as such, and the plaintext-allowlist test does not
+cover that distinction, so the comment and this ADR are what carry it. Every
+other `_enc` column remains unreadable to the operator.

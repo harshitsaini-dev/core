@@ -23,6 +23,10 @@ Concretely, the server only ever sees:
 The server never sees: master password, master key, account key, item titles,
 usernames, URLs, folder names, project names, `.env` keys or `.env` values.
 
+It does see one thing: your email address, which it must be able to read in
+order to send to it. That single exception is documented in ADR-014 and in the
+threat model rather than buried in the schema.
+
 ---
 
 ## 2. System overview
@@ -184,11 +188,15 @@ makes the zero-knowledge claim auditable by a stranger.
 
 ## 5. Data model (D1 / SQLite)
 
-Columns marked **[E]** hold ciphertext and never plaintext.
+Columns marked **[E]** hold ciphertext under a key the server never has.
+
+`email_enc` is marked **[S]** instead: it is encrypted, but under a server-held
+key, because the server has to be able to send email. It is the only such column
+in the schema. See ADR-014.
 
 ```
 users
-  id, email_blind_index, email_enc[E], auth_verifier, kdf_salt, kdf_params_json,
+  id, email_blind_index, email_enc[S], auth_verifier, kdf_salt, kdf_params_json,
   account_key_wrapped[E], public_key, private_key_wrapped[E],
   created_at, updated_at
 

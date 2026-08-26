@@ -82,12 +82,22 @@ declare const encryptedBrand: unique symbol;
  */
 export type Encrypted = string & { readonly [encryptedBrand]: true };
 
+/** Shape of a v1 envelope. Structure only — says nothing about decryptability. */
+export const ENVELOPE_PATTERN = /^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
 /**
  * Assert that a string is a ciphertext envelope.
  *
- * Only `@core/crypto` may call this, and only on values it has just produced.
- * Anywhere else it is a hole straight through the type system — if you are
- * reaching for it in application code, the design has gone wrong.
+ * There are exactly two sanctioned callers:
+ *
+ *   1. `@core/crypto`, on values it has just produced.
+ *   2. The request-validation layer, on a client-supplied string that has been
+ *      shape-checked against `ENVELOPE_PATTERN`.
+ *
+ * The second case is not a loophole but the honest boundary: ciphertext from a
+ * client is opaque by definition, so the most the server can ever establish is
+ * that it has the right structure. Anywhere else, reaching for this means the
+ * design has gone wrong.
  */
 export function unsafeAsEncrypted(value: string): Encrypted {
   return value as Encrypted;
