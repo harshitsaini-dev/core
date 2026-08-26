@@ -1,0 +1,68 @@
+# --- dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- build output ---
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+.open-next/
+*.tsbuildinfo
+
+# --- secrets & local config ---
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+secrets/
+
+# --- cloudflare / wrangler ---
+.wrangler/
+.mf/
+wrangler.local.toml
+
+# --- test & coverage ---
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# --- editor & os ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# --- local planning & working notes (not part of the public project) ---
+raw-plan.txt
+docs/daily-log.md
+docs/manual-work.md
+docs/project-state.md
+docs/skills.md
+notes/
+scratch/
+
+# --- local tooling config ---
+.claude/
+.mcp.json
+.cursor/
+.aider*
+CLAUDE.md
+AGENTS.md
