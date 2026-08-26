@@ -61,9 +61,18 @@ export const useVault = create<VaultState>((set, get) => ({
   setAutoLockMs: (ms) => set({ autoLockMs: ms }),
 
   panic: async () => {
-    // Lock first. If the network call hangs, the keys are already gone — which
-    // is the order that matters when someone is reaching for this in a hurry.
+    // Lock first. If anything after this hangs, the keys are already gone —
+    // which is the order that matters when somebody is reaching for this in a
+    // hurry.
     get().lock(false);
+
+    // Then the local cache. Locking alone would leave an encrypted copy of the
+    // vault on the device, which is exactly what this button exists to remove.
+    // Anything the outbox had not delivered is lost with it; that is the right
+    // trade for a control somebody presses because they want the data gone.
+    const { wipeLocal } = await import('./items-store');
+    await wipeLocal();
+
     await logout();
   },
 }));

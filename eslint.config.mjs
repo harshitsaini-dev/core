@@ -40,6 +40,22 @@ export default tseslint.config(
     },
   },
   {
+    // The service worker runs in a worker scope, not a page or Node, so its
+    // globals are neither set. Linted with those declared rather than exempted
+    // entirely — a typo in `caches` should still be caught.
+    files: ['**/public/sw.js'],
+    languageOptions: {
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
+  {
     // Build scripts run under Node and legitimately use its globals.
     files: ['**/scripts/**/*.mjs'],
     languageOptions: {

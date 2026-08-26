@@ -3,7 +3,7 @@
 import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useState } from 'react';
-import { LoginFailed, login } from '@/lib/client/auth';
+import { LoginFailed, login, unlockOffline } from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
 
 /**
@@ -41,7 +41,19 @@ export default function LoginPage() {
       setBusy(true);
 
       try {
-        const keys = await login(email, password, setProgress);
+        let keys;
+        try {
+          keys = await login(email, password, setProgress);
+        } catch (networkFailure) {
+          // A rejected password is final; only an unreachable server is worth
+          // falling back for. Trying the local copy after a genuine rejection
+          // would let an old password keep working after it was changed
+          // elsewhere.
+          if (networkFailure instanceof LoginFailed) throw networkFailure;
+          setProgress('offline — unlocking from this device');
+          keys = await unlockOffline(email, password, setProgress);
+        }
+
         unlock(keys);
         // Client-side navigation, deliberately. The keys live in memory and are
         // never persisted, so a full page load would discard them and land on a

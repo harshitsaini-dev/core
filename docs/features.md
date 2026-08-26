@@ -27,7 +27,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ZK-12 | Versioned ciphertext envelope (`v1.iv.ct`) for future migration | P1 | DONE |
 | ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | DONE |
 | ZK-14 | Memory wipe of keys and plaintext on lock or tab close | P3 | DONE |
-| ZK-15 | Per-device non-extractable key encrypting the offline cache | P3 | TODO |
+| ZK-15 | Per-device non-extractable key encrypting the offline cache | P3 | DONE |
 | ZK-16 | No administrator password reset — documented as a hard guarantee | P2 | DONE |
 
 ## AUTH — Authentication & Session
@@ -124,11 +124,11 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| PWA-01 | Installable PWA with manifest and maskable icons | P3 | TODO |
-| PWA-02 | Service worker with offline app shell | P3 | TODO |
-| PWA-03 | Dexie / IndexedDB encrypted offline vault | P3 | TODO |
-| PWA-04 | Offline read *and* write with outbox queue | P3 | TODO |
-| PWA-05 | Offline / online indicator dot | P3 | TODO |
+| PWA-01 | Installable PWA with manifest and maskable icons | P3 | DONE |
+| PWA-02 | Service worker with offline app shell | P3 | DONE |
+| PWA-03 | Dexie / IndexedDB encrypted offline vault | P3 | DONE |
+| PWA-04 | Offline read *and* write with outbox queue | P3 | DONE |
+| PWA-05 | Offline / online indicator dot | P3 | DONE |
 | PWA-06 | Bottom navigation bar on mobile | P3 | TODO |
 | PWA-07 | Pull-to-refresh manual sync | P3 | TODO |
 | PWA-08 | Swipe actions: copy username / copy password | P3 | TODO |

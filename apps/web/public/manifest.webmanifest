@@ -1,5 +1,5 @@
 {
-  "name": "Core — zero-knowledge vault",
+  "name": "Core",
   "short_name": "Core",
   "description": "A zero-knowledge password, secret and .env manager. Encrypted in your browser, unreadable to the server.",
   "id": "/",

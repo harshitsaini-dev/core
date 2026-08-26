@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { ServiceWorker } from './service-worker';
 
 /**
  * Metadata and link previews.
@@ -22,7 +23,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
-    default: 'Core — zero-knowledge vault',
+    default: 'Core',
     template: '%s — Core',
   },
   description: DESCRIPTION,
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Core',
-    title: 'Core — zero-knowledge vault',
+    title: 'Core',
     description: DESCRIPTION,
     url: APP_URL,
     images: [
@@ -55,7 +56,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Core — zero-knowledge vault',
+    title: 'Core',
     description: DESCRIPTION,
     images: ['/og.png'],
   },
@@ -80,7 +81,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-bg text-fg min-h-dvh antialiased">{children}</body>
+      <body className="bg-bg text-fg min-h-dvh antialiased">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

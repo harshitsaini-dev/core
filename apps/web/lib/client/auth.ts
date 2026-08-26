@@ -14,6 +14,7 @@ import {
 } from '@core/crypto';
 import type { AccountKeys } from '@core/crypto';
 import type { KdfParams } from '@core/shared';
+import * as offline from './offline-db';
 
 /**
  * The client half of authentication.
@@ -152,7 +153,61 @@ export async function login(
   // If this throws, the server returned a wrapper this password cannot open —
   // which should be impossible after a successful login, and is worth surfacing
   // as a failure rather than an empty vault.
-  return unwrapAccountKeys(masterKey, body.accountKeyWrapped);
+  const keys = await unwrapAccountKeys(masterKey, body.accountKeyWrapped);
+
+  // Keep what is needed to do this again without a server. All three values are
+  // ones the server hands out anyway; see the note in offline-db.
+  await offline.writeUnlockMaterial({
+    email: normalise(email),
+    kdfSalt,
+    kdfParams,
+    accountKeyWrapped: body.accountKeyWrapped,
+  });
+
+  return keys;
+}
+
+/** Match the server's normalisation, so a cached record is found by any casing. */
+function normalise(email: string): string {
+  return email.normalize('NFKC').trim().toLowerCase();
+}
+
+/**
+ * Unlock without a server.
+ *
+ * Used when the network is unavailable. The work is identical to the online
+ * path minus the two requests: derive from the locally cached salt, unwrap the
+ * locally cached Account Key, done.
+ *
+ * Tried only after the network path fails, never before. The server's copy is
+ * authoritative — a password changed on another device has to win over whatever
+ * this one remembers.
+ */
+export async function unlockOffline(
+  email: string,
+  masterPassword: string,
+  onProgress?: (step: string) => void,
+): Promise<AccountKeys> {
+  const material = await offline.readUnlockMaterial();
+  if (!material || material.email !== normalise(email)) {
+    throw new LoginFailed();
+  }
+
+  onProgress?.('deriving keys offline');
+  const { authKey, masterKey } = await deriveKeys(
+    masterPassword,
+    base64UrlToBytes(material.kdfSalt),
+    material.kdfParams as KdfParams,
+  );
+  wipe(authKey);
+
+  try {
+    return await unwrapAccountKeys(masterKey, material.accountKeyWrapped);
+  } catch {
+    // The wrapper did not open, which here means the wrong password. Reported
+    // the same way as any other authentication failure.
+    throw new LoginFailed();
+  }
 }
 
 /** End the session. Best-effort: local state is cleared either way. */

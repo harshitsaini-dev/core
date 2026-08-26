@@ -6,7 +6,7 @@ import { Button, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
-import { activeItems, trashedItems, useItems } from '@/lib/client/items-store';
+import { activeItems, trashedItems, useItems, watchConnectivity } from '@/lib/client/items-store';
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { ItemForm } from './item-form';
@@ -33,6 +33,8 @@ export default function VaultPage() {
   const loading = useItems((store) => store.loading);
   const error = useItems((store) => store.error);
   const undecryptable = useItems((store) => store.undecryptable);
+  const online = useItems((store) => store.online);
+  const pending = useItems((store) => store.pending);
   const load = useItems((store) => store.load);
   const reset = useItems((store) => store.reset);
 
@@ -40,6 +42,7 @@ export default function VaultPage() {
   const [query, setQuery] = useState('');
 
   useEffect(() => startAutoLock(), []);
+  useEffect(() => watchConnectivity(), []);
 
   useEffect(() => {
     if (state === 'unlocked') {
@@ -99,9 +102,12 @@ export default function VaultPage() {
         <h1 className="text-accent text-glow text-lg font-bold tracking-tight">
           <span className="cursor">core</span>
         </h1>
-        <p className="text-muted font-mono text-xs" data-testid="vault-state">
-          vault unlocked
-        </p>
+        <div className="flex items-center gap-4">
+          <ConnectionStatus online={online} pending={pending} />
+          <p className="text-muted font-mono text-xs" data-testid="vault-state">
+            vault unlocked
+          </p>
+        </div>
       </header>
 
       {view.kind === 'list' ? (
@@ -186,6 +192,35 @@ export default function VaultPage() {
         <Trash items={trashed} onBack={() => setView({ kind: 'list' })} />
       ) : null}
     </main>
+  );
+}
+
+/**
+ * Connection state.
+ *
+ * A dot and a word, not a dot alone. Colour is the wrong carrier here twice
+ * over: the palette is one hue, and "is this saved" is the question a user most
+ * needs an unambiguous answer to.
+ *
+ * Being offline is reported as a fact rather than a problem — the vault is
+ * fully usable in that state, and an alarming banner would suggest otherwise.
+ */
+function ConnectionStatus({ online, pending }: { online: boolean; pending: number }) {
+  const label = !online ? 'offline' : pending > 0 ? `syncing ${pending}` : 'synced';
+
+  return (
+    <p
+      className={
+        online && pending === 0
+          ? 'text-accent-dim font-mono text-xs'
+          : 'text-warning font-mono text-xs'
+      }
+      data-testid="connection-status"
+      aria-live="polite"
+    >
+      <span aria-hidden="true">{online && pending === 0 ? '●' : '○'} </span>
+      {label}
+    </p>
   );
 }
 

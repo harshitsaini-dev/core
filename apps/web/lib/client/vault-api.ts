@@ -24,6 +24,14 @@ interface SyncResponse {
 
 export interface PullResult {
   readonly items: DecryptedItem[];
+  /**
+   * The rows exactly as the server sent them.
+   *
+   * Returned alongside the decrypted view so the caller can write them straight
+   * to the offline cache. Re-encrypting the decrypted form would produce
+   * different ciphertext for the same item and defeat any later comparison.
+   */
+  readonly raw: SyncedItem[];
   /** Items the server sent that this client could not decrypt. */
   readonly undecryptable: string[];
   readonly cursor: number;
@@ -81,7 +89,62 @@ export async function pull(keys: AccountKeys, cursor = 0): Promise<PullResult> {
     }
   });
 
-  return { items, undecryptable, cursor: body.cursor };
+  return { items, raw: body.items, undecryptable, cursor: body.cursor };
+}
+
+/**
+ * Decrypt rows that came from the offline cache rather than the network.
+ *
+ * Same work as a pull, minus the fetch — which is the entire point: a vault
+ * opened on a train should look exactly like one opened online.
+ */
+export async function decryptCached(
+  keys: AccountKeys,
+  rows: readonly SyncedItem[],
+): Promise<{ items: DecryptedItem[]; undecryptable: string[] }> {
+  const decrypted = await Promise.all(rows.map((row) => decryptItem(keys, row)));
+
+  const items: DecryptedItem[] = [];
+  const undecryptable: string[] = [];
+
+  decrypted.forEach((item, index) => {
+    if (item) {
+      items.push(item);
+    } else {
+      undecryptable.push(rows[index]?.id ?? 'unknown');
+    }
+  });
+
+  return { items, undecryptable };
+}
+
+/**
+ * Build the wire form of a locally-created item, so it can be cached before it
+ * has ever reached the server.
+ */
+export function operationToSynced(operation: Operation, existing?: SyncedItem): SyncedItem | null {
+  if (operation.op !== 'upsert') {
+    if (!existing) return null;
+    return {
+      ...existing,
+      deletedAt: operation.op === 'delete' ? Date.now() : null,
+      updatedAt: Date.now(),
+    };
+  }
+
+  const now = Date.now();
+  return {
+    id: operation.id,
+    type: operation.type,
+    dataEnc: operation.dataEnc,
+    folderId: operation.folderId,
+    urlBlindIndex: operation.urlBlindIndex,
+    favorite: operation.favorite,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: null,
+    lastUsedAt: operation.lastUsedAt,
+  };
 }
 
 export type Operation =

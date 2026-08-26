@@ -1,43 +1,38 @@
 'use client';
 
-import type { DecryptedItem, VaultItemData } from '@core/shared';
+import type { DecryptedItem, SyncedItem, VaultItemData } from '@core/shared';
 import { create } from 'zustand';
-import { newItemId, pull, push, toUpsert } from './vault-api';
+import * as offline from './offline-db';
+import { decryptCached, newItemId, operationToSynced, pull, push, toUpsert } from './vault-api';
 import type { Operation } from './vault-api';
 import { useVault } from './vault-store';
 
 /**
- * The decrypted vault, in memory.
+ * The vault, offline first.
  *
- * Writes are optimistic: the local copy changes first and the server is told
- * afterwards. On a vault that has to work offline that is not an optimisation,
- * it is the only order that works — the alternative is a UI that freezes on
- * every keystroke and stops entirely on a train.
+ * Opening reads the local cache before it touches the network, so a vault opens
+ * on a train exactly as it does at a desk. The network pull that follows is a
+ * refresh, not a prerequisite — treating it as one is what makes most
+ * "offline-capable" apps useless the moment they actually go offline.
  *
- * When a push fails the change is kept and queued rather than rolled back.
- * Silently discarding something a user typed is worse than showing it as
- * unsaved, especially here, where what they typed may be the only copy of a
- * password they just generated.
+ * Writes go to memory, then to the cache and the outbox, then to the server.
+ * If the last step fails the change is kept and retried. Discarding something a
+ * user typed because a request failed is unacceptable here: what they typed may
+ * be the only copy of a password generated seconds ago.
  *
- * Like the key store, this deliberately has no persistence middleware. It holds
- * plaintext.
+ * This store holds plaintext and therefore has no persistence middleware. The
+ * durable copy is the cache, which is encrypted twice over.
  */
-
-export interface PendingOperation {
-  readonly operation: Operation;
-  readonly attempts: number;
-}
 
 interface ItemsState {
   readonly items: readonly DecryptedItem[];
   readonly cursor: number;
   readonly loading: boolean;
   readonly syncing: boolean;
+  readonly online: boolean;
   readonly error: string | null;
-  /** Ids the server sent that this client could not decrypt. */
+  readonly pending: number;
   readonly undecryptable: readonly string[];
-  /** Changes not yet accepted by the server. */
-  readonly outbox: readonly PendingOperation[];
 
   load: () => Promise<void>;
   save: (data: VaultItemData, id?: string) => Promise<string>;
@@ -46,7 +41,9 @@ interface ItemsState {
   remove: (id: string) => Promise<void>;
   restore: (id: string) => Promise<void>;
   flush: () => Promise<void>;
+  setOnline: (online: boolean) => void;
   reset: () => void;
+  wipeLocal: () => Promise<void>;
 }
 
 const EMPTY = {
@@ -54,10 +51,14 @@ const EMPTY = {
   cursor: 0,
   loading: false,
   syncing: false,
+  online: true,
   error: null,
+  pending: 0,
   undecryptable: [] as readonly string[],
-  outbox: [] as readonly PendingOperation[],
 };
+
+/** The wire form of each item, kept so the cache can be written without re-encrypting. */
+const raw = new Map<string, SyncedItem>();
 
 function replace(
   items: readonly DecryptedItem[],
@@ -70,31 +71,73 @@ function replace(
 export const useItems = create<ItemsState>((set, get) => ({
   ...EMPTY,
 
-  reset: () => set({ ...EMPTY }),
+  setOnline: (online) => {
+    set({ online });
+    // Coming back from offline is the moment the queue is most likely to drain.
+    if (online) void get().flush();
+  },
+
+  reset: () => {
+    raw.clear();
+    set({ ...EMPTY, online: get().online });
+  },
+
+  wipeLocal: async () => {
+    raw.clear();
+    set({ ...EMPTY, online: get().online });
+    await offline.wipe();
+  },
 
   load: async () => {
     const keys = useVault.getState().keys;
     if (!keys) return;
 
     set({ loading: true, error: null });
+
+    // 1. The cache. This is what makes the vault usable without a network, and
+    //    it is deliberately first: even online it paints before the request
+    //    returns.
+    try {
+      const cached = await offline.readCache();
+      if (cached.length > 0) {
+        for (const row of cached) raw.set(row.id, row);
+        const decrypted = await decryptCached(keys, cached);
+        set({ items: decrypted.items, undecryptable: decrypted.undecryptable });
+      }
+      set({ cursor: await offline.readCursor(), pending: (await offline.readOutbox()).length });
+    } catch {
+      // A broken cache must not stop the vault opening; the server has it all.
+    }
+
+    // 2. Anything queued from a previous session, before pulling — otherwise a
+    //    pull could overwrite a local change that was never delivered.
+    await get().flush();
+
+    // 3. The refresh.
     try {
       const result = await pull(keys, get().cursor);
 
-      // Merge rather than replace: a delta pull only carries what changed, and
-      // the local copy may hold items this pull did not mention.
       const merged = new Map(get().items.map((item) => [item.id, item]));
-      for (const item of result.items) {
-        merged.set(item.id, item);
-      }
+      for (const item of result.items) merged.set(item.id, item);
+      for (const row of result.raw) raw.set(row.id, row);
 
       set({
         items: [...merged.values()],
         cursor: result.cursor,
         undecryptable: result.undecryptable,
         loading: false,
+        error: null,
       });
+
+      await offline.writeCache(result.raw);
+      await offline.writeCursor(result.cursor);
     } catch {
-      set({ loading: false, error: 'Could not reach the vault.' });
+      set({
+        loading: false,
+        // Not an error if there is something to show. A cached vault working
+        // offline is the feature, not a degraded state to apologise for.
+        error: get().items.length > 0 ? null : 'Could not reach the vault.',
+      });
     }
   },
 
@@ -118,12 +161,10 @@ export const useItems = create<ItemsState>((set, get) => ({
     };
 
     set({
-      items: existing
-        ? replace(get().items, itemId, () => updated)
-        : [...get().items, updated],
+      items: existing ? replace(get().items, itemId, () => updated) : [...get().items, updated],
     });
 
-    await enqueue(
+    await commit(
       set,
       get,
       await toUpsert(keys, {
@@ -144,7 +185,7 @@ export const useItems = create<ItemsState>((set, get) => ({
     if (!keys || !item) return;
 
     set({ items: replace(get().items, id, (current) => ({ ...current, favorite })) });
-    await enqueue(set, get, await toUpsert(keys, { ...item, favorite }));
+    await commit(set, get, await toUpsert(keys, { ...item, favorite }));
   },
 
   markUsed: async (id) => {
@@ -154,35 +195,42 @@ export const useItems = create<ItemsState>((set, get) => ({
 
     const lastUsedAt = Date.now();
     set({ items: replace(get().items, id, (current) => ({ ...current, lastUsedAt })) });
-    await enqueue(set, get, await toUpsert(keys, { ...item, lastUsedAt }));
+    await commit(set, get, await toUpsert(keys, { ...item, lastUsedAt }));
   },
 
   remove: async (id) => {
-    // Soft, matching the server. The item stays in memory with deletedAt set so
-    // trash can list it without another round trip.
     const deletedAt = Date.now();
     set({ items: replace(get().items, id, (current) => ({ ...current, deletedAt })) });
-    await enqueue(set, get, { op: 'delete', id });
+    await commit(set, get, { op: 'delete', id });
   },
 
   restore: async (id) => {
     set({ items: replace(get().items, id, (current) => ({ ...current, deletedAt: null })) });
-    await enqueue(set, get, { op: 'restore', id });
+    await commit(set, get, { op: 'restore', id });
   },
 
   flush: async () => {
-    const pending = get().outbox;
-    if (pending.length === 0 || get().syncing) return;
+    if (get().syncing) return;
+
+    const queued = await offline.readOutbox();
+    set({ pending: queued.length });
+    if (queued.length === 0) return;
 
     set({ syncing: true });
     try {
-      const cursor = await push(pending.map((entry) => entry.operation));
-      set({ outbox: [], syncing: false, error: null, cursor: Math.max(get().cursor, cursor) });
+      const cursor = await push(queued.map((entry) => entry.operation));
+      await offline.clearOutbox(queued.map((entry) => entry.operation.id));
+      await offline.writeCursor(Math.max(get().cursor, cursor));
+
+      set({ syncing: false, pending: 0, error: null, cursor: Math.max(get().cursor, cursor) });
     } catch {
+      await offline.recordFailure(queued.map((entry) => entry.operation.id));
       set({
         syncing: false,
-        error: 'Changes are saved on this device but not yet synced.',
-        outbox: pending.map((entry) => ({ ...entry, attempts: entry.attempts + 1 })),
+        pending: queued.length,
+        // Phrased as a statement of fact rather than a failure. The change is
+        // safe on this device; it simply has not travelled yet.
+        error: 'Saved on this device. Waiting to sync.',
       });
     }
   },
@@ -191,18 +239,48 @@ export const useItems = create<ItemsState>((set, get) => ({
 type Setter = (partial: Partial<ItemsState>) => void;
 type Getter = () => ItemsState;
 
-/** Queue an operation and try to send it immediately. */
-async function enqueue(set: Setter, get: Getter, operation: Operation): Promise<void> {
-  // Replace any earlier queued operation for the same item: only the latest
-  // state matters, and sending three versions of one item wastes a round trip
-  // to arrive at the same place.
-  const outbox = [
-    ...get().outbox.filter((entry) => entry.operation.id !== operation.id),
-    { operation, attempts: 0 },
-  ];
+/**
+ * Persist a change locally, then try to send it.
+ *
+ * The local writes happen first and are awaited. If the process dies between
+ * the cache write and the push, the change survives and the outbox delivers it
+ * next time — which is the whole reason the queue is on disk rather than in
+ * memory.
+ */
+async function commit(set: Setter, get: Getter, operation: Operation): Promise<void> {
+  const cached = operationToSynced(operation, raw.get(operation.id));
+  if (cached) {
+    raw.set(operation.id, cached);
+    await offline.writeCache([cached]);
+  }
 
-  set({ outbox });
+  await offline.enqueueOperation(operation);
+  set({ pending: (await offline.readOutbox()).length });
+
   await get().flush();
+}
+
+/**
+ * Track connectivity.
+ *
+ * `navigator.onLine` is a weak signal — it reports whether an interface is up,
+ * not whether anything is reachable — so a failed request also marks the app
+ * offline. The events are what let it recover promptly when the network comes
+ * back.
+ */
+export function watchConnectivity(): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+
+  const update = (): void => useItems.getState().setOnline(navigator.onLine);
+
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
+
+  return () => {
+    window.removeEventListener('online', update);
+    window.removeEventListener('offline', update);
+  };
 }
 
 /** Items that are not in the trash. */
@@ -213,4 +291,14 @@ export function activeItems(items: readonly DecryptedItem[]): DecryptedItem[] {
 /** Items that are. */
 export function trashedItems(items: readonly DecryptedItem[]): DecryptedItem[] {
   return items.filter((item) => item.deletedAt !== null);
+}
+
+/**
+ * Destroy everything held on this device.
+ *
+ * A free function as well as a store action, so `vault-store` can call it
+ * without the two stores importing each other at module load.
+ */
+export async function wipeLocal(): Promise<void> {
+  await useItems.getState().wipeLocal();
 }

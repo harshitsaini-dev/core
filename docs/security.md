@@ -46,9 +46,18 @@ Verifier comparison is constant-time. Login, signup and password-reset endpoints
 return identical generic messages regardless of whether an account exists.
 
 ### Local device theft, partially
-The offline cache in IndexedDB is encrypted with a non-extractable per-device
-key and is useless without unlocking. Auto-lock, PIN or biometric gating, and a
-panic button that wipes the cache limit the window of exposure.
+The offline cache is encrypted twice: item contents under the Account Key, and
+each stored row again under a per-device key that is non-extractable, so no
+script can copy it out. Auto-lock and a panic button that destroys the cache
+limit the window of exposure.
+
+What this does **not** remove is the offline attack. Opening the vault without a
+network means keeping a local copy of the wrapped Account Key, and somebody
+holding the device can attack that copy at their own pace with no rate limit.
+This is inherent to every password manager that opens offline, and the defence
+is the same one the server relies on: Argon2id, tuned so each guess costs real
+time and memory. A weak master password is materially worse on a stolen device
+than on a stolen database.
 
 ---
 
