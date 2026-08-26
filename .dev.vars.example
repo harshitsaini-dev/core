@@ -12,4 +12,6 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Optional — only needed for the features that use them.
 RESEND_API_KEY=
+# Self-hosters: change this to a domain you control and have verified.
+RESEND_FROM_EMAIL="Core <no-reply@kernel.harshitsaini.in>"
 TURNSTILE_SECRET_KEY=

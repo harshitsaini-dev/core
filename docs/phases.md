@@ -94,8 +94,10 @@ anything useful, and the schema is stable enough to build on.
 **Exit criteria**
 
 - [ ] Signing up then dumping the entire D1 database shows no readable field
-- [ ] `prelogin` timing for a known vs unknown email differs by under 5 ms
-      across 100 samples
+- [~] `prelogin` timing for a known vs unknown email differs by under 5 ms
+      across 100 samples — holds under `next dev`, but only because the dev D1
+      proxy costs more than the constant-time budget and does so symmetrically.
+      Must be re-run against a Workers build before this counts.
 - [ ] Login succeeds on the correct password and fails identically (same message,
       same shape) on a wrong password and an unknown user
 - [ ] Session cookie is `HttpOnly`, `Secure`, `SameSite=Strict`

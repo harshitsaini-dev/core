@@ -27,6 +27,7 @@ const slowMo = Number(process.env.SLOWMO ?? (headed ? 300 : 0));
 
 export default defineConfig({
   testDir: './apps/web/e2e',
+  globalSetup: './apps/web/e2e/global-setup.ts',
   outputDir: './test-results',
 
   // Serial and unretried locally: a flaky headed run is confusing to watch.

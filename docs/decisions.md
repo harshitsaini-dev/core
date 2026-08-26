@@ -9,8 +9,9 @@ superseding one instead. Format: context, decision, consequences.
 
 **Date:** 2026-08-26 · **Status:** Accepted
 
-**Context.** The project sits alongside `orbit`, `hive` and `lovetrack` — short,
-meaning-driven names. This tool holds the most sensitive data of all of them.
+**Context.** The naming convention in use is short, single-word and
+meaning-driven. This tool holds more sensitive data than anything else built
+under it, so the name should read as solid rather than clever.
 
 **Decision.** Name it **Core**, host at `core.harshitsaini.in`, repository
 `harshitsaini-dev/core`, public from day one.

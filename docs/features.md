@@ -37,8 +37,8 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-01 | Signup with client-side key generation and Emergency Kit | P2 | TODO |
 | AUTH-02 | Login via derived Auth Key, peppered verifier on server | P2 | TODO |
 | AUTH-03 | Constant-time verifier comparison | P2 | TODO |
-| AUTH-04 | Prelogin salt endpoint with deterministic fake salts | P2 | TODO |
-| AUTH-05 | User-enumeration-proof generic error messages | P2 | TODO |
+| AUTH-04 | Prelogin salt endpoint with deterministic fake salts | P2 | DONE |
+| AUTH-05 | User-enumeration-proof generic error messages | P2 | DONE |
 | AUTH-06 | Short-lived session token in HttpOnly/Secure/SameSite cookie | P2 | TODO |
 | AUTH-07 | Rotating refresh tokens, revocable per device | P2 | TODO |
 | AUTH-08 | WebAuthn / passkey unlock (biometric, FaceID, YubiKey) | P5 | TODO |
@@ -184,7 +184,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | RL-06 | Account-level lockout after N consecutive failures | P5 | TODO |
 | RL-07 | Constant-time responses across all auth paths | P2 | TODO |
 | RL-08 | Server-side pepper in the verifier | P2 | TODO |
-| RL-09 | Body-size limits and strict zod validation on every route | P2 | TODO |
+| RL-09 | Body-size limits and strict zod validation on every route | P2 | DONE |
 | RL-10 | Structured abuse logging with hashed IPs | P5 | TODO |
 
 ## IO — Import, Export, Backup

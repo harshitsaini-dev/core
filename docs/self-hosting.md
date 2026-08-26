@@ -85,12 +85,16 @@ mistake to real users.
 
 ## 5. Optional — email
 
-Sign up at [resend.com](https://resend.com), verify your domain, create a
-sending API key, then:
+Sign up at [resend.com](https://resend.com), verify a domain you control —
+a dedicated sending subdomain is worth it, so that a deliverability problem here
+cannot affect your main domain — then create a sending API key:
 
 ```bash
 pnpm cf secret put RESEND_API_KEY
 ```
+
+Set `RESEND_FROM_EMAIL` to an address on that verified domain, in the form
+`Core <no-reply@mail.example.com>`.
 
 Without this, Core still works; you simply do not receive login alerts or
 magic-link unlocks.

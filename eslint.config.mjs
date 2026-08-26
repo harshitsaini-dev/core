@@ -13,6 +13,8 @@ export default tseslint.config(
       '**/test-results/**',
       '**/.wrangler/**',
       '**/next-env.d.ts',
+      // Generated from wrangler.toml by `pnpm cf:types`; not ours to lint.
+      '**/cloudflare-env.d.ts',
     ],
   },
   js.configs.recommended,
@@ -27,6 +29,14 @@ export default tseslint.config(
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       eqeqeq: ['error', 'always'],
+    },
+  },
+  {
+    // Declaration files that bridge two external type systems. An interface
+    // that only extends another is exactly the intent there, not an oversight.
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-empty-object-type': 'off',
     },
   },
   {

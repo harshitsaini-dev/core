@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['packages/*/src/**/*.test.ts', 'apps/web/lib/**/*.test.ts'],
+    // Timing assertions need room; the default 5s is tight when several
+    // padded calls run back to back.
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],
