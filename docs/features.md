@@ -15,17 +15,17 @@ P5 Hardening+Deploy · P6 Post-v1
 |---|---|---|---|
 | ZK-01 | Client-side-only encryption; plaintext never crosses the network | P1 | TODO |
 | ZK-02 | Master password never sent to the server in any form | P1 | TODO |
-| ZK-03 | AES-256-GCM for all vault data, fresh IV per operation | P1 | TODO |
-| ZK-04 | Argon2id key derivation, tuned to ~500 ms client-side | P1 | TODO |
-| ZK-05 | Two independent derived keys (auth vs encryption) | P1 | TODO |
-| ZK-06 | Random per-user Account Key wrapped by the Master Key | P1 | TODO |
-| ZK-07 | Master-password change re-wraps only the Account Key | P1 | TODO |
-| ZK-08 | ECDH P-256 key pair per user for encrypted sharing | P1 | TODO |
+| ZK-03 | AES-256-GCM for all vault data, fresh IV per operation | P1 | DONE |
+| ZK-04 | Argon2id key derivation, tuned to ~500 ms client-side | P1 | DONE |
+| ZK-05 | Two independent derived keys (auth vs encryption) | P1 | DONE |
+| ZK-06 | Random per-user Account Key wrapped by the Master Key | P1 | DONE |
+| ZK-07 | Master-password change re-wraps only the Account Key | P1 | DONE |
+| ZK-08 | ECDH P-256 key pair per user for encrypted sharing | P1 | DONE |
 | ZK-09 | Server secrets are irrelevant to data confidentiality | P1 | TODO |
 | ZK-10 | Encrypted metadata: titles, URLs, folder names, ENV keys | P1 | TODO |
-| ZK-11 | Blind index (HMAC) for server-side equality lookups | P1 | TODO |
-| ZK-12 | Versioned ciphertext envelope (`v1.iv.ct`) for future migration | P1 | TODO |
-| ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | TODO |
+| ZK-11 | Blind index (HMAC) for server-side equality lookups | P1 | DONE |
+| ZK-12 | Versioned ciphertext envelope (`v1.iv.ct`) for future migration | P1 | DONE |
+| ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | DONE |
 | ZK-14 | Memory wipe of keys and plaintext on lock or tab close | P3 | TODO |
 | ZK-15 | Per-device non-extractable key encrypting the offline cache | P3 | TODO |
 | ZK-16 | No administrator password reset — documented as a hard guarantee | P2 | TODO |
@@ -208,7 +208,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | OSS-03 | `.env.example` with every variable documented | P2 | DONE |
 | OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2 | TODO |
 | OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e | P2 | DONE |
-| OSS-06 | Crypto test vectors published for independent audit | P1 | TODO |
+| OSS-06 | Crypto test vectors published for independent audit | P1 | DONE |
 | OSS-07 | SECURITY.md with a responsible-disclosure policy | P5 | TODO |
 | OSS-08 | Self-hosting guide with screenshots | P5 | TODO |
 | OSS-09 | MIT licence | P0 | DONE |

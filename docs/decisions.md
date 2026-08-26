@@ -195,3 +195,75 @@ refresh reuse invalidates the whole device chain.
 **Consequences.** Refresh rotation adds bookkeeping and a race condition to
 handle when several tabs refresh at once. Sessions become individually
 revocable, which the trusted-devices UI depends on.
+
+---
+
+## ADR-011 — One Argon2id pass, split by HKDF
+
+**Date:** 2026-08-26 · **Status:** Accepted · **Supersedes part of** ADR-004
+
+**Context.** The original sketch derived the Auth Key and the Master Key with
+two separate Argon2id runs using different context strings. Implementing it
+made the cost obvious: at the target of ~500 ms per derivation, every unlock
+would spend a full second in key derivation on a desktop, and considerably
+longer on a phone.
+
+**Decision.** Run Argon2id exactly once over `(password, salt)` to produce a
+32-byte root key, then split it with HKDF-Expand into the Auth Key
+(`info = "core.auth.v1"`) and the Master Key (`info = "core.enc.v1"`). The root
+key is wiped as soon as both are derived.
+
+**Consequences.** Unlock cost halves with no loss of security — the strength of
+both keys already derived entirely from that one Argon2id computation, and
+HKDF-Expand provides cryptographic domain separation. The two `info` strings
+are now load-bearing: changing either one silently locks every existing vault
+out, so they are pinned by test as well as by review.
+
+---
+
+## ADR-012 — The auth verifier is an HMAC, not a second Argon2id
+
+**Date:** 2026-08-26 · **Status:** Accepted · **Supersedes part of** ADR-002
+
+**Context.** The plan called for the server to store `Argon2id(authKey + pepper)`
+and compare against it. That treats the Auth Key as if it were a password.
+
+**Decision.** Store `HMAC-SHA256(pepper, authKey)` instead.
+
+**Rationale.** The Auth Key is already the output of a memory-hard derivation
+over the password. An attacker with the database who wants to guess passwords
+must compute Argon2id per guess regardless of what the server does afterwards,
+so a second expensive pass adds no resistance. It does add two real costs: every
+login burns 64 MiB and hundreds of milliseconds of Worker CPU, which is both a
+free-tier problem and an obvious denial-of-service lever for an unauthenticated
+endpoint.
+
+**Consequences.** Login verification becomes microseconds instead of hundreds of
+milliseconds, which also makes constant-time comparison easier to reason about.
+The pepper carries more weight than before — it is now the only thing standing
+between a leaked database and an offline attack on the verifier — so losing it
+locks every existing account out permanently. That is documented in
+`.env.example` and in the self-hosting guide.
+
+---
+
+## ADR-013 — Additional authenticated data on key wrappers
+
+**Date:** 2026-08-26 · **Status:** Accepted
+
+**Context.** A hostile server cannot read a ciphertext, but nothing in plain
+AES-GCM stops it from moving one. Copying a user's wrapped Account Key into
+another user's row, or replaying an old wrapper after a password change, are
+both cheap attacks against an untrusted storage layer.
+
+**Decision.** Every wrapper passes a fixed domain string as AES-GCM additional
+authenticated data — `core.account-key.v1` for the Account Key,
+`core.private-key.v1` for the ECDH private key, `core.share.v1` for share
+payloads. The AAD is authenticated but not encrypted, and decryption fails
+unless it matches exactly.
+
+**Consequences.** Ciphertexts are bound to their role and cannot be substituted
+across columns. The strings become part of the on-disk format, so changing one
+breaks existing data; they are covered by the published test vectors. Binding to
+a specific *row id* rather than a role would be stronger still, and remains open
+for Phase 2 once the schema exists.

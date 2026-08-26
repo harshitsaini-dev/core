@@ -16,11 +16,11 @@ device.
 
 ### A full database compromise
 An attacker who dumps the entire D1 database obtains encrypted blobs and
-authentication verifiers. The verifiers are Argon2id outputs mixed with a
-server-side pepper that is not stored in the database, so an offline attack
-cannot even begin without also compromising the Worker's secret store. Even
-with the pepper, recovering a strong master password from an Argon2id verifier
-is not practical.
+authentication verifiers. Each verifier is `HMAC-SHA256(pepper, authKey)`, and
+the pepper lives in the Worker's secret store rather than the database — so an
+offline attack cannot begin without also compromising that store. Even with the
+pepper, every password guess still costs a full Argon2id derivation, because the
+Auth Key is itself an Argon2id output.
 
 ### Server source-code and environment compromise
 The server's secrets are used for authentication rate-limiting and email. None
@@ -84,6 +84,8 @@ chain attack on a build-time dependency remains a real risk for any web app.
 | Purpose | Primitive |
 |---|---|
 | Key derivation | Argon2id, `m = 64 MiB, t = 3, p = 1`, ~500 ms target |
+| Key separation | HKDF-SHA256 split of one Argon2id output |
+| Auth verifier | HMAC-SHA256 under a server-side pepper |
 | Fallback KDF | PBKDF2-SHA512, 600 000 iterations |
 | Data encryption | AES-256-GCM, 96-bit random IV per operation |
 | Key wrapping | AES-256-GCM |

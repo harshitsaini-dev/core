@@ -30,6 +30,18 @@ export default tseslint.config(
     },
   },
   {
+    // Build scripts run under Node and legitimately use its globals.
+    files: ['**/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        crypto: 'readonly',
+        Buffer: 'readonly',
+        TextEncoder: 'readonly',
+      },
+    },
+  },
+  {
     // packages/crypto must stay isomorphic: no Node built-ins, no framework.
     files: ['packages/crypto/**/*.ts'],
     rules: {

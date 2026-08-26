@@ -1,0 +1,81 @@
+{
+  "$comment": "Core cryptography test vectors, envelope version v1. Inputs are fixed; regenerate with packages/crypto/scripts/generate-vectors.mjs.",
+  "version": "v1",
+  "kdf": {
+    "algorithm": "argon2id",
+    "note": "Weak parameters on purpose so that verification is fast. Production uses m=65536, t=3, p=1.",
+    "params": {
+      "memoryKiB": 512,
+      "iterations": 2,
+      "parallelism": 1
+    },
+    "password": "correct horse battery staple",
+    "saltHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "rootKeyHex": "3f58527b51fc4f04d08d1097a51c32eea2899a3514758de1e6900c2bb241ab82",
+    "authKeyHex": "b95edd643a2bd3c5f3cd99a3351ceb3e8865d9d25e45d700c5e31aec8f2789c7",
+    "masterKeyHex": "e08f34a70df875fe53c613e9496936b579636321582d53abe808b2018ee3c792",
+    "contexts": {
+      "auth": "core.auth.v1",
+      "encryption": "core.enc.v1"
+    }
+  },
+  "authVerifier": {
+    "algorithm": "HMAC-SHA256",
+    "pepperHex": "5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c",
+    "authKeyHex": "b95edd643a2bd3c5f3cd99a3351ceb3e8865d9d25e45d700c5e31aec8f2789c7",
+    "verifierHex": "9fb5730bbeb45e2264b4b145a368aee63248b3b605635f56304dbfd6b5c92e3a"
+  },
+  "aesGcm": {
+    "algorithm": "AES-256-GCM",
+    "keyHex": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+    "ivHex": "111111111111111111111111",
+    "plaintext": "DATABASE_URL=postgres://user:pass@localhost:5432/core",
+    "envelope": "v1.ERERERERERERERER.3BWEPzmXdiwjrIBXaojhalyqU23L6WTIh2QEsNbDA_YjrT6ciTnBn16r1ygkNiSJw9blyHgci-qNJA_TPKEtFlSMBMZD",
+    "envelopeWithAad": "v1.ERERERERERERERER.3BWEPzmXdiwjrIBXaojhalyqU23L6WTIh2QEsNbDA_YjrT6ciTnBn16r1ygkNiSJw9blyHhdmoC03vT-3w79xlsh9hrm",
+    "aad": "core.account-key.v1"
+  },
+  "blindIndex": {
+    "algorithm": "HMAC-SHA256 truncated to 128 bits",
+    "accountKeyHex": "3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+    "info": "core.blind-index.v1",
+    "keyHex": "d98ea69afb98687b4d4a31b918694c4b394ee378448fa535165d81f81b0a47f0",
+    "cases": [
+      {
+        "value": "github.com",
+        "tag": "LIDfL1y0PaxHPV2toqLzag"
+      },
+      {
+        "value": "user@example.com",
+        "tag": "1H3fgzjw_VSM8BOogPHISg"
+      },
+      {
+        "value": "",
+        "tag": "cPVIP38PiXBAthIKrDb3GA"
+      },
+      {
+        "value": "पासवर्ड",
+        "tag": "GDd0BSnyT7WO4GGlWwJqOA"
+      }
+    ]
+  },
+  "encoding": {
+    "base64url": [
+      {
+        "bytesHex": "",
+        "encoded": ""
+      },
+      {
+        "bytesHex": "00",
+        "encoded": "AA"
+      },
+      {
+        "bytesHex": "fbffbeff",
+        "encoded": "-_--_w"
+      },
+      {
+        "bytesHex": "000102030405060708090a0b0c0d0e0f",
+        "encoded": "AAECAwQFBgcICQoLDA0ODw"
+      }
+    ]
+  }
+}

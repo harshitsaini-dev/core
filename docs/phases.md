@@ -26,9 +26,9 @@ single feature lands.
 
 **Exit criteria**
 
-- [ ] `pnpm install && pnpm typecheck && pnpm lint && pnpm test` passes clean
-- [ ] CI is green on the default branch
-- [ ] `git ls-files` shows no secrets and no local planning files
+- [x] `pnpm install && pnpm typecheck && pnpm lint && pnpm test` passes clean
+- [x] CI is green on the default branch
+- [x] `git ls-files` shows no secrets and no local planning files
 
 ---
 
@@ -56,15 +56,17 @@ anything depends on it. This is the phase that must not be rushed.
 
 **Exit criteria**
 
-- [ ] Round-trip property tests: encrypt → decrypt returns the exact input for
+- [x] Round-trip property tests: encrypt → decrypt returns the exact input for
       1 000 random payloads including empty strings and 1 MB blobs
-- [ ] Tampering any byte of ciphertext, IV or tag causes decryption to throw
-- [ ] Wrong master password fails to unwrap the Account Key, and fails *loudly*
-- [ ] Argon2id derivation measured between 400 ms and 900 ms on the dev machine
-- [ ] Changing the master password re-wraps the Account Key and all previously
+- [x] Tampering any byte of ciphertext, IV or tag causes decryption to throw
+- [x] Wrong master password fails to unwrap the Account Key, and fails *loudly*
+- [x] Calibrated Argon2id parameters land between 400 ms and 900 ms on the dev
+      machine (defaults alone cost ~140 ms there, so calibration — not the
+      default — is what has to hit the target)
+- [x] Changing the master password re-wraps the Account Key and all previously
       encrypted items still decrypt
-- [ ] `packages/crypto` has zero imports from React, Next.js or `node:*`
-- [ ] Coverage on `packages/crypto` is above 95 %
+- [x] `packages/crypto` has zero imports from React, Next.js or `node:*`
+- [x] Coverage on `packages/crypto` is above 95 %
 
 ---
 
