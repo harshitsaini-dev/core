@@ -63,14 +63,20 @@ This has a consequence you must accept before using Core:
 ```
 Master Password
    │
-   ├── Argon2id ──► Auth Key ────────► server (verifier only, peppered)
-   │
-   └── Argon2id ──► Master Key
+   └── Argon2id ──► Root Key          one expensive derivation
                        │
-                       └── unwraps ──► Account Key ──► AES-256-GCM ──► your vault
+                       ├── HKDF ──► Auth Key ──► server (peppered verifier only)
+                       │
+                       └── HKDF ──► Master Key
+                                        │
+                                        └── unwraps ──► Account Key
+                                                            │
+                                                            └── AES-256-GCM ──► your vault
 ```
 
 - **Argon2id** key derivation, tuned so each attempt costs real time and memory.
+  It runs once; HKDF then splits the result into two keys that can never be
+  derived from one another.
 - **AES-256-GCM** for every stored value, with a fresh IV each time and built-in
   tamper detection.
 - A random **Account Key** encrypts your data and is itself wrapped by the key
