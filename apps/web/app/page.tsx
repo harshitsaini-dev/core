@@ -12,12 +12,10 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-6 py-16">
       <div className="border border-line bg-surface p-6 sm:p-8">
-        <h1 className="text-accent text-2xl font-bold tracking-tight">
+        <h1 className="text-accent text-glow text-2xl font-bold tracking-tight">
           <span className="cursor">core</span>
         </h1>
-        <p className="text-muted mt-2 text-sm">
-          zero-knowledge password, secret and .env manager
-        </p>
+        <p className="text-muted mt-2 text-sm">zero-knowledge password, secret and .env manager</p>
 
         <div className="mt-8 space-y-1 text-sm">
           {BOOT_LINES.map((line) => (

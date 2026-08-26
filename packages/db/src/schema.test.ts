@@ -32,6 +32,9 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     'kdf_params',
     // ECDH public half. Public is the entire point of a public key.
     'public_key',
+    // HMAC of an HKDF output. Proves possession of the Account Key; decrypts
+    // nothing, and cannot be reversed into the key it was derived from.
+    'recovery_verifier',
     'emergency_kit_acknowledged_at',
     // Lockout state. Server-owned; the client has no say in it.
     'failed_attempts',

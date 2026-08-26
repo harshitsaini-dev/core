@@ -1,81 +1,41 @@
 import {
+  base64UrlToBytes,
   bytesToBase64Url,
-  createAccountKeys,
-  createKeyPair,
   decryptString,
   deriveKeys,
   encryptString,
-  generateKdfSalt,
-  base64UrlToBytes,
+  unwrapAccountKeys,
 } from '@core/crypto';
-import { unwrapAccountKeys } from '@core/crypto';
 import type { KdfParams } from '@core/shared';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
+import { FAST_KDF, buildAccount, loginWith, register, uniqueEmail } from './helpers/account';
 
 /**
  * /api/auth/login and the session endpoints.
  *
- * The tests build requests the way a browser would, using the same
- * `@core/crypto`. The most important one is the round trip at the bottom: it
- * signs up, logs in, and then actually decrypts something with keys recovered
- * from the login response — which is the only way to prove the wire format and
- * the crypto agree end to end rather than merely appearing to.
+ * The one that matters most is the round trip at the bottom: it signs up, logs
+ * in, and then actually decrypts something with keys recovered from the login
+ * response. That is the only way to show the wire format and the cryptography
+ * agree end to end rather than merely appearing to.
  */
 
-const FAST_KDF: KdfParams = {
-  algorithm: 'argon2id',
-  memoryKiB: 8192,
-  iterations: 1,
-  parallelism: 1,
-};
+const login = loginWith;
 
-interface Account {
-  email: string;
-  password: string;
-  kdfSalt: string;
-  authKey: string;
-}
-
-function uniqueEmail(label: string): string {
-  return `${label}-${crypto.randomUUID()}@core.test`;
-}
-
-/** Sign up a fresh account and return what a client would remember. */
-async function register(
-  request: APIRequestContext,
-  label: string,
-  password = 'a strong master password',
-): Promise<Account> {
-  const email = uniqueEmail(label);
-  const salt = generateKdfSalt();
-  const { authKey, masterKey } = await deriveKeys(password, salt, FAST_KDF);
-  const { keys, wrappedAccountKey } = await createAccountKeys(masterKey);
-  const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
-
-  const response = await request.post('/api/auth/signup', {
-    data: {
-      email,
-      authKey: bytesToBase64Url(authKey),
-      kdfSalt: bytesToBase64Url(salt),
-      kdfParams: FAST_KDF,
-      accountKeyWrapped: wrappedAccountKey,
-      publicKey,
-      privateKeyWrapped: wrappedPrivateKey,
-    },
-  });
-  expect(response.status()).toBe(200);
-
-  return { email, password, kdfSalt: bytesToBase64Url(salt), authKey: bytesToBase64Url(authKey) };
-}
-
-async function login(request: APIRequestContext, email: string, authKey: string) {
-  return request.post('/api/auth/login', { data: { email, authKey } });
+/** Adapts the shared helper to the shape these tests already expect. */
+async function registerAccount(request: APIRequestContext, label: string, password?: string) {
+  const account = await register(request, label, password);
+  return {
+    email: account.payload.email,
+    authKey: account.payload.authKey,
+    kdfSalt: account.payload.kdfSalt,
+    password: account.password,
+  };
 }
 
 test.describe('login', () => {
   test('accepts the correct auth key and returns the wrapped keys', async ({ request }) => {
-    const account = await register(request, 'ok');
+    const account = await registerAccount(request, 'ok');
 
     const response = await login(request, account.email, account.authKey);
     expect(response.status()).toBe(200);
@@ -87,7 +47,7 @@ test.describe('login', () => {
   });
 
   test('sets a hardened session cookie', async ({ request }) => {
-    const account = await register(request, 'cookie');
+    const account = await registerAccount(request, 'cookie');
     const response = await login(request, account.email, account.authKey);
 
     const setCookie = response.headers()['set-cookie'] ?? '';
@@ -98,8 +58,8 @@ test.describe('login', () => {
   });
 
   test('rejects a wrong auth key', async ({ request }) => {
-    const account = await register(request, 'wrongkey');
-    const wrong = await register(request, 'other');
+    const account = await registerAccount(request, 'wrongkey');
+    const wrong = await registerAccount(request, 'other');
 
     const response = await login(request, account.email, wrong.authKey);
     expect(response.status()).toBe(401);
@@ -108,8 +68,8 @@ test.describe('login', () => {
   test('answers identically for a wrong password and an unknown address', async ({ request }) => {
     // If these differed in any way, login would become the enumeration oracle
     // that prelogin is carefully built to avoid being.
-    const account = await register(request, 'sameerror');
-    const other = await register(request, 'sameerror-other');
+    const account = await registerAccount(request, 'sameerror');
+    const other = await registerAccount(request, 'sameerror-other');
 
     const wrongPassword = await login(request, account.email, other.authKey);
     const unknownUser = await login(request, uniqueEmail('ghost'), account.authKey);
@@ -119,15 +79,15 @@ test.describe('login', () => {
   });
 
   test('issues no cookie on a failed attempt', async ({ request }) => {
-    const account = await register(request, 'nocookie');
-    const other = await register(request, 'nocookie-other');
+    const account = await registerAccount(request, 'nocookie');
+    const other = await registerAccount(request, 'nocookie-other');
 
     const response = await login(request, account.email, other.authKey);
     expect(response.headers()['set-cookie'] ?? '').not.toContain('core_session=');
   });
 
   test('normalises the address', async ({ request }) => {
-    const account = await register(request, 'casing');
+    const account = await registerAccount(request, 'casing');
 
     const response = await login(request, `  ${account.email.toUpperCase()} `, account.authKey);
     expect(response.status()).toBe(200);
@@ -141,7 +101,7 @@ test.describe('login', () => {
   });
 
   test('never caches', async ({ request }) => {
-    const account = await register(request, 'nocache');
+    const account = await registerAccount(request, 'nocache');
     const response = await login(request, account.email, account.authKey);
     expect(response.headers()['cache-control']).toContain('no-store');
   });
@@ -149,7 +109,7 @@ test.describe('login', () => {
 
 test.describe('session lifecycle', () => {
   test('reports a live session after login', async ({ request }) => {
-    const account = await register(request, 'live');
+    const account = await registerAccount(request, 'live');
     await login(request, account.email, account.authKey);
 
     const response = await request.get('/api/auth/session');
@@ -175,7 +135,7 @@ test.describe('session lifecycle', () => {
   });
 
   test('logout revokes the session it was called with', async ({ request }) => {
-    const account = await register(request, 'logout');
+    const account = await registerAccount(request, 'logout');
     await login(request, account.email, account.authKey);
     expect((await request.get('/api/auth/session')).status()).toBe(200);
 
@@ -201,26 +161,13 @@ test.describe('end-to-end key recovery', () => {
     const password = 'the real master password';
     const email = uniqueEmail('roundtrip');
 
-    const salt = generateKdfSalt();
-    const { authKey, masterKey } = await deriveKeys(password, salt, FAST_KDF);
-    const { keys, wrappedAccountKey } = await createAccountKeys(masterKey);
-    const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
+    const built = await buildAccount(email, password);
 
-    // Encrypt something with the original Account Key, before any round trip.
+    // Encrypted with the original Account Key, before any round trip.
     const secret = 'DATABASE_URL=postgres://user:pass@localhost/core';
-    const envelope = await encryptString(keys.dataKey, secret);
+    const envelope = await encryptString(built.keys.dataKey, secret);
 
-    await request.post('/api/auth/signup', {
-      data: {
-        email,
-        authKey: bytesToBase64Url(authKey),
-        kdfSalt: bytesToBase64Url(salt),
-        kdfParams: FAST_KDF,
-        accountKeyWrapped: wrappedAccountKey,
-        publicKey,
-        privateKeyWrapped: wrappedPrivateKey,
-      },
-    });
+    await request.post('/api/auth/signup', { data: built.payload });
 
     // Now start over as if on a new device: prelogin for the salt, derive, log in.
     const pre = await request.post('/api/auth/prelogin', { data: { email } });
@@ -241,7 +188,7 @@ test.describe('end-to-end key recovery', () => {
   }) => {
     // Defence in depth: even handed the wrapped key directly, the wrong master
     // password cannot open it. The server is not what keeps the vault shut.
-    const account = await register(request, 'depth', 'correct password');
+    const account = await registerAccount(request, 'depth', 'correct password');
     const response = await login(request, account.email, account.authKey);
     const body = (await response.json()) as { accountKeyWrapped: string };
 

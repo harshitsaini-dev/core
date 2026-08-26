@@ -2,6 +2,7 @@ import type { KdfParams } from '@core/shared';
 import { describe, expect, it } from 'vitest';
 import {
   createAccountKeys,
+  deriveRecoveryVerifier,
   recoverAccountKeys,
   rewrapAccountKey,
   unwrapAccountKeys,
@@ -160,5 +161,42 @@ describe('emergency kit recovery', () => {
     await expect(recoverAccountKeys('not valid base64url!!')).rejects.toThrow(TypeError);
     // Valid base64url, but not 32 bytes.
     await expect(recoverAccountKeys('AAAA')).rejects.toThrow(RangeError);
+  });
+});
+
+describe('deriveRecoveryVerifier', () => {
+  it('is deterministic for the same recovery key', async () => {
+    const { recoveryKey } = await createAccountKeys(await masterKeyFor('pw'));
+    expect(await deriveRecoveryVerifier(recoveryKey)).toBe(
+      await deriveRecoveryVerifier(recoveryKey),
+    );
+  });
+
+  it('differs for different accounts', async () => {
+    const master = await masterKeyFor('pw');
+    const a = await createAccountKeys(master);
+    const b = await createAccountKeys(master);
+    expect(await deriveRecoveryVerifier(a.recoveryKey)).not.toBe(
+      await deriveRecoveryVerifier(b.recoveryKey),
+    );
+  });
+
+  it('is not the recovery key itself, so the server never holds the vault key', async () => {
+    // The whole point: possession of the verifier proves possession of the
+    // Account Key, but the verifier decrypts nothing.
+    const { recoveryKey } = await createAccountKeys(await masterKeyFor('pw'));
+    const verifier = await deriveRecoveryVerifier(recoveryKey);
+
+    expect(verifier).not.toBe(recoveryKey);
+    await expect(recoverAccountKeys(verifier)).resolves.toBeDefined();
+    // Same length, so it decodes - but it opens a different, useless key.
+    const wrong = await recoverAccountKeys(verifier);
+    const real = await recoverAccountKeys(recoveryKey);
+    const envelope = await encryptString(real.dataKey, 'secret');
+    await expect(decryptString(wrong.dataKey, envelope)).rejects.toThrow();
+  });
+
+  it('rejects a malformed recovery key', async () => {
+    await expect(deriveRecoveryVerifier('AAAA')).rejects.toThrow(RangeError);
   });
 });

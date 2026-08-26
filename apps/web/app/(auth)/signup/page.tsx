@@ -101,7 +101,7 @@ export default function SignupPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
       <Panel>
-        <h1 className="text-accent text-xl font-bold tracking-tight">
+        <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
           <span className="cursor">core --create-vault</span>
         </h1>
         <p className="text-muted mt-2 text-sm">
@@ -125,7 +125,9 @@ export default function SignupPage() {
           <Field
             label="master password"
             htmlFor={passwordId}
-            error={tooWeak ? (strength?.warning || 'Too weak. Make it longer, not cleverer.') : undefined}
+            error={
+              tooWeak ? strength?.warning || 'Too weak. Make it longer, not cleverer.' : undefined
+            }
             hint={strength ? undefined : 'A long passphrase beats a short complicated one.'}
           >
             <Input
@@ -161,8 +163,8 @@ export default function SignupPage() {
           </Field>
 
           <Warning title="no password reset">
-            Lose your master password and your Emergency Kit, and the vault is gone for good.
-            Nobody can recover it — us included.
+            Lose your master password and your Emergency Kit, and the vault is gone for good. Nobody
+            can recover it — us included.
           </Warning>
 
           {error ? (

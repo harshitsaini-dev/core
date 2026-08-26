@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 
 /*
+ * Tailwind v4 discovers classes by scanning the tree around this file, which
+ * stops at the app. Without this, every class used inside @core/ui is dropped
+ * from the build — the components still render, just entirely unstyled, which
+ * is a failure that looks like a design decision rather than a bug.
+ */
+@source "../../../packages/ui/src";
+
+/*
  * Terminal theme tokens.
  * Mirrors THEME in @core/shared - keep the two in sync.
  */
@@ -18,6 +26,20 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-none: 0px;
+
+  /*
+   * Phosphor glow.
+   *
+   * Two strengths, both green, both deliberately restrained: a CRT bloom on a
+   * black background reads as atmosphere, but the same effect at full strength
+   * on a page of monospace text reads as smeared and hurts to look at.
+   *
+   * Used to mark what is interactive or live, never as decoration on static
+   * text — otherwise it stops meaning anything.
+   */
+  --shadow-glow: 0 0 10px rgb(0 255 65 / 0.35), 0 0 28px rgb(0 255 65 / 0.1);
+  --shadow-glow-soft: 0 0 8px rgb(0 255 65 / 0.16);
+  --shadow-glow-danger: 0 0 10px rgb(255 59 48 / 0.32);
 }
 
 html,
@@ -38,6 +60,35 @@ body {
   color: var(--color-bg);
 }
 
+/*
+ * Text glow.
+ *
+ * Tailwind gained text-shadow utilities recently, but expressing this as a
+ * named class keeps the two strengths in one place and makes the
+ * reduced-transparency opt-out below possible.
+ */
+.text-glow {
+  text-shadow:
+    0 0 8px rgb(0 255 65 / 0.45),
+    0 0 24px rgb(0 255 65 / 0.15);
+}
+
+.text-glow-soft {
+  text-shadow: 0 0 6px rgb(0 255 65 / 0.25);
+}
+
+/*
+ * Some people find glow genuinely hard to read, and both of these settings are
+ * how they say so. Dropping it costs nothing: the accent colour still carries
+ * the meaning, the glow only reinforced it.
+ */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .text-glow,
+  .text-glow-soft {
+    text-shadow: none;
+  }
+}
+
 /* The cursor motif used across headings and prompts. */
 @keyframes cursor-blink {
   0%,
@@ -53,6 +104,7 @@ body {
 .cursor::after {
   content: '_';
   color: var(--color-accent);
+  text-shadow: 0 0 10px rgb(0 255 65 / 0.6);
   animation: cursor-blink 1s step-end infinite;
 }
 

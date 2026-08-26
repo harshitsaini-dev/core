@@ -65,6 +65,12 @@ const signupSchema = z.object({
   /** ECDH P-256, for sharing. Public half in the clear. */
   publicKey: base64Url.max(512),
   privateKeyWrapped: envelope,
+
+  /**
+   * Proves possession of the Account Key during recovery. Derived client-side
+   * from the recovery key; it decrypts nothing on its own.
+   */
+  recoveryVerifier: base64Url.max(128),
 });
 
 /** Bodies are small and fully specified; anything larger is not a real client. */
@@ -111,7 +117,12 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     // Both branches still compute the verifier, so that an address already in
     // use does not answer measurably faster than a fresh one.
-    const verifier = await deriveAuthVerifier(base64UrlToBytes(input.authKey), pepper);
+    const [verifier, recoveryVerifier] = await Promise.all([
+      deriveAuthVerifier(base64UrlToBytes(input.authKey), pepper),
+      // Peppered the same way, for the same reason: a database dump alone must
+      // not let anyone mount the recovery flow offline.
+      deriveAuthVerifier(base64UrlToBytes(input.recoveryVerifier), pepper),
+    ]);
 
     if (existing.length > 0) {
       // Deliberately reported as success. Telling the caller "that address is
@@ -132,6 +143,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       accountKeyWrapped: input.accountKeyWrapped,
       publicKey: input.publicKey,
       privateKeyWrapped: input.privateKeyWrapped,
+      recoveryVerifier: bytesToBase64Url(recoveryVerifier),
     });
 
     await db.insert(auditLog).values({

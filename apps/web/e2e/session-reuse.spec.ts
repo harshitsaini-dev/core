@@ -2,16 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  bytesToBase64Url,
-  createAccountKeys,
-  createKeyPair,
-  deriveKeys,
-  generateKdfSalt,
-} from '@core/crypto';
-import type { KdfParams } from '@core/shared';
+import { bytesToBase64Url } from '@core/crypto';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
+import { loginWith, register } from './helpers/account';
 
 /**
  * Refresh-token reuse detection.
@@ -27,13 +21,6 @@ import type { APIRequestContext } from '@playwright/test';
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-
-const FAST_KDF: KdfParams = {
-  algorithm: 'argon2id',
-  memoryKiB: 8192,
-  iterations: 1,
-  parallelism: 1,
-};
 
 /**
  * Run SQL against the local replica and return wrangler's output.
@@ -73,29 +60,8 @@ function ageNewestSession(): void {
 }
 
 async function registerAndLogin(request: APIRequestContext, label: string): Promise<void> {
-  const email = `${label}-${crypto.randomUUID()}@core.test`;
-  const password = 'a strong master password';
-
-  const salt = generateKdfSalt();
-  const { authKey, masterKey } = await deriveKeys(password, salt, FAST_KDF);
-  const { keys, wrappedAccountKey } = await createAccountKeys(masterKey);
-  const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
-
-  await request.post('/api/auth/signup', {
-    data: {
-      email,
-      authKey: bytesToBase64Url(authKey),
-      kdfSalt: bytesToBase64Url(salt),
-      kdfParams: FAST_KDF,
-      accountKeyWrapped: wrappedAccountKey,
-      publicKey,
-      privateKeyWrapped: wrappedPrivateKey,
-    },
-  });
-
-  const response = await request.post('/api/auth/login', {
-    data: { email, authKey: bytesToBase64Url(authKey) },
-  });
+  const account = await register(request, label);
+  const response = await loginWith(request, account.payload.email, account.payload.authKey);
   expect(response.status()).toBe(200);
 }
 

@@ -26,7 +26,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ZK-11 | Blind index (HMAC) for server-side equality lookups | P1 | DONE |
 | ZK-12 | Versioned ciphertext envelope (`v1.iv.ct`) for future migration | P1 | DONE |
 | ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | DONE |
-| ZK-14 | Memory wipe of keys and plaintext on lock or tab close | P3 | TODO |
+| ZK-14 | Memory wipe of keys and plaintext on lock or tab close | P3 | DONE |
 | ZK-15 | Per-device non-extractable key encrypting the offline cache | P3 | TODO |
 | ZK-16 | No administrator password reset — documented as a hard guarantee | P2 | DONE |
 
@@ -47,7 +47,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-11 | New-device / new-country login approval via email OTP | P5 | TODO |
 | AUTH-12 | Concurrent session limit with oldest-session eviction | P5 | TODO |
 | AUTH-13 | Trusted-device list with individual revoke | P5 | TODO |
-| AUTH-14 | Inactivity auto-lock with configurable timeout | P3 | TODO |
+| AUTH-14 | Inactivity auto-lock with configurable timeout | P3 | DONE |
 
 ## VAULT — Items & Data Entry
 
@@ -133,7 +133,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | PWA-07 | Pull-to-refresh manual sync | P3 | TODO |
 | PWA-08 | Swipe actions: copy username / copy password | P3 | TODO |
 | PWA-09 | Haptic feedback on copy (Vibration API) | P3 | TODO |
-| PWA-10 | Safe-area insets and one-handed reachability | P3 | TODO |
+| PWA-10 | Safe-area insets and one-handed reachability | P3 | DONE |
 | PWA-11 | Keyboard shortcuts across desktop | P3 | TODO |
 | PWA-12 | Update-available prompt when a new SW is waiting | P5 | TODO |
 
@@ -163,7 +163,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-02 | HaveIBeenPwned k-anonymity breach check | P5 | TODO |
 | SEC-03 | Clipboard auto-clear after 30 / 60 seconds | P3 | TODO |
 | SEC-04 | Session timeout slider (1 / 5 / 15 min / never) | P3 | TODO |
-| SEC-05 | Panic button — instant lock and cache wipe | P3 | TODO |
+| SEC-05 | Panic button — instant lock and cache wipe | P3 | DONE |
 | SEC-06 | Audit log of unlocks, devices, IPs, timestamps | P5 | TODO |
 | SEC-07 | Emergency Kit PDF with recovery key | P2 | DONE |
 | SEC-08 | Master-password change with Account Key re-wrap | P5 | TODO |

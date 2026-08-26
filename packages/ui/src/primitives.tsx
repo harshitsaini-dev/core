@@ -19,10 +19,20 @@ function cx(...parts: (string | false | undefined)[]): string {
 
 export type ButtonVariant = 'primary' | 'ghost' | 'danger';
 
+/**
+ * Glow marks what is interactive, and only on hover or focus.
+ *
+ * A permanently glowing button is just a bright button; the effect has to
+ * change to carry information. Ghost buttons stay unlit on purpose — they are
+ * the secondary action, and lighting them equally would flatten the hierarchy
+ * the variants exist to create.
+ */
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'border-accent text-accent hover:bg-accent hover:text-bg',
+  primary:
+    'border-accent text-accent hover:bg-accent hover:text-bg hover:shadow-glow focus-visible:shadow-glow',
   ghost: 'border-line text-muted hover:border-fg hover:text-fg',
-  danger: 'border-danger text-danger hover:bg-danger hover:text-bg',
+  danger:
+    'border-danger text-danger hover:bg-danger hover:text-bg hover:shadow-glow-danger focus-visible:shadow-glow-danger',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -34,7 +44,10 @@ export function Button({ variant = 'primary', className, ...props }: ButtonProps
     <button
       {...props}
       className={cx(
-        'border px-4 py-2 font-mono text-sm tracking-tight transition-colors',
+        // min-h-11 is 44px: the smallest target most people can hit reliably
+        // with a thumb. The type stays small to suit the terminal look, so the
+        // height has to be set explicitly rather than falling out of padding.
+        'inline-flex min-h-11 items-center justify-center border px-4 py-2 font-mono text-sm tracking-tight transition-colors',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
         'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
         BUTTON_VARIANTS[variant],
@@ -55,9 +68,12 @@ export function Input({ invalid, className, ...props }: InputProps) {
       {...props}
       aria-invalid={invalid || undefined}
       className={cx(
-        'w-full border bg-black px-3 py-2 font-mono text-sm text-fg',
+        // Matches the button height, and 16px type on mobile specifically:
+        // anything smaller makes iOS Safari zoom the viewport on focus, which
+        // shoves the rest of the form off screen mid-entry.
+        'w-full min-h-11 border bg-black px-3 py-2 font-mono text-base text-fg sm:text-sm',
         'placeholder:text-muted/60',
-        'focus:outline-none focus:border-accent',
+        'focus:border-accent focus:shadow-glow-soft focus:outline-none',
         invalid ? 'border-danger' : 'border-line',
         className,
       )}
@@ -98,7 +114,11 @@ export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
 }
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx('border border-line bg-surface p-6 sm:p-8', className)}>{children}</div>;
+  return (
+    <div className={cx('border-line bg-surface border p-6 shadow-glow-soft sm:p-8', className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Prompt({ children }: { children: ReactNode }) {
@@ -121,7 +141,7 @@ export function Prompt({ children }: { children: ReactNode }) {
 export function Warning({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div role="note" className="border border-warning bg-warning/5 p-4">
-      <p className="font-mono text-xs uppercase tracking-widest text-warning">
+      <p className="text-warning font-mono text-xs tracking-widest uppercase">
         <span aria-hidden="true">!! </span>
         {title}
       </p>

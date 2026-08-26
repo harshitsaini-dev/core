@@ -53,6 +53,8 @@ export const KDF_CONTEXT = {
 export const HKDF_INFO = {
   blindIndex: 'core.blind-index.v1',
   device: 'core.device.v1',
+  /** Proves possession of the Account Key without revealing it. */
+  recovery: 'core.recovery.v1',
 } as const;
 
 /** Byte lengths used throughout. */

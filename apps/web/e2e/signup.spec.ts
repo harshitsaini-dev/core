@@ -1,63 +1,20 @@
-import {
-  bytesToBase64Url,
-  createAccountKeys,
-  createKeyPair,
-  deriveKeys,
-  generateKdfSalt,
-} from '@core/crypto';
 import type { KdfParams } from '@core/shared';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
+import { FAST_KDF, buildAccount, uniqueEmail } from './helpers/account';
+import type { SignupPayload } from './helpers/account';
 
 /**
  * /api/auth/signup
  *
- * These tests build the request the way a real client would — deriving keys,
- * generating an Account Key, wrapping it — using the same `@core/crypto` the
- * browser will. Hand-written fixtures would let the test drift from the client
- * and stop proving that the two agree on the wire format.
- *
- * Weak KDF parameters here on purpose: production values cost half a second per
- * derivation, and this file makes many.
+ * These build the request the way a real client would, via the shared helper
+ * that uses the same `@core/crypto` the browser does. Hand-written fixtures
+ * would let the tests drift from the client and stop proving the two agree on
+ * the wire format.
  */
 
-const FAST_KDF: KdfParams = {
-  algorithm: 'argon2id',
-  memoryKiB: 8192,
-  iterations: 1,
-  parallelism: 1,
-};
-
-interface SignupPayload {
-  email: string;
-  authKey: string;
-  kdfSalt: string;
-  kdfParams: KdfParams;
-  accountKeyWrapped: string;
-  publicKey: string;
-  privateKeyWrapped: string;
-}
-
-/** Everything a browser does before it is allowed to talk to the server. */
 async function buildSignup(email: string, password: string): Promise<SignupPayload> {
-  const salt = generateKdfSalt();
-  const { authKey, masterKey } = await deriveKeys(password, salt, FAST_KDF);
-  const { keys, wrappedAccountKey } = await createAccountKeys(masterKey);
-  const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
-
-  return {
-    email,
-    authKey: bytesToBase64Url(authKey),
-    kdfSalt: bytesToBase64Url(salt),
-    kdfParams: FAST_KDF,
-    accountKeyWrapped: wrappedAccountKey,
-    publicKey,
-    privateKeyWrapped: wrappedPrivateKey,
-  };
-}
-
-function uniqueEmail(label: string): string {
-  return `${label}-${crypto.randomUUID()}@core.test`;
+  return (await buildAccount(email, password)).payload;
 }
 
 async function signup(request: APIRequestContext, payload: Partial<SignupPayload>) {
@@ -132,6 +89,7 @@ test.describe('signup', () => {
       'accountKeyWrapped',
       'publicKey',
       'privateKeyWrapped',
+      'recoveryVerifier',
     ] as const) {
       const partial: Partial<SignupPayload> = { ...complete };
       delete partial[omitted];

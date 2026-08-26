@@ -5,9 +5,12 @@ import {
   createAccountKeys,
   createKeyPair,
   deriveKeys,
+  deriveRecoveryVerifier,
   generateKdfSalt,
+  recoverAccountKeys,
   unwrapAccountKeys,
   wipe,
+  wrapRecoveryKey,
 } from '@core/crypto';
 import type { AccountKeys } from '@core/crypto';
 import type { KdfParams } from '@core/shared';
@@ -66,6 +69,7 @@ export async function signup(
   onProgress?.('generating account key');
   const { keys, wrappedAccountKey, recoveryKey } = await createAccountKeys(masterKey);
   const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
+  const recoveryVerifier = await deriveRecoveryVerifier(recoveryKey);
 
   onProgress?.('creating account');
   const response = await postJson('/api/auth/signup', {
@@ -76,6 +80,7 @@ export async function signup(
     accountKeyWrapped: wrappedAccountKey,
     publicKey,
     privateKeyWrapped: wrappedPrivateKey,
+    recoveryVerifier,
   });
 
   wipe(authKey);
@@ -166,4 +171,66 @@ export async function hasSession(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Thrown when a recovery key does not match the account. */
+export class RecoveryFailed extends Error {
+  constructor() {
+    super('That recovery key does not match this account.');
+    this.name = 'RecoveryFailed';
+  }
+}
+
+/**
+ * Set a new master password using the Emergency Kit.
+ *
+ * The vault is never re-encrypted. The recovery key *is* the Account Key, so
+ * this decrypts nothing and re-encrypts nothing — it unwraps 32 bytes with the
+ * old key and re-wraps the same 32 bytes under a key derived from the new
+ * password. A vault of ten thousand items costs exactly as much as an empty one.
+ *
+ * The keys are returned so the caller can go straight to an unlocked vault
+ * rather than asking for the password that was just set.
+ */
+export async function recover(
+  email: string,
+  recoveryKey: string,
+  newPassword: string,
+  onProgress?: (step: string) => void,
+): Promise<AccountKeys> {
+  onProgress?.('checking recovery key');
+
+  let keys: AccountKeys;
+  let recoveryVerifier: string;
+  try {
+    // Fails locally, before anything is sent, if the key is malformed.
+    keys = await recoverAccountKeys(recoveryKey);
+    recoveryVerifier = await deriveRecoveryVerifier(recoveryKey);
+  } catch {
+    throw new RecoveryFailed();
+  }
+
+  onProgress?.('calibrating key derivation');
+  const { params } = await calibrateKdf();
+
+  onProgress?.('deriving new keys');
+  const salt = generateKdfSalt();
+  const { authKey, masterKey } = await deriveKeys(newPassword, salt, params);
+  const accountKeyWrapped = await wrapRecoveryKey(masterKey, recoveryKey);
+
+  onProgress?.('saving');
+  const response = await postJson('/api/auth/recover', {
+    email,
+    recoveryVerifier,
+    authKey: bytesToBase64Url(authKey),
+    kdfSalt: bytesToBase64Url(salt),
+    kdfParams: params,
+    accountKeyWrapped,
+  });
+
+  wipe(authKey);
+
+  if (!response.ok) throw new RecoveryFailed();
+
+  return keys;
 }

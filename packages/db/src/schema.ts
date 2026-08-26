@@ -73,6 +73,18 @@ export const users = sqliteTable(
     publicKey: text('public_key').notNull(),
     privateKeyWrapped: encrypted('private_key_wrapped').notNull(),
 
+    /**
+     * Proves possession of the Account Key during recovery, without the server
+     * ever holding that key. `HMAC(pepper, HKDF(accountKey, "core.recovery.v1"))`.
+     *
+     * Nullable because accounts created before recovery existed have none, and
+     * back-filling is impossible — the value can only be computed by someone
+     * holding the Account Key. Those accounts simply cannot use the recovery
+     * path, which is better than a migration that silently invents a verifier
+     * nobody can satisfy.
+     */
+    recoveryVerifier: text('recovery_verifier'),
+
     /** Set once the user confirms they have stored their Emergency Kit. */
     emergencyKitAcknowledgedAt: timestamp('emergency_kit_acknowledged_at'),
 

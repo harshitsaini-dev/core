@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Panel, Warning } from '@core/ui';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 /**
@@ -29,6 +30,7 @@ export interface EmergencyKitProps {
 }
 
 export function EmergencyKit({ email, recoveryKey }: EmergencyKitProps) {
+  const router = useRouter();
   const [acknowledged, setAcknowledged] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -116,9 +118,7 @@ export function EmergencyKit({ email, recoveryKey }: EmergencyKitProps) {
           <Button
             type="button"
             disabled={!acknowledged}
-            onClick={() => {
-              window.location.href = '/login';
-            }}
+            onClick={() => router.push('/login')}
             className="mt-6 w-full"
             data-testid="kit-continue"
           >

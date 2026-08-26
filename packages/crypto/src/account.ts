@@ -135,6 +135,43 @@ export async function rewrapAccountKey(
   }
 }
 
+/**
+ * Derive the value that proves possession of the Account Key.
+ *
+ * Recovery has an awkward requirement: the server must let somebody holding the
+ * Emergency Kit replace their master password, while being unable to do so
+ * itself. It cannot check the recovery key directly — that key decrypts the
+ * whole vault, and handing it over would end the zero-knowledge property.
+ *
+ * So the client derives a separate value from the Account Key and the server
+ * stores only that, exactly as it does for the Auth Key. Possession of the
+ * verifier proves possession of the Account Key; the verifier itself decrypts
+ * nothing.
+ */
+export async function deriveRecoveryVerifier(recoveryKey: string): Promise<string> {
+  const raw = base64UrlToBytes(recoveryKey.trim());
+  if (raw.length !== SIZES.key) {
+    throw new RangeError('Recovery key must decode to exactly 32 bytes');
+  }
+
+  try {
+    const hkdfKey = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: new Uint8Array(0),
+        info: utf8ToBytes(HKDF_INFO.recovery),
+      },
+      hkdfKey,
+      SIZES.key * 8,
+    );
+    return bytesToBase64Url(new Uint8Array(bits));
+  } finally {
+    wipe(raw);
+  }
+}
+
 /** Wrap a known Account Key under a Master Key — used when restoring from a kit. */
 export async function wrapRecoveryKey(
   masterKey: CryptoKey,
