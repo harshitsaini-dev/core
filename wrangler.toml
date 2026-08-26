@@ -1,0 +1,41 @@
+#:schema node_modules/wrangler/config-schema.json
+#
+# Cloudflare configuration for Core.
+#
+# Nothing in this file is a secret. Database and namespace ids are Cloudflare's
+# internal identifiers — they are useless without credentials for the account
+# that owns them, which is why they are safe to commit and why a self-hoster
+# simply replaces them with their own.
+#
+# Real secrets never appear here. They go to the Worker secret store:
+#     pnpm cf secret put AUTH_PEPPER
+# and to .dev.vars for local development, which is git-ignored.
+
+name = "core"
+compatibility_date = "2026-08-26"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# D1 — the encrypted vault.
+#
+# Every user-data column in this database holds ciphertext. If a query ever
+# returns something a human can read, that is a bug, not a feature.
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "core-vault"
+database_id = "ca642db4-f5ca-4c06-a4d7-e23dab58940d"
+migrations_dir = "packages/db/migrations"
+
+# ---------------------------------------------------------------------------
+# KV — rate limit counters and account lockout state.
+#
+# Deliberately separate from D1: this data is high-write, short-lived and
+# worthless if lost, which is the opposite of the vault in every respect.
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "ce6dfdbbd41a4e74af8c90e30360bafe"
+
+[observability]
+enabled = true

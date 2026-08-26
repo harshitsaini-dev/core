@@ -1,4 +1,5 @@
 import { SIZES } from '@core/shared';
+import type { Encrypted } from '@core/shared';
 import { decryptBytes, encryptBytes, importAesKey } from './aes.js';
 import type { Bytes } from './encoding.js';
 import { base64UrlToBytes, bytesToBase64Url, utf8ToBytes, wipe } from './encoding.js';
@@ -25,7 +26,7 @@ export interface KeyPairMaterial {
   /** SPKI, base64url. Public — stored in the clear. */
   readonly publicKey: string;
   /** PKCS#8, encrypted under the Account Key. */
-  readonly wrappedPrivateKey: string;
+  readonly wrappedPrivateKey: Encrypted;
 }
 
 /** Generate an ECDH P-256 key pair and wrap the private half. */
@@ -125,7 +126,7 @@ export async function encryptForRecipient(
   senderPrivateKey: CryptoKey,
   recipientPublicKey: CryptoKey,
   plaintext: string,
-): Promise<string> {
+): Promise<Encrypted> {
   const key = await deriveSharedKey(senderPrivateKey, recipientPublicKey);
   return encryptBytes(key, utf8ToBytes(plaintext), SHARE_INFO);
 }

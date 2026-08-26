@@ -27,7 +27,13 @@
     "e2e:report": "playwright show-report",
     "e2e:codegen": "playwright codegen http://localhost:3000",
     "e2e:install": "playwright install --with-deps chromium",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "d1": "wrangler d1",
+    "cf": "wrangler",
+    "db:generate": "pnpm --filter @core/db generate",
+    "db:migrate:local": "wrangler d1 migrations apply core-vault --local",
+    "db:migrate": "wrangler d1 migrations apply core-vault --remote",
+    "db:studio": "wrangler d1 execute core-vault --local --command"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
@@ -39,6 +45,7 @@
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.20.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
   }
 }

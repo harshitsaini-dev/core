@@ -206,7 +206,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | OSS-01 | One-click Deploy to Cloudflare button | P5 | TODO |
 | OSS-02 | Docker single-container option for VPS self-hosters | P6 | TODO |
 | OSS-03 | `.env.example` with every variable documented | P2 | DONE |
-| OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2 | TODO |
+| OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2 | DONE |
 | OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e | P2 | DONE |
 | OSS-06 | Crypto test vectors published for independent audit | P1 | DONE |
 | OSS-07 | SECURITY.md with a responsible-disclosure policy | P5 | TODO |

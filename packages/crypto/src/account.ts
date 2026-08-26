@@ -1,4 +1,5 @@
 import { HKDF_INFO, SIZES } from '@core/shared';
+import type { Encrypted } from '@core/shared';
 import { decryptBytes, encryptBytes, importAesKey } from './aes.js';
 import type { Bytes } from './encoding.js';
 import { base64UrlToBytes, bytesToBase64Url, utf8ToBytes, wipe } from './encoding.js';
@@ -29,7 +30,7 @@ export interface AccountKeys {
 export interface NewAccount {
   readonly keys: AccountKeys;
   /** The Account Key encrypted under the Master Key. Safe to store server-side. */
-  readonly wrappedAccountKey: string;
+  readonly wrappedAccountKey: Encrypted;
   /**
    * The Account Key itself, base64url.
    *
@@ -125,7 +126,7 @@ export async function rewrapAccountKey(
   oldMasterKey: CryptoKey,
   newMasterKey: CryptoKey,
   wrappedAccountKey: string,
-): Promise<string> {
+): Promise<Encrypted> {
   const raw = await decryptBytes(oldMasterKey, wrappedAccountKey, ACCOUNT_KEY_AAD);
   try {
     return await encryptBytes(newMasterKey, raw, ACCOUNT_KEY_AAD);
@@ -138,7 +139,7 @@ export async function rewrapAccountKey(
 export async function wrapRecoveryKey(
   masterKey: CryptoKey,
   recoveryKey: string,
-): Promise<string> {
+): Promise<Encrypted> {
   const raw = base64UrlToBytes(recoveryKey.trim());
   if (raw.length !== SIZES.key) {
     throw new RangeError('Recovery key must decode to exactly 32 bytes');

@@ -66,4 +66,31 @@ export const SIZES = {
 /** Prefix of the ciphertext envelope: `v1.<iv>.<ciphertext+tag>`. */
 export const ENVELOPE_VERSION = 'v1';
 
+declare const encryptedBrand: unique symbol;
+
+/**
+ * A ciphertext envelope produced by `@core/crypto`.
+ *
+ * This is a branded string: structurally it is just text, but nothing can
+ * produce one except the encryption functions. Database columns holding user
+ * data are typed as `Encrypted`, so writing a plain string into one is a
+ * compile error rather than a silent, catastrophic leak.
+ *
+ * Decryption deliberately accepts a plain `string`, because values arriving
+ * from the network or the database are untrusted and are validated at runtime
+ * anyway.
+ */
+export type Encrypted = string & { readonly [encryptedBrand]: true };
+
+/**
+ * Assert that a string is a ciphertext envelope.
+ *
+ * Only `@core/crypto` may call this, and only on values it has just produced.
+ * Anywhere else it is a hole straight through the type system — if you are
+ * reaching for it in application code, the design has gone wrong.
+ */
+export function unsafeAsEncrypted(value: string): Encrypted {
+  return value as Encrypted;
+}
+
 export type VaultItemType = 'login' | 'note' | 'card' | 'identity' | 'ssh';

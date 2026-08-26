@@ -1,4 +1,5 @@
-import { ENVELOPE_VERSION, SIZES } from '@core/shared';
+import { ENVELOPE_VERSION, SIZES, unsafeAsEncrypted } from '@core/shared';
+import type { Encrypted } from '@core/shared';
 import type { Bytes } from './encoding.js';
 import { base64UrlToBytes, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from './encoding.js';
 import { randomBytes } from './random.js';
@@ -70,7 +71,7 @@ export async function encryptBytes(
   key: CryptoKey,
   plaintext: Bytes,
   aad?: string,
-): Promise<string> {
+): Promise<Encrypted> {
   // A fresh IV per encryption. Reuse under the same key would be catastrophic
   // for GCM, so it is generated here and never accepted as a parameter.
   const iv = randomBytes(SIZES.iv);
@@ -82,7 +83,9 @@ export async function encryptBytes(
   }
 
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt(algorithm, key, plaintext));
-  return `${ENVELOPE_VERSION}.${bytesToBase64Url(iv)}.${bytesToBase64Url(ciphertext)}`;
+  return unsafeAsEncrypted(
+    `${ENVELOPE_VERSION}.${bytesToBase64Url(iv)}.${bytesToBase64Url(ciphertext)}`,
+  );
 }
 
 /** Encrypt a UTF-8 string. */
@@ -90,12 +93,16 @@ export async function encryptString(
   key: CryptoKey,
   plaintext: string,
   aad?: string,
-): Promise<string> {
+): Promise<Encrypted> {
   return encryptBytes(key, utf8ToBytes(plaintext), aad);
 }
 
 /** Encrypt a JSON-serialisable value. */
-export async function encryptJson(key: CryptoKey, value: unknown, aad?: string): Promise<string> {
+export async function encryptJson(
+  key: CryptoKey,
+  value: unknown,
+  aad?: string,
+): Promise<Encrypted> {
   return encryptString(key, JSON.stringify(value), aad);
 }
 
