@@ -97,7 +97,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | GEN-04 | Generator history (session-scoped, never persisted) | P3 | TODO |
 | GEN-05 | API-key utility: random 32 / 64 character keys | P4 | TODO |
 | GEN-06 | UUID / hex / base64 quick generators | P4 | TODO |
-| GEN-07 | Master-password strength meter (zxcvbn) | P2 | TODO |
+| GEN-07 | Master-password strength meter (zxcvbn) | P2 | DONE |
 
 ## ENV — Developer Environment Manager
 
@@ -165,7 +165,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-04 | Session timeout slider (1 / 5 / 15 min / never) | P3 | TODO |
 | SEC-05 | Panic button — instant lock and cache wipe | P3 | TODO |
 | SEC-06 | Audit log of unlocks, devices, IPs, timestamps | P5 | TODO |
-| SEC-07 | Emergency Kit PDF with recovery key | P2 | TODO |
+| SEC-07 | Emergency Kit PDF with recovery key | P2 | DONE |
 | SEC-08 | Master-password change with Account Key re-wrap | P5 | TODO |
 | SEC-09 | Suspicious-activity email alerts | P5 | TODO |
 | SEC-10 | One-time self-destructing share links | P6 | TODO |

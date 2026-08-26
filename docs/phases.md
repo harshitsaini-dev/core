@@ -105,7 +105,8 @@ anything useful, and the schema is stable enough to build on.
 - [x] Session cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`; `Secure` is
       set outside development, where it would make the cookie invisible to a
       plain-HTTP localhost server
-- [ ] Emergency Kit PDF actually restores an account in a clean browser profile
+- [~] Emergency Kit is generated and shown; restoring an account from it in a
+      clean browser profile needs the recovery flow, which does not exist yet
 - [ ] Migrations apply cleanly from an empty database
 
 ---
