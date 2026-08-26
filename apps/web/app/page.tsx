@@ -5,7 +5,7 @@ const BOOT_LINES = [
   { prompt: '>', text: 'encryption   AES-256-GCM / client-side only', accent: true },
   { prompt: '>', text: 'derivation   Argon2id (m=64MiB, t=3, p=1)', accent: true },
   { prompt: '>', text: 'server sees  ciphertext', accent: true },
-  { prompt: '>', text: 'vault        not built yet — phase 0', accent: false },
+  { prompt: '>', text: 'vault        in development', accent: false },
 ] as const;
 
 export default function Home() {
@@ -30,13 +30,7 @@ export default function Home() {
       </div>
 
       <p className="text-muted mt-6 text-xs">
-        Built in the open ·{' '}
-        <a
-          className="text-accent hover:bg-accent hover:text-bg"
-          href="https://github.com/harshitsaini-dev/core"
-        >
-          github.com/harshitsaini-dev/core
-        </a>
+        Encrypted in your browser. Unreadable to this server.
       </p>
     </main>
   );

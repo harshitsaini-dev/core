@@ -40,8 +40,9 @@ test.describe('signup form', () => {
   test('states up front that there is no password reset', async ({ page }) => {
     // A user cannot consent to a consequence they were not told about, and this
     // one is permanent.
-    await expect(page.getByText(/there is no password reset/i)).toBeVisible();
-    await expect(page.getByText(/vault is gone\s+permanently/i)).toBeVisible();
+    await expect(page.getByText(/no password reset/i)).toBeVisible();
+    await expect(page.getByText(/the vault is gone for good/i)).toBeVisible();
+    await expect(page.getByText(/nobody can recover it/i)).toBeVisible();
   });
 
   test('cannot be submitted empty', async ({ page }) => {

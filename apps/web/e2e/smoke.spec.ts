@@ -47,13 +47,17 @@ test.describe('landing page', () => {
     expect(radii.every((radius) => radius === '0px')).toBe(true);
   });
 
-  test('links to the public repository', async ({ page }) => {
+  test('does not link out to the source repository', async ({ page }) => {
+    // The deployed site says nothing about where its code lives. Anyone who
+    // wants the source can find it; the running instance should not volunteer
+    // an external destination on a page users arrive at with a password in mind.
     await page.goto('/');
 
-    await expect(page.getByRole('link', { name: /github\.com\/harshitsaini-dev\/core/ })).toHaveAttribute(
-      'href',
-      'https://github.com/harshitsaini-dev/core',
-    );
+    const external = await page
+      .locator('a[href^="http"]')
+      .evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href));
+
+    expect(external).toEqual([]);
   });
 
   test('sets the hardening response headers', async ({ page }) => {

@@ -160,10 +160,9 @@ export default function SignupPage() {
             />
           </Field>
 
-          <Warning title="there is no password reset">
-            If you forget your master password and lose your Emergency Kit, your vault is gone
-            permanently. Nobody — including whoever runs this server — can recover it. That is the
-            point.
+          <Warning title="no password reset">
+            Lose your master password and your Emergency Kit, and the vault is gone for good.
+            Nobody can recover it — us included.
           </Warning>
 
           {error ? (
