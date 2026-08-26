@@ -1,0 +1,63 @@
+@import 'tailwindcss';
+
+/*
+ * Terminal theme tokens.
+ * Mirrors THEME in @core/shared - keep the two in sync.
+ */
+@theme {
+  --color-bg: #000000;
+  --color-surface: #0a0a0a;
+  --color-line: #1a1a1a;
+  --color-accent: #00ff41;
+  --color-accent-dim: #00a82b;
+  --color-fg: #e6e6e6;
+  --color-muted: #7a7a7a;
+  --color-danger: #ff3b30;
+  --color-warning: #ffb020;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-none: 0px;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* No rounded corners anywhere. Cyber-brutalism, not friendliness. */
+* {
+  border-radius: 0 !important;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* The cursor motif used across headings and prompts. */
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.cursor::after {
+  content: '_';
+  color: var(--color-accent);
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor::after {
+    animation: none;
+  }
+}

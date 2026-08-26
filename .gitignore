@@ -66,3 +66,6 @@ scratch/
 .aider*
 CLAUDE.md
 AGENTS.md
+
+# next auto-generated types
+next-env.d.ts

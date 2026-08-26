@@ -141,16 +141,16 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| UI-01 | Cyber-brutalist terminal theme, pure black background | P1 | TODO |
-| UI-02 | Matrix-green accent (`#00FF41`), monospace everywhere | P1 | TODO |
-| UI-03 | Zero border radius, 1px hard borders | P1 | TODO |
+| UI-01 | Cyber-brutalist terminal theme, pure black background | P1 | DONE |
+| UI-02 | Matrix-green accent (`#00FF41`), monospace everywhere | P1 | DONE |
+| UI-03 | Zero border radius, 1px hard borders | P1 | DONE |
 | UI-04 | Blinking cursor motif on headings and inputs | P3 | TODO |
 | UI-05 | Typewriter reveal on first paint of a view | P3 | TODO |
 | UI-06 | Invert-on-hover interaction (black text on green block) | P3 | TODO |
 | UI-07 | Toast notifications, bottom-anchored | P3 | TODO |
 | UI-08 | Command-line style empty and error states | P3 | TODO |
 | UI-09 | Anti-screenshot blur-all toggle | P3 | TODO |
-| UI-10 | True OLED black for battery saving | P1 | TODO |
+| UI-10 | True OLED black for battery saving | P1 | DONE |
 | UI-11 | Reduced-motion support | P5 | TODO |
 | UI-12 | Full keyboard navigation and visible focus rings | P5 | TODO |
 | UI-13 | Optional light theme (inverted terminal) | P6 | TODO |
@@ -205,13 +205,13 @@ P5 Hardening+Deploy · P6 Post-v1
 |---|---|---|---|
 | OSS-01 | One-click Deploy to Cloudflare button | P5 | TODO |
 | OSS-02 | Docker single-container option for VPS self-hosters | P6 | TODO |
-| OSS-03 | `.env.example` with every variable documented | P2 | TODO |
+| OSS-03 | `.env.example` with every variable documented | P2 | DONE |
 | OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2 | TODO |
-| OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e | P2 | TODO |
+| OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e | P2 | DONE |
 | OSS-06 | Crypto test vectors published for independent audit | P1 | TODO |
 | OSS-07 | SECURITY.md with a responsible-disclosure policy | P5 | TODO |
 | OSS-08 | Self-hosting guide with screenshots | P5 | TODO |
-| OSS-09 | MIT licence | P0 | TODO |
+| OSS-09 | MIT licence | P0 | DONE |
 | OSS-10 | Lighthouse PWA score 100 in CI | P5 | TODO |
 
 ---

@@ -1,0 +1,88 @@
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * End-to-end configuration.
+ *
+ * Watching tests run in a real browser:
+ *
+ *   pnpm e2e:ui       best for development - time-travel UI, pick locators,
+ *                     re-run single tests, watch mode
+ *   pnpm e2e:headed   plain headed run, slowed down so it is followable
+ *   pnpm e2e:debug    step through with the Playwright Inspector
+ *   pnpm e2e          headless, what CI runs
+ *
+ * Extra knobs:
+ *   HEADED=1          force headed even without the flag
+ *   SLOWMO=500        milliseconds of delay between actions
+ *   DEVTOOLS=1        open Chrome DevTools alongside the run
+ */
+
+const isCI = !!process.env.CI;
+
+// Headed whenever asked for explicitly, and never in CI.
+const headed = !isCI && (process.env.HEADED === '1' || process.argv.includes('--headed'));
+
+// A run you cannot follow is not much use, so headed runs are slowed by default.
+const slowMo = Number(process.env.SLOWMO ?? (headed ? 300 : 0));
+
+export default defineConfig({
+  testDir: './apps/web/e2e',
+  outputDir: './test-results',
+
+  // Serial and unretried locally: a flaky headed run is confusing to watch.
+  fullyParallel: isCI,
+  workers: isCI ? 2 : 1,
+  retries: isCI ? 2 : 0,
+  forbidOnly: isCI,
+
+  timeout: headed ? 120_000 : 30_000,
+  expect: { timeout: headed ? 15_000 : 5_000 },
+
+  reporter: isCI
+    ? [['github'], ['html', { open: 'never' }]]
+    : [['list'], ['html', { open: 'never' }]],
+
+  use: {
+    baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
+    headless: !headed,
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: isCI ? 'retain-on-failure' : 'off',
+    actionTimeout: headed ? 15_000 : 5_000,
+    launchOptions: {
+      slowMo,
+      devtools: process.env.DEVTOOLS === '1',
+    },
+  },
+
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // A window large enough to actually see what is happening.
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'mobile',
+      use: { ...devices['Pixel 7'] },
+    },
+    // Cross-browser coverage is CI-only; locally it just slows the loop down.
+    ...(isCI
+      ? [
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+          { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+        ]
+      : []),
+  ],
+
+  webServer: {
+    command: 'pnpm dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !isCI,
+    timeout: 120_000,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  },
+});

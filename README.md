@@ -1,12 +1,15 @@
 <div align="center">
 
 ```
- ██████╗ ██████╗ ██████╗ ███████╗
-██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██║     ██║   ██║██████╔╝█████╗
-██║     ██║   ██║██╔══██╗██╔══╝
-╚██████╗╚██████╔╝██║  ██║███████╗
- ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+  ____ ___  ____  _____
+ / ___/ _ \|  _ \| ____|
+| |  | | | | |_) |  _|
+| |__| |_| |  _ <| |___
+ \____\___/|_| \_\_____|
+
+ $ core unlock
+ > deriving key ... argon2id
+ > vault decrypted ... local only
 ```
 
 **A zero-knowledge password, secret and `.env` manager you can actually self-host.**
@@ -144,11 +147,24 @@ Then connect the repository to Cloudflare Pages and add your own domain.
 
 ```bash
 pnpm install
-pnpm dev          # local dev server
-pnpm test         # unit tests
-pnpm typecheck    # strict TypeScript
-pnpm lint
+pnpm dev            # local dev server on :3000
+pnpm check          # typecheck + lint + unit tests
+pnpm test:watch     # unit tests in watch mode
 ```
+
+End-to-end tests run against a real browser:
+
+```bash
+pnpm e2e:install    # one-time: download the browsers
+pnpm e2e            # headless, what CI runs
+pnpm e2e:ui         # time-travel UI, watch mode, locator picker
+pnpm e2e:headed     # visible browser, slowed to 300ms per action
+pnpm e2e:debug      # step through with the Playwright Inspector
+pnpm e2e:report     # open the last HTML report
+```
+
+`SLOWMO=500` changes the pacing of a headed run and `DEVTOOLS=1` opens
+DevTools alongside it.
 
 Project documentation lives in [`docs/`](docs/) —
 [architecture](docs/architecture.md) ·
