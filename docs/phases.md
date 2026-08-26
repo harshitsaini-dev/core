@@ -96,10 +96,11 @@ anything useful, and the schema is stable enough to build on.
 - [x] Signing up then dumping the entire D1 database shows no readable field
       (verified 2026-08-26; the email is ciphertext too, though under a
       server-held key — see ADR-014)
-- [~] `prelogin` timing for a known vs unknown email differs by under 5 ms
-      across 100 samples — holds under `next dev`, but only because the dev D1
-      proxy costs more than the constant-time budget and does so symmetrically.
-      Must be re-run against a Workers build before this counts.
+- [x] `prelogin` timing for a known vs unknown email differs by under 5 ms
+      across 100 samples — verified against a real Workers build, where the
+      binding is local and the response time sits just above the padded budget.
+      That is what shows the padding is doing the work rather than dev-server
+      overhead masking the difference.
 - [x] Login succeeds on the correct password and fails identically (same message,
       same shape) on a wrong password and an unknown user
 - [x] Session cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`; `Secure` is
