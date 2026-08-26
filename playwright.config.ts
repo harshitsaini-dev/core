@@ -3,24 +3,29 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * End-to-end configuration.
  *
- * Watching tests run in a real browser:
+ * Runs headed by default. CI is always headless.
  *
- *   pnpm e2e:ui       best for development - time-travel UI, pick locators,
- *                     re-run single tests, watch mode
- *   pnpm e2e:headed   plain headed run, slowed down so it is followable
- *   pnpm e2e:debug    step through with the Playwright Inspector
- *   pnpm e2e          headless, what CI runs
+ *   pnpm e2e            headed, slowed so it is followable
+ *   pnpm e2e:ui         time-travel UI, watch mode, locator picker
+ *   pnpm e2e:debug      step through with the Playwright Inspector
+ *   pnpm e2e:headless   unattended run, what CI does
  *
  * Extra knobs:
- *   HEADED=1          force headed even without the flag
- *   SLOWMO=500        milliseconds of delay between actions
- *   DEVTOOLS=1        open Chrome DevTools alongside the run
+ *   HEADED=0            force headless
+ *   SLOWMO=500          milliseconds of delay between actions
+ *   DEVTOOLS=1          open Chrome DevTools alongside the run
+ *
+ * One caveat worth knowing: the API specs (prelogin, signup, login) drive HTTP
+ * directly, so a headed run shows a browser window sitting on a blank page.
+ * There is nothing to render until there is a UI. The smoke spec is the one
+ * that actually paints Core.
  */
 
 const isCI = !!process.env.CI;
 
-// Headed whenever asked for explicitly, and never in CI.
-const headed = !isCI && (process.env.HEADED === '1' || process.argv.includes('--headed'));
+// Headed by default outside CI: a test run you can watch catches things a
+// summary line never will. Opt out with HEADED=0 for a quick unattended run.
+const headed = !isCI && process.env.HEADED !== '0';
 
 // A run you cannot follow is not much use, so headed runs are slowed by default.
 const slowMo = Number(process.env.SLOWMO ?? (headed ? 300 : 0));

@@ -159,19 +159,29 @@ pnpm check          # typecheck + lint + unit tests
 pnpm test:watch     # unit tests in watch mode
 ```
 
+On Windows there are batch wrappers for the dev server — `start.bat`,
+`stop.bat`, `restart.bat` and `status.bat`. They take an optional port and act
+on the process that owns it rather than on every `node.exe`, so they will not
+disturb anything else you have running. `status.bat` also probes an API route,
+which distinguishes "the port is open" from "the database is actually
+reachable".
+
 End-to-end tests run against a real browser:
 
 ```bash
 pnpm e2e:install    # one-time: download the browsers
-pnpm e2e            # headless, what CI runs
+pnpm e2e            # visible browser, slowed so you can follow it
 pnpm e2e:ui         # time-travel UI, watch mode, locator picker
-pnpm e2e:headed     # visible browser, slowed to 300ms per action
 pnpm e2e:debug      # step through with the Playwright Inspector
+pnpm e2e:headless   # unattended run, what CI does
 pnpm e2e:report     # open the last HTML report
 ```
 
-`SLOWMO=500` changes the pacing of a headed run and `DEVTOOLS=1` opens
-DevTools alongside it.
+Runs headed by default outside CI. `SLOWMO=500` changes the pacing and
+`DEVTOOLS=1` opens DevTools alongside it.
+
+The API specs drive HTTP directly, so a headed run shows a browser sitting on a
+blank page — there is nothing to paint until the UI exists.
 
 Project documentation lives in [`docs/`](docs/) —
 [architecture](docs/architecture.md) ·
