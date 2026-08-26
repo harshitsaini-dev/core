@@ -36,7 +36,7 @@ jobs:
           {
             echo "AUTH_PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
             echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
-          } > .dev.vars
+          } > apps/web/.dev.vars
 
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
 

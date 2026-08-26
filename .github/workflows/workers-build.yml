@@ -1,0 +1,93 @@
+name: Workers build
+
+# The suite against a real Cloudflare Workers build.
+#
+# Two assertions cannot be settled against `next dev` and are skipped there:
+# the prelogin constant-time proof, and cold offline navigation. Under `next
+# dev` the D1 binding goes through an IPC proxy that costs more than the timing
+# budget, and chunks are compiled on demand and renamed on every compilation —
+# so neither result would mean anything.
+#
+# This does not run on the development machine either. OpenNext's build copies
+# node_modules, and pnpm's symlinks cannot be traversed on Windows, which is the
+# incompatibility OpenNext itself warns about. Linux here is the honest place to
+# run it rather than a reason to reshape the workspace.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workers:
+    name: e2e against workerd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate a throwaway pepper for the test run
+        run: |
+          {
+            echo "AUTH_PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+            echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+          } > apps/web/.dev.vars
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Prepare the local database
+        run: |
+          pnpm db:migrate:local
+          pnpm db:seed
+
+      - name: Build for the Workers runtime
+        run: pnpm build:cf
+
+      - name: Start the Workers preview
+        run: |
+          pnpm exec wrangler dev \
+            --config apps/web/wrangler.toml \
+            --port 3000 \
+            --local \
+            --persist-to .wrangler/state \
+            > wrangler.log 2>&1 &
+          # Poll rather than sleeping: a cold workerd start varies by several
+          # seconds, and guessing wrong either wastes time or fails a server
+          # that was about to come up.
+          for attempt in $(seq 1 60); do
+            if curl -sf -o /dev/null http://localhost:3000/; then
+              echo "preview is up after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "preview did not start"
+          cat wrangler.log
+          exit 1
+
+      - name: Run the suite
+        env:
+          WORKERS_BUILD: '1'
+        run: pnpm e2e --project=chromium
+
+      - name: Worker log
+        if: ${{ failure() }}
+        run: cat wrangler.log
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-workers
+          path: playwright-report/
+          retention-days: 7

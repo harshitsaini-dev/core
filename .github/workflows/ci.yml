@@ -53,14 +53,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Generate a throwaway pepper for the test run
-        # .dev.vars is git-ignored, so CI has to make its own. This value exists
+        # apps/web/.dev.vars is git-ignored, so CI has to make its own. It lives
+        # beside wrangler.toml, which is where the adapter looks for it. This value exists
         # for the length of one job against an empty local D1 replica; it never
         # protects anything real and is deliberately not a stored secret.
         run: |
           {
             echo "AUTH_PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
             echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
-          } > .dev.vars
+          } > apps/web/.dev.vars
 
       - run: pnpm exec playwright install --with-deps chromium
 

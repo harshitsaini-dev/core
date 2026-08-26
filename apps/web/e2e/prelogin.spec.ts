@@ -154,5 +154,17 @@ test.describe('prelogin timing', () => {
       difference,
       `known median ${knownMedian}ms vs unknown median ${unknownMedian}ms`,
     ).toBeLessThan(5);
+
+    if (process.env.WORKERS_BUILD === '1') {
+      // Against a real Workers build the binding is local and the handler
+      // finishes in single-digit milliseconds, so the response time should sit
+      // just above the constant-time budget. That is what proves the padding is
+      // doing the work, rather than dev-server overhead masking the difference.
+      expect(
+        knownMedian,
+        `expected the padded budget to dominate, got ${knownMedian}ms`,
+      ).toBeGreaterThan(100);
+      expect(knownMedian).toBeLessThan(400);
+    }
   });
 });

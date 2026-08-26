@@ -29,14 +29,16 @@
     "e2e:install": "playwright install --with-deps chromium",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "d1": "wrangler d1",
-    "cf": "wrangler",
+    "cf": "wrangler --config apps/web/wrangler.toml",
     "db:generate": "pnpm --filter @core/db generate",
-    "db:migrate:local": "wrangler d1 migrations apply core-vault --local",
-    "db:migrate": "wrangler d1 migrations apply core-vault --remote",
-    "db:studio": "wrangler d1 execute core-vault --local --command",
-    "cf:types": "wrangler types apps/web/cloudflare-env.d.ts --include-runtime=false",
+    "db:migrate:local": "wrangler d1 migrations apply core-vault --local --config apps/web/wrangler.toml --persist-to .wrangler/state",
+    "db:migrate": "wrangler d1 migrations apply core-vault --remote --config apps/web/wrangler.toml",
+    "db:studio": "wrangler d1 execute core-vault --local --config apps/web/wrangler.toml --persist-to .wrangler/state --command",
+    "cf:types": "wrangler types apps/web/cloudflare-env.d.ts --include-runtime=false --config apps/web/wrangler.toml",
     "db:seed": "tsx scripts/seed-dev.mts",
-    "assets": "tsx scripts/generate-assets.mts"
+    "assets": "tsx scripts/generate-assets.mts",
+    "build:cf": "pnpm --filter @core/web exec opennextjs-cloudflare build",
+    "preview": "pnpm --filter @core/web exec opennextjs-cloudflare preview"
   },
   "devDependencies": {
     "@core/crypto": "workspace:*",

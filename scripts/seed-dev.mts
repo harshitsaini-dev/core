@@ -61,7 +61,7 @@ function readDevPepper(): string {
   const fromEnv = process.env.AUTH_PEPPER?.trim();
   if (fromEnv) return fromEnv;
 
-  const devVars = resolve(repoRoot, '.dev.vars');
+  const devVars = resolve(repoRoot, 'apps/web/.dev.vars');
   if (!existsSync(devVars)) {
     throw new Error(
       'No AUTH_PEPPER found. Set it in the environment, or copy .dev.vars.example to .dev.vars and fill it in.',
@@ -94,7 +94,7 @@ function execLocal(sql: string): void {
   try {
     execFileSync(
       'pnpm',
-      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--file', file],
+      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--config', 'apps/web/wrangler.toml', '--persist-to', '.wrangler/state', '--file', file],
       { cwd: repoRoot, stdio: 'pipe', shell: process.platform === 'win32' },
     );
   } finally {

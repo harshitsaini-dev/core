@@ -99,12 +99,25 @@ export default defineConfig({
       : []),
   ],
 
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !isCI,
-    timeout: 120_000,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  /*
+   * The server under test.
+   *
+   * Normally `next dev`, because it is the only way to get the Cloudflare
+   * bindings locally. When WORKERS_BUILD is set the workflow has already
+   * started a real Workers preview, so Playwright attaches to it instead of
+   * starting anything — that is the environment where the two assertions
+   * `next dev` cannot settle finally mean something.
+   */
+  ...(process.env.WORKERS_BUILD === '1'
+    ? {}
+    : {
+        webServer: {
+          command: 'pnpm dev',
+          url: 'http://localhost:3000',
+          reuseExistingServer: !isCI,
+          timeout: 120_000,
+          stdout: 'ignore' as const,
+          stderr: 'pipe' as const,
+        },
+      }),
 });

@@ -143,7 +143,7 @@ pnpm install
 
 pnpm cf d1 create core-vault         # paste the id into wrangler.toml
 pnpm db:migrate:local                # create the tables
-cp .dev.vars.example .dev.vars       # then add a local AUTH_PEPPER
+cp apps/web/.dev.vars.example apps/web/.dev.vars       # then add a local AUTH_PEPPER
 
 pnpm dev
 ```

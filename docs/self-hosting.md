@@ -70,7 +70,7 @@ pnpm cf secret put AUTH_PEPPER
 > accounts on your instance can no longer log in. It cannot be regenerated or
 > reset.
 
-For local development, copy `.dev.vars.example` to `.dev.vars` and put a
+For local development, copy `apps/web/.dev.vars.example` to `apps/web/.dev.vars` and put a
 **different, disposable** pepper in it:
 
 ```
@@ -78,7 +78,8 @@ AUTH_PEPPER=<a separate local value>
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-`.dev.vars` is git-ignored, and Wrangler loads it automatically. Keep it
+`apps/web/.dev.vars` is git-ignored, and Wrangler loads it automatically — it
+sits beside `wrangler.toml`, which is where the adapter looks. Keep it
 distinct from production: local accounts are throwaway, so a leaked development
 pepper costs nothing, whereas reusing the production value would extend a local
 mistake to real users.

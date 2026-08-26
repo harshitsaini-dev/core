@@ -77,7 +77,10 @@ test.describe('offline vault', () => {
     // writing offline and syncing on reconnect, and unlocking from the local
     // copy. This assertion should be re-run against a Workers build, alongside
     // the prelogin timing test, which is waiting on the same thing.
-    test.fixme(true, 'cold offline navigation cannot be verified against next dev');
+    test.fixme(
+      process.env.WORKERS_BUILD !== '1',
+      'cold offline navigation is only meaningful against a Workers build',
+    );
 
     const email = await openVault(page, 'offline-open');
     await addItem(page, 'CachedItem');

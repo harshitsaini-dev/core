@@ -37,7 +37,7 @@ function execLocal(sql: string): string {
   try {
     return execFileSync(
       'pnpm',
-      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--json', '--file', file],
+      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--json', '--config', 'apps/web/wrangler.toml', '--persist-to', '.wrangler/state', '--file', file],
       { cwd: repoRoot, encoding: 'utf8', shell: process.platform === 'win32' },
     );
   } finally {
@@ -77,7 +77,7 @@ function devPepper(): string {
   const fromEnv = process.env.AUTH_PEPPER?.trim();
   if (fromEnv) return fromEnv;
 
-  const match = /^AUTH_PEPPER=(.+)$/m.exec(readFileSync(resolve(repoRoot, '.dev.vars'), 'utf8'));
+  const match = /^AUTH_PEPPER=(.+)$/m.exec(readFileSync(resolve(repoRoot, 'apps/web/.dev.vars'), 'utf8'));
   if (!match?.[1]) throw new Error('AUTH_PEPPER not found');
   return match[1].trim();
 }

@@ -12,6 +12,8 @@
 # and to .dev.vars for local development, which is git-ignored.
 
 name = "core"
+main = ".open-next/worker.js"
+assets = { directory = ".open-next/assets", binding = "ASSETS" }
 compatibility_date = "2026-08-26"
 compatibility_flags = ["nodejs_compat"]
 
@@ -25,7 +27,9 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "core-vault"
 database_id = "ca642db4-f5ca-4c06-a4d7-e23dab58940d"
-migrations_dir = "packages/db/migrations"
+# Relative to this file, which lives in apps/web because the OpenNext
+# build looks for the config beside the Next app rather than at the repo root.
+migrations_dir = "../../packages/db/migrations"
 
 # ---------------------------------------------------------------------------
 # KV — rate limit counters and account lockout state.

@@ -307,3 +307,61 @@ enough to hold their vault.
 server key. It is commented as such, and the plaintext-allowlist test does not
 cover that distinction, so the comment and this ADR are what carry it. Every
 other `_enc` column remains unreadable to the operator.
+
+---
+
+## ADR-015 — One local D1 replica, pinned explicitly
+
+**Date:** 2026-08-27 · **Status:** Accepted
+
+**Context.** Miniflare stores its local database under `.wrangler/state`,
+resolved relative to whatever directory the process started in. The dev server
+runs from `apps/web`, the CLI runs from the repository root, and moving
+`wrangler.toml` into `apps/web` for the OpenNext build moved a third reference
+point. Each combination produced a plausible-looking path.
+
+The failure mode is what makes this worth an ADR rather than a comment. Two
+replicas do not error. Migrations report success against one while the app reads
+the other; a seeded account is invisible to the running server; a test that
+queries the database sees an empty table and fails for a reason that looks like
+a bug in the feature. It has now happened twice, the second time after a change
+that appeared unrelated.
+
+**Decision.** Every invocation names the path explicitly. Wrangler commands pass
+`--persist-to .wrangler/state`, and the dev adapter is configured with
+`persist: { path: '../../.wrangler/state/v3' }`. There is exactly one local
+replica, at the repository root, and no code path relies on the default.
+
+**Consequences.** Slightly noisier commands, and a rule that has to be applied to
+any new script that touches the local database. Cheap next to a class of failure
+that presents as a broken feature rather than as a broken configuration.
+
+---
+
+## ADR-016 — The Workers build runs in CI, not on the development machine
+
+**Date:** 2026-08-27 · **Status:** Accepted
+
+**Context.** Two assertions cannot be settled against `next dev`: the prelogin
+constant-time proof, because the dev D1 binding goes through an IPC proxy
+costing more than the timing budget, and cold offline navigation, because dev
+compiles chunks on demand and renames them on every compilation.
+
+Building for the Workers runtime locally fails. OpenNext copies `node_modules`,
+and pnpm's symlinks cannot be traversed on Windows — the incompatibility
+OpenNext warns about in its own output.
+
+**Decision.** A separate workflow builds with `opennextjs-cloudflare`, starts a
+real Workers preview with local D1 and KV, and runs the suite against it with
+`WORKERS_BUILD=1`. The two assertions are skipped everywhere else and enabled
+there.
+
+**Rejected alternatives.** Moving development to WSL, or switching the workspace
+to hoisted `node_modules`, would both make the local build work — and both
+reshape the development environment to suit one build step. Deleting the two
+assertions would have been quieter and dishonest: the properties they check are
+the ones the product claims hardest.
+
+**Consequences.** The strongest assertions run on push rather than on save,
+which is a slower feedback loop for exactly the things worth being sure about.
+Accepted because the alternative is not knowing at all.
