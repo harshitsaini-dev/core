@@ -38,6 +38,9 @@ importers:
       prettier:
         specifier: ^3.4.0
         version: 3.9.6
+      sharp:
+        specifier: ^0.34.0
+        version: 0.34.5
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
@@ -7166,7 +7169,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-ia32': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
-    optional: true
 
   sharp@0.35.2:
     dependencies:

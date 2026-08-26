@@ -61,6 +61,65 @@ body {
 }
 
 /*
+ * Scrollbars.
+ *
+ * The default light scrollbar against a pure black page is the single most
+ * obvious break in the terminal illusion, and on Windows it is a wide grey slab
+ * sitting next to the content.
+ *
+ * Declared twice on purpose: the standard properties are what Firefox and
+ * recent Safari read, the -webkit- pseudo-elements are what Chromium reads.
+ * Neither alone covers the browsers this has to run in.
+ */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-accent-dim) var(--color-bg);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-line);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f3d27;
+  border: 1px solid var(--color-accent-dim);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+  box-shadow: 0 0 8px rgb(0 255 65 / 0.35);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--color-accent);
+}
+
+/* Where the two bars meet. Left unstyled it renders as a pale square. */
+::-webkit-scrollbar-corner {
+  background: var(--color-bg);
+}
+
+/*
+ * Scrollable panes inside the app get a narrower bar than the page does, so a
+ * list inside a card does not compete with the window scrollbar beside it.
+ */
+.scroll-pane {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.scroll-pane::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/*
  * Text glow.
  *
  * Tailwind gained text-shadow utilities recently, but expressing this as a

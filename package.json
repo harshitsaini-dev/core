@@ -35,7 +35,8 @@
     "db:migrate": "wrangler d1 migrations apply core-vault --remote",
     "db:studio": "wrangler d1 execute core-vault --local --command",
     "cf:types": "wrangler types apps/web/cloudflare-env.d.ts --include-runtime=false",
-    "db:seed": "tsx scripts/seed-dev.mts"
+    "db:seed": "tsx scripts/seed-dev.mts",
+    "assets": "tsx scripts/generate-assets.mts"
   },
   "devDependencies": {
     "@core/crypto": "workspace:*",
@@ -48,6 +49,7 @@
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.0",
     "prettier": "^3.4.0",
+    "sharp": "^0.34.0",
     "tsx": "^4.23.12",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.20.0",

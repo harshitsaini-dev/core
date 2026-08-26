@@ -35,27 +35,34 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
     'border-danger text-danger hover:bg-danger hover:text-bg hover:shadow-glow-danger focus-visible:shadow-glow-danger',
 };
 
+/**
+ * The button look, as a class string.
+ *
+ * Exported so an anchor can be styled as a button without reaching for a
+ * polymorphic `asChild` prop and the dependency that usually comes with it. A
+ * link that navigates should stay an `<a>`: it belongs in the tab order as a
+ * link, opens in a new tab on middle-click, and is announced correctly.
+ */
+export function buttonClasses(variant: ButtonVariant = 'primary', className?: string): string {
+  return cx(
+    // min-h-11 is 44px: the smallest target most people can hit reliably with a
+    // thumb. The type stays small to suit the terminal look, so the height has
+    // to be set explicitly rather than falling out of padding.
+    'inline-flex min-h-11 items-center justify-center border px-4 py-2 font-mono text-sm tracking-tight transition-colors',
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+    'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+    BUTTON_VARIANTS[variant],
+    variant === 'primary' ? 'disabled:hover:text-accent' : undefined,
+    className,
+  );
+}
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
 }
 
 export function Button({ variant = 'primary', className, ...props }: ButtonProps) {
-  return (
-    <button
-      {...props}
-      className={cx(
-        // min-h-11 is 44px: the smallest target most people can hit reliably
-        // with a thumb. The type stays small to suit the terminal look, so the
-        // height has to be set explicitly rather than falling out of padding.
-        'inline-flex min-h-11 items-center justify-center border px-4 py-2 font-mono text-sm tracking-tight transition-colors',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-        'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
-        BUTTON_VARIANTS[variant],
-        variant === 'primary' ? 'disabled:hover:text-accent' : undefined,
-        className,
-      )}
-    />
-  );
+  return <button {...props} className={buttonClasses(variant, className)} />;
 }
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {

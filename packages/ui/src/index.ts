@@ -7,3 +7,4 @@
 
 export { THEME } from '@core/shared';
 export * from './primitives.js';
+export * from './status-screen.js';

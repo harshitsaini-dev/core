@@ -1,11 +1,41 @@
 {
   "name": "Core — zero-knowledge vault",
   "short_name": "Core",
-  "description": "Zero-knowledge password, secret and .env manager.",
+  "description": "A zero-knowledge password, secret and .env manager. Encrypted in your browser, unreadable to the server.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "orientation": "portrait-primary",
-  "icons": []
+  "categories": ["productivity", "security", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Unlock",
+      "short_name": "Unlock",
+      "url": "/login",
+      "description": "Open the vault"
+    }
+  ]
 }
