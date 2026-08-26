@@ -16,7 +16,7 @@ fifteen minutes. Everything below fits inside free tiers.
 |---|---|
 | A Cloudflare account | Free. Handles hosting, database, DNS and bot protection. |
 | A GitHub account | To fork the repository and trigger deploys. |
-| Node 20+ and pnpm 9+ | For local setup and the Wrangler CLI. |
+| Node 20+ and pnpm 9+ | Wrangler ships as a project dependency; no global install needed. |
 | A domain *(optional)* | Cloudflare gives you a free `*.pages.dev` subdomain otherwise. |
 | A Resend account *(optional)* | Only needed for login alerts and magic links. |
 
@@ -33,8 +33,8 @@ pnpm install
 ## 2. Create the database
 
 ```bash
-pnpm dlx wrangler login
-pnpm dlx wrangler d1 create core-vault
+pnpm cf login
+pnpm cf d1 create core-vault
 ```
 
 Copy the printed `[[d1_databases]]` block into `wrangler.toml`. The
@@ -43,14 +43,14 @@ Copy the printed `[[d1_databases]]` block into `wrangler.toml`. The
 Apply the schema:
 
 ```bash
-pnpm dlx wrangler d1 migrations apply core-vault --local   # local dev
-pnpm dlx wrangler d1 migrations apply core-vault --remote  # production
+pnpm db:migrate:local   # local dev
+pnpm db:migrate  # production
 ```
 
 ## 3. Create the KV namespace for rate limiting
 
 ```bash
-pnpm dlx wrangler kv namespace create RATE_LIMIT
+pnpm cf kv namespace create RATE_LIMIT
 ```
 
 Add the returned id to `wrangler.toml`.
@@ -63,20 +63,25 @@ commit it.
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-pnpm dlx wrangler secret put AUTH_PEPPER
+pnpm cf secret put AUTH_PEPPER
 ```
 
 > **Keep a backup of this value somewhere safe.** If you lose it, existing
 > accounts on your instance can no longer log in. It cannot be regenerated or
 > reset.
 
-For local development, put the same value in `.dev.vars`:
+For local development, copy `.dev.vars.example` to `.dev.vars` and put a
+**different, disposable** pepper in it:
 
 ```
-AUTH_PEPPER=<your value>
+AUTH_PEPPER=<a separate local value>
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-`.dev.vars` is git-ignored.
+`.dev.vars` is git-ignored, and Wrangler loads it automatically. Keep it
+distinct from production: local accounts are throwaway, so a leaked development
+pepper costs nothing, whereas reusing the production value would extend a local
+mistake to real users.
 
 ## 5. Optional — email
 
@@ -84,7 +89,7 @@ Sign up at [resend.com](https://resend.com), verify your domain, create a
 sending API key, then:
 
 ```bash
-pnpm dlx wrangler secret put RESEND_API_KEY
+pnpm cf secret put RESEND_API_KEY
 ```
 
 Without this, Core still works; you simply do not receive login alerts or
@@ -97,7 +102,7 @@ In the Cloudflare dashboard, create a Turnstile site for your domain in
 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, then:
 
 ```bash
-pnpm dlx wrangler secret put TURNSTILE_SECRET_KEY
+pnpm cf secret put TURNSTILE_SECRET_KEY
 ```
 
 ## 7. Run locally
@@ -157,7 +162,7 @@ Skipping step 3 is the most common way people lose a self-hosted vault.
 ```bash
 git pull upstream main
 pnpm install
-pnpm dlx wrangler d1 migrations apply core-vault --remote
+pnpm db:migrate
 ```
 
 Migrations never rewrite ciphertext. If a future release changes the encryption

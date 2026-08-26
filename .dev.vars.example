@@ -1,0 +1,15 @@
+# Copy to .dev.vars and fill in. Wrangler loads .dev.vars automatically when
+# running locally; it is git-ignored.
+#
+# Generate a pepper:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+#
+# Use a DIFFERENT value here from the one in production. Local accounts are
+# throwaway; the production pepper is not.
+
+AUTH_PEPPER=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Optional — only needed for the features that use them.
+RESEND_API_KEY=
+TURNSTILE_SECRET_KEY=

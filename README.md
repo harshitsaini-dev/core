@@ -135,8 +135,9 @@ git clone https://github.com/harshitsaini-dev/core.git
 cd core
 pnpm install
 
-pnpm dlx wrangler d1 create core-vault    # paste the id into wrangler.toml
-pnpm dlx wrangler secret put AUTH_PEPPER  # a random 32-byte value you generate
+pnpm cf d1 create core-vault         # paste the id into wrangler.toml
+pnpm db:migrate:local                # create the tables
+cp .dev.vars.example .dev.vars       # then add a local AUTH_PEPPER
 
 pnpm dev
 ```
