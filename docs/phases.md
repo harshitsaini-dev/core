@@ -100,9 +100,11 @@ anything useful, and the schema is stable enough to build on.
       across 100 samples — holds under `next dev`, but only because the dev D1
       proxy costs more than the constant-time budget and does so symmetrically.
       Must be re-run against a Workers build before this counts.
-- [ ] Login succeeds on the correct password and fails identically (same message,
+- [x] Login succeeds on the correct password and fails identically (same message,
       same shape) on a wrong password and an unknown user
-- [ ] Session cookie is `HttpOnly`, `Secure`, `SameSite=Strict`
+- [x] Session cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`; `Secure` is
+      set outside development, where it would make the cookie invisible to a
+      plain-HTTP localhost server
 - [ ] Emergency Kit PDF actually restores an account in a clean browser profile
 - [ ] Migrations apply cleanly from an empty database
 

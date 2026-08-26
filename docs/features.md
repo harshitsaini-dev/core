@@ -28,19 +28,19 @@ P5 Hardening+Deploy · P6 Post-v1
 | ZK-13 | Native WebCrypto only; single pinned Argon2 WASM dependency | P1 | DONE |
 | ZK-14 | Memory wipe of keys and plaintext on lock or tab close | P3 | TODO |
 | ZK-15 | Per-device non-extractable key encrypting the offline cache | P3 | TODO |
-| ZK-16 | No administrator password reset — documented as a hard guarantee | P2 | TODO |
+| ZK-16 | No administrator password reset — documented as a hard guarantee | P2 | DONE |
 
 ## AUTH — Authentication & Session
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
 | AUTH-01 | Signup with client-side key generation and Emergency Kit | P2 | DONE |
-| AUTH-02 | Login via derived Auth Key, peppered verifier on server | P2 | TODO |
-| AUTH-03 | Constant-time verifier comparison | P2 | TODO |
+| AUTH-02 | Login via derived Auth Key, peppered verifier on server | P2 | DONE |
+| AUTH-03 | Constant-time verifier comparison | P2 | DONE |
 | AUTH-04 | Prelogin salt endpoint with deterministic fake salts | P2 | DONE |
 | AUTH-05 | User-enumeration-proof generic error messages | P2 | DONE |
-| AUTH-06 | Short-lived session token in HttpOnly/Secure/SameSite cookie | P2 | TODO |
-| AUTH-07 | Rotating refresh tokens, revocable per device | P2 | TODO |
+| AUTH-06 | Short-lived session token in HttpOnly/Secure/SameSite cookie | P2 | DONE |
+| AUTH-07 | Rotating refresh tokens, revocable per device | P2 | WIP |
 | AUTH-08 | WebAuthn / passkey unlock (biometric, FaceID, YubiKey) | P5 | TODO |
 | AUTH-09 | Device PIN quick-unlock backed by the device key | P3 | TODO |
 | AUTH-10 | Magic-link account unlock after lockout (Resend) | P5 | TODO |
@@ -182,8 +182,8 @@ P5 Hardening+Deploy · P6 Post-v1
 | RL-04 | Token-bucket algorithm for burst tolerance | P5 | TODO |
 | RL-05 | Cloudflare Turnstile on signup, login, share-open | P5 | TODO |
 | RL-06 | Account-level lockout after N consecutive failures | P5 | TODO |
-| RL-07 | Constant-time responses across all auth paths | P2 | TODO |
-| RL-08 | Server-side pepper in the verifier | P2 | TODO |
+| RL-07 | Constant-time responses across all auth paths | P2 | DONE |
+| RL-08 | Server-side pepper in the verifier | P2 | DONE |
 | RL-09 | Body-size limits and strict zod validation on every route | P2 | DONE |
 | RL-10 | Structured abuse logging with hashed IPs | P5 | TODO |
 
