@@ -53,7 +53,7 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| VLT-01 | Login items: title, username, password, URL, notes | P3 | TODO |
+| VLT-01 | Login items: title, username, password, URL, notes | P3 | DONE |
 | VLT-02 | Arbitrary custom fields (text, hidden, date, number) | P3 | TODO |
 | VLT-03 | Isolated recovery-code storage per item | P3 | TODO |
 | VLT-04 | Built-in TOTP generator with live countdown ring | P3 | TODO |
@@ -64,7 +64,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-09 | Encrypted attachments up to 10 MB (R2) | P6 | TODO |
 | VLT-10 | Inline editing directly in the list | P3 | TODO |
 | VLT-11 | Item version history with per-version restore | P4 | TODO |
-| VLT-12 | Trash with 30-day retention and restore | P3 | TODO |
+| VLT-12 | Trash with 30-day retention and restore | P3 | DONE |
 | VLT-13 | Bulk select: delete, move, tag | P3 | TODO |
 | VLT-14 | Drag-and-drop items into folders (desktop) | P4 | TODO |
 | VLT-15 | Linked items (DB credential linked to an ENV project) | P4 | TODO |
@@ -74,29 +74,29 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| ORG-01 | Client-side fuzzy search tolerant of typos | P3 | TODO |
+| ORG-01 | Client-side fuzzy search tolerant of typos | P3 | DONE |
 | ORG-02 | Global command palette (Ctrl/Cmd + K) | P3 | TODO |
 | ORG-03 | Tags with `#` syntax | P3 | TODO |
 | ORG-04 | Nested folders, unlimited depth | P3 | TODO |
 | ORG-05 | Colour-coded folders and tags | P3 | TODO |
 | ORG-06 | Multi-level combined filtering | P3 | TODO |
-| ORG-07 | Sort by A-Z, Z-A, modified, created, most-used | P3 | TODO |
-| ORG-08 | Pinned / favourite items at the top | P3 | TODO |
+| ORG-07 | Sort by A-Z, Z-A, modified, created, most-used | P3 | DONE |
+| ORG-08 | Pinned / favourite items at the top | P3 | DONE |
 | ORG-09 | Password age indicator per item | P4 | TODO |
 | ORG-10 | Grid vs list view toggle | P3 | TODO |
-| ORG-11 | Recently used section | P3 | TODO |
+| ORG-11 | Recently used section | P3 | DONE |
 | ORG-12 | Saved filter views | P6 | TODO |
 
 ## GEN — Generators & Utilities
 
 | ID | Feature | Phase | Status |
 |---|---|---|---|
-| GEN-01 | Password generator with length, case, digits, symbols | P3 | TODO |
-| GEN-02 | Pronounceable passphrase generator (diceware style) | P3 | TODO |
-| GEN-03 | Exclude-ambiguous-characters toggle | P3 | TODO |
+| GEN-01 | Password generator with length, case, digits, symbols | P3 | DONE |
+| GEN-02 | Pronounceable passphrase generator (diceware style) | P3 | DONE |
+| GEN-03 | Exclude-ambiguous-characters toggle | P3 | DONE |
 | GEN-04 | Generator history (session-scoped, never persisted) | P3 | TODO |
-| GEN-05 | API-key utility: random 32 / 64 character keys | P4 | TODO |
-| GEN-06 | UUID / hex / base64 quick generators | P4 | TODO |
+| GEN-05 | API-key utility: random 32 / 64 character keys | P4 | DONE |
+| GEN-06 | UUID / hex / base64 quick generators | P4 | DONE |
 | GEN-07 | Master-password strength meter (zxcvbn) | P2 | DONE |
 
 ## ENV — Developer Environment Manager
@@ -132,7 +132,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | PWA-06 | Bottom navigation bar on mobile | P3 | TODO |
 | PWA-07 | Pull-to-refresh manual sync | P3 | TODO |
 | PWA-08 | Swipe actions: copy username / copy password | P3 | TODO |
-| PWA-09 | Haptic feedback on copy (Vibration API) | P3 | TODO |
+| PWA-09 | Haptic feedback on copy (Vibration API) | P3 | DONE |
 | PWA-10 | Safe-area insets and one-handed reachability | P3 | DONE |
 | PWA-11 | Keyboard shortcuts across desktop | P3 | TODO |
 | PWA-12 | Update-available prompt when a new SW is waiting | P5 | TODO |
@@ -161,7 +161,7 @@ P5 Hardening+Deploy · P6 Post-v1
 |---|---|---|---|
 | SEC-01 | Security dashboard: weak, reused, old passwords | P5 | TODO |
 | SEC-02 | HaveIBeenPwned k-anonymity breach check | P5 | TODO |
-| SEC-03 | Clipboard auto-clear after 30 / 60 seconds | P3 | TODO |
+| SEC-03 | Clipboard auto-clear after 30 / 60 seconds | P3 | DONE |
 | SEC-04 | Session timeout slider (1 / 5 / 15 min / never) | P3 | TODO |
 | SEC-05 | Panic button — instant lock and cache wipe | P3 | DONE |
 | SEC-06 | Audit log of unlocks, devices, IPs, timestamps | P5 | TODO |

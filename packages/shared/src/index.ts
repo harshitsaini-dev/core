@@ -106,3 +106,5 @@ export function unsafeAsEncrypted(value: string): Encrypted {
 }
 
 export type VaultItemType = 'login' | 'note' | 'card' | 'identity' | 'ssh';
+
+export * from './vault.js';
