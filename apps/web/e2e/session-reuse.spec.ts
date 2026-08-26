@@ -1,0 +1,212 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  bytesToBase64Url,
+  createAccountKeys,
+  createKeyPair,
+  deriveKeys,
+  generateKdfSalt,
+} from '@core/crypto';
+import type { KdfParams } from '@core/shared';
+import { expect, test } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
+
+/**
+ * Refresh-token reuse detection.
+ *
+ * Rotation replaces a token and records the hash it replaced. If that old token
+ * ever comes back, a copy of it is in circulation — the legitimate client
+ * replaced it and moved on, so nothing honest would present it again.
+ *
+ * Testing this needs a session old enough to rotate, and sessions rotate at half
+ * their seven-day life. Rather than adding a "rotate sooner" knob that could
+ * weaken production if it were ever set by accident, these tests age the row in
+ * the database directly. The code under test is exactly the code that ships.
+ */
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+
+const FAST_KDF: KdfParams = {
+  algorithm: 'argon2id',
+  memoryKiB: 8192,
+  iterations: 1,
+  parallelism: 1,
+};
+
+/**
+ * Run SQL against the local replica and return wrangler's output.
+ *
+ * Always through a file, never `--command`. Passing SQL as an argument needs a
+ * shell on Windows, and the shell then splits it on whitespace — wrangler sees
+ * `SELECT` and rejects the rest as unknown arguments.
+ */
+function execLocal(sql: string): string {
+  const file = resolve(repoRoot, '.wrangler', `e2e-${crypto.randomUUID()}.sql`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, sql, 'utf8');
+  try {
+    return execFileSync(
+      'pnpm',
+      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--json', '--file', file],
+      { cwd: repoRoot, encoding: 'utf8', shell: process.platform === 'win32' },
+    );
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+
+/**
+ * Push the newest live session close enough to expiry that the next request
+ * rotates it. Half of seven days is the threshold, so one day of remaining life
+ * comfortably qualifies.
+ */
+function ageNewestSession(): void {
+  const oneDayFromNow = Date.now() + 24 * 60 * 60 * 1000;
+  execLocal(
+    `UPDATE sessions SET expires_at = ${oneDayFromNow}
+     WHERE id = (
+       SELECT id FROM sessions WHERE revoked_at IS NULL ORDER BY created_at DESC LIMIT 1
+     );`,
+  );
+}
+
+async function registerAndLogin(request: APIRequestContext, label: string): Promise<void> {
+  const email = `${label}-${crypto.randomUUID()}@core.test`;
+  const password = 'a strong master password';
+
+  const salt = generateKdfSalt();
+  const { authKey, masterKey } = await deriveKeys(password, salt, FAST_KDF);
+  const { keys, wrappedAccountKey } = await createAccountKeys(masterKey);
+  const { publicKey, wrappedPrivateKey } = await createKeyPair(keys.dataKey);
+
+  await request.post('/api/auth/signup', {
+    data: {
+      email,
+      authKey: bytesToBase64Url(authKey),
+      kdfSalt: bytesToBase64Url(salt),
+      kdfParams: FAST_KDF,
+      accountKeyWrapped: wrappedAccountKey,
+      publicKey,
+      privateKeyWrapped: wrappedPrivateKey,
+    },
+  });
+
+  const response = await request.post('/api/auth/login', {
+    data: { email, authKey: bytesToBase64Url(authKey) },
+  });
+  expect(response.status()).toBe(200);
+}
+
+/** Read the session cookie the request context is currently carrying. */
+async function currentToken(request: APIRequestContext): Promise<string> {
+  const state = await request.storageState();
+  const cookie = state.cookies.find((candidate) => candidate.name === 'core_session');
+  expect(cookie, 'expected a session cookie').toBeDefined();
+  return cookie?.value ?? '';
+}
+
+test.describe('session rotation', () => {
+  test('rotates a session that is past half its life', async ({ request }) => {
+    await registerAndLogin(request, 'rotate');
+    const before = await currentToken(request);
+
+    ageNewestSession();
+
+    const response = await request.get('/api/auth/session');
+    expect(response.status()).toBe(200);
+    expect(response.headers()['set-cookie'] ?? '').toContain('core_session=');
+
+    expect(await currentToken(request)).not.toBe(before);
+  });
+
+  test('leaves a fresh session alone', async ({ request }) => {
+    await registerAndLogin(request, 'norotate');
+    const before = await currentToken(request);
+
+    const response = await request.get('/api/auth/session');
+    expect(response.status()).toBe(200);
+    // Rotating on every request would churn the sessions table for no gain.
+    expect(await currentToken(request)).toBe(before);
+  });
+});
+
+test.describe('reuse detection', () => {
+  test('rejects a token that was already rotated away', async ({ request, playwright }) => {
+    await registerAndLogin(request, 'reuse');
+    const stolen = await currentToken(request);
+
+    ageNewestSession();
+    await request.get('/api/auth/session');
+    expect(await currentToken(request)).not.toBe(stolen);
+
+    const attacker = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+      extraHTTPHeaders: { cookie: `core_session=${stolen}` },
+    });
+
+    expect((await attacker.get('/api/auth/session')).status()).toBe(401);
+    await attacker.dispose();
+  });
+
+  test('revokes the whole chain, not just the replayed token', async ({ request, playwright }) => {
+    // The point of the design. There is no way to tell whether the replay or the
+    // live session is the attacker, so both have to go — signing the real user
+    // out is an inconvenience, leaving an attacker signed in is not.
+    await registerAndLogin(request, 'chain');
+    const stolen = await currentToken(request);
+
+    ageNewestSession();
+    await request.get('/api/auth/session');
+
+    // The legitimate client is still working at this point.
+    expect((await request.get('/api/auth/session')).status()).toBe(200);
+
+    const attacker = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+      extraHTTPHeaders: { cookie: `core_session=${stolen}` },
+    });
+    await attacker.get('/api/auth/session');
+    await attacker.dispose();
+
+    // And now it is not.
+    expect((await request.get('/api/auth/session')).status()).toBe(401);
+  });
+
+  test('records the detection in the audit log', async ({ request, playwright }) => {
+    await registerAndLogin(request, 'audit');
+    const stolen = await currentToken(request);
+
+    ageNewestSession();
+    await request.get('/api/auth/session');
+
+    const attacker = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+      extraHTTPHeaders: { cookie: `core_session=${stolen}` },
+    });
+    await attacker.get('/api/auth/session');
+    await attacker.dispose();
+
+    const output = execLocal(
+      "SELECT count(*) AS n FROM audit_log WHERE event = 'session_reuse_detected';",
+    );
+
+    expect(output).toMatch(/"n":\s*[1-9]/);
+  });
+
+  test('a random token is rejected without touching any session', async ({ request, playwright }) => {
+    await registerAndLogin(request, 'random');
+
+    const guesser = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+      extraHTTPHeaders: { cookie: `core_session=${bytesToBase64Url(new Uint8Array(32).fill(9))}` },
+    });
+    expect((await guesser.get('/api/auth/session')).status()).toBe(401);
+    await guesser.dispose();
+
+    // A guessed token must not be able to sign anybody out. If it could, an
+    // attacker would have a free denial-of-service against any account.
+    expect((await request.get('/api/auth/session')).status()).toBe(200);
+  });
+});

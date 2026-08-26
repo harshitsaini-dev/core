@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { getRequestContext } from '@/lib/server/context';
 import { authFailure, serverError } from '@/lib/server/responses';
-import { SESSION_COOKIE, resolveSession, rotateSession, sessionCookie } from '@/lib/server/session';
+import { requireSession } from '@/lib/server/session-guard';
+import { rotateSession, sessionCookie } from '@/lib/server/session';
 
 /**
  * GET /api/auth/session
@@ -23,12 +24,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     return serverError();
   }
 
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = await resolveSession(context.db, context.pepper, token);
-
-  if (!session || !token) {
+  const current = await requireSession(request, context);
+  if (!current) {
     return authFailure();
   }
+  const { session, token } = current;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

@@ -69,18 +69,29 @@ export interface ResolvedSession {
 }
 
 /**
- * Resolve a token to a live session, or null.
+ * The outcome of looking up a token.
  *
- * Returns null for absent, unknown, expired and revoked tokens alike. The caller
- * has no way to tell those apart, and should not: an attacker probing with
- * guessed tokens learns nothing from the distinction.
+ * `reused` is the interesting one. A token that was already rotated away should
+ * never be presented again — the legitimate client replaced it and moved on. So
+ * seeing one means a copy was captured, and the only safe reading is that either
+ * the copy or the current token is in the wrong hands. Since there is no way to
+ * tell which, both go.
+ *
+ * `invalid` covers absent, unknown, expired and revoked alike. A caller cannot
+ * tell those apart and should not be able to: an attacker probing with guessed
+ * tokens learns nothing from the distinction.
  */
+export type SessionLookup =
+  | { readonly status: 'valid'; readonly session: ResolvedSession }
+  | { readonly status: 'reused'; readonly userId: string }
+  | { readonly status: 'invalid' };
+
 export async function resolveSession(
   db: Database,
   pepper: Bytes,
   token: string | undefined,
-): Promise<ResolvedSession | null> {
-  if (!token) return null;
+): Promise<SessionLookup> {
+  if (!token) return { status: 'invalid' };
 
   const tokenHash = await hashToken(pepper, token);
 
@@ -96,23 +107,43 @@ export async function resolveSession(
     .limit(1);
 
   const row = rows[0];
-  if (!row) return null;
+
+  if (!row) {
+    // Not a live session. Before writing it off as noise, check whether it is a
+    // token we ourselves rotated away — that is a captured credential being
+    // replayed, not a random guess.
+    const replaced = await db
+      .select({ userId: sessions.userId })
+      .from(sessions)
+      .where(eq(sessions.previousTokenHash, tokenHash))
+      .limit(1);
+
+    const reused = replaced[0];
+    if (reused) {
+      return { status: 'reused', userId: reused.userId };
+    }
+
+    return { status: 'invalid' };
+  }
 
   // The lookup above already matched on equality, so this is belt-and-braces
   // against a future change that widens the query.
   if (!constantTimeEqual(utf8ToBytes(row.tokenHash), utf8ToBytes(tokenHash))) {
-    return null;
+    return { status: 'invalid' };
   }
 
   if (row.expiresAt.getTime() <= Date.now()) {
-    return null;
+    return { status: 'invalid' };
   }
 
   return {
-    id: row.id,
-    userId: row.userId,
-    expiresAt: row.expiresAt,
-    shouldRotate: row.expiresAt.getTime() - Date.now() < ROTATE_AFTER_MS,
+    status: 'valid',
+    session: {
+      id: row.id,
+      userId: row.userId,
+      expiresAt: row.expiresAt,
+      shouldRotate: row.expiresAt.getTime() - Date.now() < ROTATE_AFTER_MS,
+    },
   };
 }
 

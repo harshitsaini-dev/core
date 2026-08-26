@@ -1,13 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { getRequestContext } from '@/lib/server/context';
 import { serverError } from '@/lib/server/responses';
-import {
-  SESSION_COOKIE,
-  clearedSessionCookie,
-  resolveSession,
-  revokeAllSessions,
-  revokeSession,
-} from '@/lib/server/session';
+import { requireSession } from '@/lib/server/session-guard';
+import { clearedSessionCookie, revokeAllSessions, revokeSession } from '@/lib/server/session';
 
 /**
  * POST /api/auth/logout
@@ -33,15 +28,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     return serverError();
   }
 
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = await resolveSession(context.db, context.pepper, token);
+  // A replayed token is handled inside requireSession, which revokes the whole
+  // chain. Logout then has nothing left to do, and still answers 200.
+  const current = await requireSession(request, context);
 
-  if (session) {
+  if (current) {
     const everywhere = new URL(request.url).searchParams.get('all') === '1';
     if (everywhere) {
-      await revokeAllSessions(context.db, session.userId);
+      await revokeAllSessions(context.db, current.session.userId);
     } else {
-      await revokeSession(context.db, session.id);
+      await revokeSession(context.db, current.session.id);
     }
   }
 

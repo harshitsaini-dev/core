@@ -40,7 +40,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-04 | Prelogin salt endpoint with deterministic fake salts | P2 | DONE |
 | AUTH-05 | User-enumeration-proof generic error messages | P2 | DONE |
 | AUTH-06 | Short-lived session token in HttpOnly/Secure/SameSite cookie | P2 | DONE |
-| AUTH-07 | Rotating refresh tokens, revocable per device | P2 | WIP |
+| AUTH-07 | Rotating refresh tokens, revocable per device | P2 | DONE |
 | AUTH-08 | WebAuthn / passkey unlock (biometric, FaceID, YubiKey) | P5 | TODO |
 | AUTH-09 | Device PIN quick-unlock backed by the device key | P3 | TODO |
 | AUTH-10 | Magic-link account unlock after lockout (Resend) | P5 | TODO |

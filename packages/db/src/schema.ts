@@ -336,6 +336,7 @@ export const auditLog = sqliteTable(
         'password_changed',
         'device_trusted',
         'session_revoked',
+        'session_reuse_detected',
         'export',
         'account_locked',
       ],
