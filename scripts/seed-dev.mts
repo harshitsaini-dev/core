@@ -17,7 +17,7 @@
  * meaningless.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -49,11 +49,28 @@ export const SEED_USER = {
   password: 'seed-master-password',
 } as const;
 
+/**
+ * Find the development pepper.
+ *
+ * `.dev.vars` is the normal source locally, but it is git-ignored and therefore
+ * absent in CI, so the environment takes precedence. Both must agree with what
+ * the dev server loads, or the seeded row gets an email index the running
+ * application cannot reproduce — and every lookup silently misses.
+ */
 function readDevPepper(): string {
-  const contents = readFileSync(resolve(repoRoot, '.dev.vars'), 'utf8');
-  const match = /^AUTH_PEPPER=(.+)$/m.exec(contents);
+  const fromEnv = process.env.AUTH_PEPPER?.trim();
+  if (fromEnv) return fromEnv;
+
+  const devVars = resolve(repoRoot, '.dev.vars');
+  if (!existsSync(devVars)) {
+    throw new Error(
+      'No AUTH_PEPPER found. Set it in the environment, or copy .dev.vars.example to .dev.vars and fill it in.',
+    );
+  }
+
+  const match = /^AUTH_PEPPER=(.+)$/m.exec(readFileSync(devVars, 'utf8'));
   if (!match?.[1]) {
-    throw new Error('AUTH_PEPPER not found in .dev.vars');
+    throw new Error('AUTH_PEPPER is missing from .dev.vars');
   }
   return match[1].trim();
 }
