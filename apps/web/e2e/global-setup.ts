@@ -23,3 +23,12 @@ export default function globalSetup(): void {
   run(['db:migrate:local']);
   run(['db:seed']);
 }
+
+/**
+ * Note on why this does not also warm the routes.
+ *
+ * Global setup runs before the web server is guaranteed to be listening, so a
+ * warm-up here would race it. The action timeout is generous instead, which
+ * handles cold compilation without adding an ordering dependency that would
+ * fail intermittently in a different way.
+ */

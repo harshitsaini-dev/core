@@ -41,8 +41,8 @@ export default defineConfig({
   retries: isCI ? 2 : 0,
   forbidOnly: isCI,
 
-  timeout: headed ? 120_000 : 30_000,
-  expect: { timeout: headed ? 15_000 : 5_000 },
+  timeout: headed ? 120_000 : 60_000,
+  expect: { timeout: headed ? 15_000 : 10_000 },
 
   reporter: isCI
     ? [['github'], ['html', { open: 'never' }]]
@@ -54,7 +54,12 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: isCI ? 'retain-on-failure' : 'off',
-    actionTimeout: headed ? 15_000 : 5_000,
+    // Generous even headless. The suite runs against `next dev` — production
+    // `next start` gets no Cloudflare bindings, so there is no faster option —
+    // and the first request to a cold route waits on compilation. Five seconds
+    // was enough locally, where routes are already warm, and produced flakes in
+    // CI that had nothing to do with the code under test.
+    actionTimeout: headed ? 15_000 : 20_000,
     launchOptions: {
       slowMo,
       devtools: process.env.DEVTOOLS === '1',
@@ -74,8 +79,19 @@ export default defineConfig({
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
     },
-    // Cross-browser coverage is CI-only; locally it just slows the loop down.
-    ...(isCI
+    /*
+     * Firefox and WebKit are opt-in, via E2E_ALL_BROWSERS=1.
+     *
+     * They were briefly enabled for every CI run, which was wrong twice over:
+     * the workflow installs only Chromium, so they failed on a missing browser
+     * rather than on anything real, and running four projects would roughly
+     * double an eight-minute suite on every push.
+     *
+     * They run on a schedule and on demand instead. WebKit genuinely matters
+     * for a mobile-first PWA — every iOS browser is Safari underneath — so this
+     * is a cadence decision, not a coverage one.
+     */
+    ...(process.env.E2E_ALL_BROWSERS === '1'
       ? [
           { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
           { name: 'webkit', use: { ...devices['Desktop Safari'] } },

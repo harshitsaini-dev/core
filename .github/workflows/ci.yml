@@ -66,8 +66,9 @@ jobs:
 
       - run: pnpm build
 
-      # Both projects: desktop and a phone viewport. A layout that only works
+      # Chromium and a phone viewport on every push. A layout that only works
       # on one of them is not finished, and this is a mobile-first PWA.
+      # Firefox and WebKit run on a schedule; see cross-browser.yml.
       - run: pnpm e2e
 
       - uses: actions/upload-artifact@v4

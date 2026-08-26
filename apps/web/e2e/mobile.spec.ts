@@ -114,9 +114,22 @@ test.describe('mobile layout', () => {
 });
 
 test.describe('glow', () => {
-  test('marks interactive elements rather than decorating static text', async ({ page }) => {
+  test('marks interactive elements rather than decorating static text', async ({
+    page,
+    isMobile,
+  }) => {
+    // Hover does not exist on a touch device, so there is nothing here to
+    // assert. Skipped rather than weakened into a test that passes everywhere
+    // and checks nothing.
+    test.skip(isMobile, 'no hover on touch');
+
     // A permanently glowing button is just a bright button. The effect has to
     // change on interaction to carry any information.
+    //
+    // Asserted on hover rather than focus: `:focus-visible` is a browser
+    // heuristic that a programmatic `.focus()` does not reliably satisfy, which
+    // passes headed locally and fails headless in CI for reasons that have
+    // nothing to do with the styling.
     await page.goto('/signup');
 
     const button = page.getByRole('button', { name: 'create vault' });
@@ -125,13 +138,13 @@ test.describe('glow', () => {
     await page.getByLabel('email').fill('glow@core.test');
     await page.getByLabel('master password', { exact: true }).fill('correct-horse-battery-7391');
     await page.getByLabel('confirm master password').fill('correct-horse-battery-7391');
-    await button.focus();
+    await button.hover();
 
-    const focused = await button.evaluate((element) => getComputedStyle(element).boxShadow);
+    const hovered = await button.evaluate((element) => getComputedStyle(element).boxShadow);
 
     expect(resting).toBe('none');
-    expect(focused).not.toBe('none');
-    expect(focused).toContain('rgba(0, 255, 65');
+    expect(hovered).not.toBe('none');
+    expect(hovered).toContain('rgba(0, 255, 65');
   });
 
   test('lights the heading in the accent colour', async ({ page }) => {
@@ -149,7 +162,8 @@ test.describe('glow', () => {
     const input = page.getByLabel('email');
 
     const resting = await input.evaluate((element) => getComputedStyle(element).boxShadow);
-    await input.focus();
+    // Inputs use plain `:focus`, not `:focus-visible`, so clicking is enough.
+    await input.click();
     const focused = await input.evaluate((element) => getComputedStyle(element).boxShadow);
 
     expect(resting).toBe('none');

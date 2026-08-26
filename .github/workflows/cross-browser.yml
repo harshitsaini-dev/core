@@ -1,0 +1,54 @@
+name: Cross-browser
+
+# Firefox and WebKit, away from the push path.
+#
+# Running four projects on every push would roughly double an eight-minute
+# suite for feedback that changes far less often than the code does. WebKit
+# still matters — every browser on iOS is Safari underneath, and this is a
+# mobile-first PWA — so it runs nightly and on demand rather than not at all.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: firefox and webkit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate a throwaway pepper for the test run
+        run: |
+          {
+            echo "AUTH_PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+            echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+          } > .dev.vars
+
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - run: pnpm build
+
+      - env:
+          E2E_ALL_BROWSERS: '1'
+        run: pnpm e2e --project=firefox --project=webkit
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-cross-browser
+          path: playwright-report/
+          retention-days: 7
