@@ -127,6 +127,7 @@ export const useItems = create<ItemsState>((set, get) => ({
         undecryptable: result.undecryptable,
         loading: false,
         error: null,
+        online: true,
       });
 
       await offline.writeCache(result.raw);
@@ -134,6 +135,11 @@ export const useItems = create<ItemsState>((set, get) => ({
     } catch {
       set({
         loading: false,
+        // A request that failed is better evidence than navigator.onLine, which
+        // reports whether an interface is up rather than whether anything is
+        // reachable. Set directly rather than through setOnline, which would
+        // trigger a flush and fail the same way.
+        online: false,
         // Not an error if there is something to show. A cached vault working
         // offline is the feature, not a degraded state to apologise for.
         error: get().items.length > 0 ? null : 'Could not reach the vault.',
@@ -222,11 +228,18 @@ export const useItems = create<ItemsState>((set, get) => ({
       await offline.clearOutbox(queued.map((entry) => entry.operation.id));
       await offline.writeCursor(Math.max(get().cursor, cursor));
 
-      set({ syncing: false, pending: 0, error: null, cursor: Math.max(get().cursor, cursor) });
+      set({
+        syncing: false,
+        pending: 0,
+        error: null,
+        online: true,
+        cursor: Math.max(get().cursor, cursor),
+      });
     } catch {
       await offline.recordFailure(queued.map((entry) => entry.operation.id));
       set({
         syncing: false,
+        online: false,
         pending: queued.length,
         // Phrased as a statement of fact rather than a failure. The change is
         // safe on this device; it simply has not travelled yet.
@@ -263,15 +276,29 @@ async function commit(set: Setter, get: Getter, operation: Operation): Promise<v
 /**
  * Track connectivity.
  *
- * `navigator.onLine` is a weak signal — it reports whether an interface is up,
- * not whether anything is reachable — so a failed request also marks the app
- * offline. The events are what let it recover promptly when the network comes
- * back.
+ * `navigator.onLine` is a weak signal: it reports whether an interface is up,
+ * not whether anything is reachable, and it can stay true on a captive portal
+ * or a dead uplink. So it is only half of the answer — a request that actually
+ * failed marks the app offline too, and a request that succeeded marks it back
+ * online. The events are what let it recover promptly rather than waiting for
+ * the next attempt.
+ *
+ * Going offline is never inferred from the browser saying so alone, because
+ * the reverse mistake matters more: telling somebody their change is synced
+ * when it is sitting in a queue is worse than a stale "offline".
  */
 export function watchConnectivity(): () => void {
   if (typeof window === 'undefined') return () => undefined;
 
-  const update = (): void => useItems.getState().setOnline(navigator.onLine);
+  const update = (): void => {
+    // Only the browser going offline is trusted outright. Coming back online is
+    // treated as a hint to retry, and the retry decides.
+    if (!navigator.onLine) {
+      useItems.setState({ online: false });
+      return;
+    }
+    useItems.getState().setOnline(true);
+  };
 
   window.addEventListener('online', update);
   window.addEventListener('offline', update);

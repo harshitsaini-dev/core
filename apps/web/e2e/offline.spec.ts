@@ -77,7 +77,10 @@ test.describe('offline vault', () => {
     // writing offline and syncing on reconnect, and unlocking from the local
     // copy. This assertion should be re-run against a Workers build, alongside
     // the prelogin timing test, which is waiting on the same thing.
-    test.fixme(
+    // Skipped against `next dev`, which compiles chunks on demand and renames
+    // them on every compilation — the page is served from the shell cache but
+    // never hydrates, so the result would say nothing about the product.
+    test.skip(
       process.env.WORKERS_BUILD !== '1',
       'cold offline navigation is only meaningful against a Workers build',
     );
