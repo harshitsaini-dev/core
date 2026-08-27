@@ -35,6 +35,18 @@ async function createVault(page: Page, email: string): Promise<string> {
   return shown.replace(/\s/g, '');
 }
 
+/**
+ * How long recovery is allowed to take.
+ *
+ * The heaviest thing this product ever asks a browser to do: two full Argon2id
+ * derivations back to back, one to unwrap with the recovery key and one to
+ * re-wrap under the new password. Each is tuned to roughly half a second on an
+ * idle machine and takes considerably longer on a shared one running the rest
+ * of this suite beside it — which is how a 45 second bound failed once, in a
+ * fifty-minute run, while passing in eighteen seconds on its own.
+ */
+const RECOVERY_TIMEOUT_MS = 120_000;
+
 async function submitRecovery(
   page: Page,
   email: string,
@@ -58,7 +70,7 @@ test.describe('recovery', () => {
 
     await submitRecovery(page, email, recoveryKey, REPLACEMENT);
 
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
     await expect(page.getByTestId('vault-state')).toContainText('unlocked');
   });
 
@@ -66,17 +78,17 @@ test.describe('recovery', () => {
     const email = uniqueEmail('rotate-pw');
     const recoveryKey = await createVault(page, email);
     await submitRecovery(page, email, recoveryKey, REPLACEMENT);
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
 
     await page.goto('/login');
     await page.getByLabel('email').fill(email);
     await page.getByLabel('master password').fill(ORIGINAL);
     await page.getByTestId('unlock').click();
-    await expect(page.getByTestId('login-error')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('login-error')).toBeVisible({ timeout: RECOVERY_TIMEOUT_MS });
 
     await page.getByLabel('master password').fill(REPLACEMENT);
     await page.getByTestId('unlock').click();
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
   });
 
   test('accepts the key formatted the way it was printed, with spaces', async ({ page }) => {
@@ -87,7 +99,7 @@ test.describe('recovery', () => {
     const spaced = recoveryKey.match(/.{1,8}/g)?.join(' ') ?? recoveryKey;
 
     await submitRecovery(page, email, spaced, REPLACEMENT);
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
   });
 
   test('rejects a recovery key belonging to a different account', async ({ page }) => {
@@ -99,7 +111,7 @@ test.describe('recovery', () => {
 
     await submitRecovery(page, victim, attackerKey, REPLACEMENT);
 
-    await expect(page.getByTestId('recover-error')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('recover-error')).toBeVisible({ timeout: RECOVERY_TIMEOUT_MS });
     await expect(page).not.toHaveURL(/\/vault$/);
   });
 
@@ -114,7 +126,7 @@ test.describe('recovery', () => {
 
     await submitRecovery(page, email, 'obviously-not-a-key', REPLACEMENT);
 
-    await expect(page.getByTestId('recover-error')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('recover-error')).toBeVisible({ timeout: RECOVERY_TIMEOUT_MS });
     // The client decodes the key before it derives anything, so a typo never
     // reaches the network at all.
     expect(requests).toEqual([]);
@@ -143,7 +155,7 @@ test.describe('recovery', () => {
     });
 
     await submitRecovery(page, email, recoveryKey, REPLACEMENT);
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
 
     expect(bodies.length).toBeGreaterThan(0);
     for (const body of bodies) {
@@ -161,7 +173,7 @@ test.describe('vault lock state', () => {
     const email = uniqueEmail('lock');
     const recoveryKey = await createVault(page, email);
     await submitRecovery(page, email, recoveryKey, REPLACEMENT);
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
 
     await page.getByTestId('lock').click();
     await expect(page.getByTestId('vault-state')).toContainText('locked');
@@ -177,7 +189,7 @@ test.describe('vault lock state', () => {
     const email = uniqueEmail('reload');
     const recoveryKey = await createVault(page, email);
     await submitRecovery(page, email, recoveryKey, REPLACEMENT);
-    await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/vault$/, { timeout: RECOVERY_TIMEOUT_MS });
 
     await page.reload();
     await expect(page.getByTestId('vault-state')).toContainText('locked');
