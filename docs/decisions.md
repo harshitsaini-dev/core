@@ -365,3 +365,10 @@ the ones the product claims hardest.
 **Consequences.** The strongest assertions run on push rather than on save,
 which is a slower feedback loop for exactly the things worth being sure about.
 Accepted because the alternative is not knowing at all.
+
+**Amendment, same day.** The workflow first ran the entire suite and the preview
+died partway through, refusing connections, on a commit that CI passed. It now
+runs only the specs that need workerd — smoke, prelogin and offline. Running
+everything twice cost double for almost no extra signal, and the sustained load
+was what destabilised a single `wrangler dev` process. If a focused run ever
+brings it down again, that is a real signal rather than an artefact of scale.

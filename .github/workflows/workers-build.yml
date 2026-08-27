@@ -76,10 +76,21 @@ jobs:
           cat wrangler.log
           exit 1
 
-      - name: Run the suite
+      # Deliberately not the whole suite.
+      #
+      # This workflow exists to settle the assertions that only mean something
+      # on workerd. Everything else is already covered by CI against `next dev`,
+      # and running all of it twice doubles the cost for almost no extra signal
+      # — while the sustained load is what brought the preview down when it was
+      # tried: the run died partway through with the worker refusing
+      # connections, on a commit that CI passed.
+      #
+      # Serial for the same reason. One preview process, one client.
+      - name: Run the assertions that need workerd
         env:
           WORKERS_BUILD: '1'
-        run: pnpm e2e --project=chromium
+        run: |
+          pnpm e2e --project=chromium --workers=1             apps/web/e2e/smoke.spec.ts             apps/web/e2e/prelogin.spec.ts             apps/web/e2e/offline.spec.ts
 
       - name: Worker log
         if: ${{ failure() }}
