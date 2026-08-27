@@ -4,8 +4,9 @@ import { FOLDER_COLORS, collectTags, itemSubtitle, orderFolders } from '@core/sh
 import type { DecryptedFolder, DecryptedItem } from '@core/shared';
 import { Button, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
+import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
 import {
   activeFolders,
   activeItems,
@@ -15,6 +16,8 @@ import {
 } from '@/lib/client/items-store';
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
+import { CommandPalette } from './command-palette';
+import type { Command } from './command-palette';
 import { ItemForm } from './item-form';
 import { TotpCode } from './totp-code';
 
@@ -41,6 +44,23 @@ type View =
  */
 type FolderFilter = string | 'none' | null;
 
+/**
+ * Whether a keystroke belongs to whatever the user is typing into.
+ *
+ * Single-letter shortcuts are only safe if they never fire mid-word. Getting
+ * this wrong means a title containing "n" opens a second new-item form while
+ * somebody is still naming the first.
+ */
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT'
+  );
+}
+
 export default function VaultPage() {
   const router = useRouter();
 
@@ -63,6 +83,8 @@ export default function VaultPage() {
   const [query, setQuery] = useState('');
   const [folderFilter, setFolderFilter] = useState<FolderFilter>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => startAutoLock(), []);
   useEffect(() => watchConnectivity(), []);
@@ -105,6 +127,80 @@ export default function VaultPage() {
   }, [live, query, folderFilter, tagFilter]);
 
   const trashed = useMemo(() => trashedItems(items), [items]);
+
+  const openItem = useCallback((id: string) => setView({ kind: 'edit', id }), []);
+
+  const commands = useMemo<Command[]>(
+    () => [
+      { id: 'new', label: 'new item', hint: 'n', run: () => setView({ kind: 'new' }) },
+      { id: 'folders', label: 'manage folders', run: () => setView({ kind: 'folders' }) },
+      { id: 'trash', label: 'open trash', run: () => setView({ kind: 'trash' }) },
+      {
+        id: 'clear-clipboard',
+        label: 'clear the clipboard now',
+        run: () => void clearClipboardNow(),
+      },
+      { id: 'lock', label: 'lock the vault', hint: 'l', run: () => lock(false) },
+    ],
+    // Delete and panic are deliberately absent: see the note in
+    // command-palette.tsx. Nothing irreversible should be one Enter away from a
+    // fuzzy match.
+    [lock],
+  );
+
+  /**
+   * Keyboard shortcuts.
+   *
+   * Ctrl/Cmd+K works anywhere, including inside a form — it is the way out of
+   * whatever you are doing. The single-letter ones only fire when nothing is
+   * focused for typing, which is what keeps "n" from appearing in a password.
+   */
+  useEffect(() => {
+    if (state !== 'unlocked') return;
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+
+      if (paletteOpen || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === 'Escape' && !isTyping(event.target)) {
+        setView({ kind: 'list' });
+        return;
+      }
+
+      if (isTyping(event.target)) return;
+
+      if (event.key === '/') {
+        event.preventDefault();
+        setView({ kind: 'list' });
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (event.key === 'n') {
+        event.preventDefault();
+        setView({ kind: 'new' });
+        return;
+      }
+
+      if (event.key === 'l') {
+        event.preventDefault();
+        lock(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [state, paletteOpen, lock]);
+
+  // The palette holds decrypted titles. Locking has to take it with them.
+  useEffect(() => {
+    if (state !== 'unlocked') setPaletteOpen(false);
+  }, [state]);
   const tags = useMemo(() => collectTags(live), [live]);
   const visibleFolders = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
 
@@ -171,6 +267,7 @@ export default function VaultPage() {
         <>
           <div className="mt-6 flex flex-wrap gap-3">
             <Input
+              ref={searchRef}
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -181,6 +278,14 @@ export default function VaultPage() {
             />
             <Button type="button" onClick={() => setView({ kind: 'new' })} data-testid="new-item">
               new
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setPaletteOpen(true)}
+              data-testid="open-palette"
+            >
+              ⌘K
             </Button>
           </div>
 
@@ -212,12 +317,9 @@ export default function VaultPage() {
             </p>
           ) : null}
 
-          <ItemList
-            items={visible}
-            loading={loading}
-            query={query}
-            onEdit={(id) => setView({ kind: 'edit', id })}
-          />
+          <PullToRefresh onRefresh={load}>
+            <ItemList items={visible} loading={loading} query={query} onEdit={openItem} />
+          </PullToRefresh>
 
           <footer className="border-line mt-10 flex flex-wrap gap-3 border-t pt-6">
             <Button type="button" variant="ghost" onClick={() => lock(false)} data-testid="lock">
@@ -267,10 +369,54 @@ export default function VaultPage() {
         <Trash items={trashed} onBack={() => setView({ kind: 'list' })} />
       ) : null}
 
+      {paletteOpen ? (
+        <CommandPalette
+          items={live}
+          commands={commands}
+          onClose={() => setPaletteOpen(false)}
+          onOpenItem={openItem}
+        />
+      ) : null}
+
       {view.kind === 'folders' ? (
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
       ) : null}
     </main>
+  );
+}
+
+/**
+ * Pull down to sync.
+ *
+ * Touch only: a desktop has the connection indicator and a page that refreshes
+ * itself, and a mouse has nothing to pull with.
+ */
+function PullToRefresh({
+  onRefresh,
+  children,
+}: {
+  onRefresh: () => Promise<void>;
+  children: React.ReactNode;
+}) {
+  const pull = usePullToRefresh(onRefresh);
+
+  const label = pull.refreshing ? 'syncing' : pull.armed ? 'release to sync' : 'pull to sync';
+
+  return (
+    <div {...pull.handlers} data-testid="pull-to-refresh">
+      {pull.distance > 0 || pull.refreshing ? (
+        <p
+          className="text-accent-dim overflow-hidden text-center font-mono text-xs"
+          style={{ height: pull.refreshing ? 24 : pull.distance }}
+          aria-live="polite"
+          data-testid="pull-indicator"
+        >
+          <span aria-hidden="true">{pull.refreshing ? '...' : pull.armed ? '^' : 'v'} </span>
+          {label}
+        </p>
+      ) : null}
+      {children}
+    </div>
   );
 }
 
@@ -637,9 +783,43 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
     setTimeout(() => setCopied(null), 2000);
   }
 
+  // Left copies the password, right copies the username — the same two actions
+  // as the buttons, reachable with one thumb. Rows with nothing to copy do not
+  // move at all, rather than sliding to reveal an action that does nothing.
+  const swipe = useSwipe({
+    ...(fields?.password ? { onSwipeLeft: () => void copy('password', fields.password) } : {}),
+    ...(fields?.username ? { onSwipeRight: () => void copy('username', fields.username) } : {}),
+  });
+
   return (
-    <li className="border-line border-b py-4" data-testid="item-row">
-      <div className="flex items-start justify-between gap-3">
+    <li
+      className="border-line relative overflow-hidden border-b py-4"
+      data-testid="item-row"
+      {...swipe.handlers}
+    >
+      {swipe.offset !== 0 ? (
+        <p
+          className={
+            swipe.armed
+              ? 'text-accent text-glow pointer-events-none absolute inset-y-0 flex items-center font-mono text-xs'
+              : 'text-muted pointer-events-none absolute inset-y-0 flex items-center font-mono text-xs'
+          }
+          style={swipe.offset < 0 ? { right: 0 } : { left: 0 }}
+          aria-hidden="true"
+          data-testid="swipe-hint"
+        >
+          {swipe.offset < 0 ? 'copy password' : 'copy username'}
+        </p>
+      ) : null}
+
+      <div
+        className="flex items-start justify-between gap-3"
+        style={
+          swipe.offset === 0
+            ? undefined
+            : { transform: `translateX(${swipe.offset}px)`, willChange: 'transform' }
+        }
+      >
         <div className="min-w-0">
           <p className="text-fg truncate font-mono text-sm" data-testid="item-row-title">
             {item.favorite ? <span aria-label="favourite">★ </span> : null}

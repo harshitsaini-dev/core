@@ -75,7 +75,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ID     | Feature                                        | Phase | Status |
 | ------ | ---------------------------------------------- | ----- | ------ |
 | ORG-01 | Client-side fuzzy search tolerant of typos     | P3    | DONE   |
-| ORG-02 | Global command palette (Ctrl/Cmd + K)          | P3    | TODO   |
+| ORG-02 | Global command palette (Ctrl/Cmd + K)          | P3    | DONE   |
 | ORG-03 | Tags with `#` syntax                           | P3    | DONE   |
 | ORG-04 | Nested folders, unlimited depth                | P3    | DONE   |
 | ORG-05 | Colour-coded folders and tags                  | P3    | DONE   |
@@ -130,11 +130,11 @@ P5 Hardening+Deploy · P6 Post-v1
 | PWA-04 | Offline read _and_ write with outbox queue       | P3    | DONE   |
 | PWA-05 | Offline / online indicator dot                   | P3    | DONE   |
 | PWA-06 | Bottom navigation bar on mobile                  | P3    | TODO   |
-| PWA-07 | Pull-to-refresh manual sync                      | P3    | TODO   |
-| PWA-08 | Swipe actions: copy username / copy password     | P3    | TODO   |
+| PWA-07 | Pull-to-refresh manual sync                      | P3    | DONE   |
+| PWA-08 | Swipe actions: copy username / copy password     | P3    | DONE   |
 | PWA-09 | Haptic feedback on copy (Vibration API)          | P3    | DONE   |
 | PWA-10 | Safe-area insets and one-handed reachability     | P3    | DONE   |
-| PWA-11 | Keyboard shortcuts across desktop                | P3    | TODO   |
+| PWA-11 | Keyboard shortcuts across desktop                | P3    | DONE   |
 | PWA-12 | Update-available prompt when a new SW is waiting | P5    | TODO   |
 
 ## UI — Terminal Theme & Interaction

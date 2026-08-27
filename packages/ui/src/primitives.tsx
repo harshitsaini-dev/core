@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from 'react';
 
 /**
  * Terminal-theme primitives.
@@ -67,6 +67,12 @@ export function Button({ variant = 'primary', className, ...props }: ButtonProps
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
+  /**
+   * Declared explicitly because `InputHTMLAttributes` does not carry it. React
+   * 19 passes `ref` like any other prop, so no `forwardRef` is needed — but the
+   * type has to say so or callers cannot focus the field.
+   */
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 export function Input({ invalid, className, ...props }: InputProps) {
