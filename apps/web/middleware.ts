@@ -125,6 +125,12 @@ export const config = {
    * each chunk would add a nonce nothing reads to hundreds of responses per
    * page load.
    *
+   * `sw.js` is excluded because a nonce-based `script-src` on the service
+   * worker's own response stops the worker executing — it has no nonce, and it
+   * is not loaded by anything that could give it one. The symptom is not a CSP
+   * error but a silently unregistered worker, which shows up much later as the
+   * app failing to open offline.
+   *
    * `/api` is excluded for a second and better reason. A JSON response has no
    * scripts, so a script policy on it protects nothing — and the auth routes
    * pad themselves to a fixed duration to hide whether an account exists.
@@ -133,6 +139,6 @@ export const config = {
    * assertion drifting from under 5ms to 9ms.
    */
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon[.]ico|.*[.](?:png|svg|ico|webmanifest)$).*)',
+    '/((?!api|sw[.]js|_next/static|_next/image|favicon[.]ico|.*[.](?:png|svg|ico|webmanifest)$).*)',
   ],
 };
