@@ -40,8 +40,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     headers['Set-Cookie'] = sessionCookie(issued);
   }
 
-  return new Response(JSON.stringify({ status: 'ok', expiresAt: session.expiresAt.toISOString() }), {
-    status: 200,
-    headers,
-  });
+  return new Response(
+    JSON.stringify({ status: 'ok', expiresAt: session.expiresAt.toISOString() }),
+    {
+      status: 200,
+      headers,
+    },
+  );
 }

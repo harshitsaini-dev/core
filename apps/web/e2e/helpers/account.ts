@@ -94,10 +94,6 @@ export async function register(
   return account;
 }
 
-export async function loginWith(
-  request: APIRequestContext,
-  email: string,
-  authKey: string,
-) {
+export async function loginWith(request: APIRequestContext, email: string, authKey: string) {
   return request.post('/api/auth/login', { data: { email, authKey } });
 }

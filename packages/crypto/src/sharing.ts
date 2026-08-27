@@ -87,10 +87,7 @@ export async function unwrapPrivateKey(
  * The raw ECDH output is not used directly as a key: it is not uniformly
  * distributed, so it goes through HKDF-Extract-and-Expand first.
  */
-async function deriveSharedKey(
-  privateKey: CryptoKey,
-  publicKey: CryptoKey,
-): Promise<CryptoKey> {
+async function deriveSharedKey(privateKey: CryptoKey, publicKey: CryptoKey): Promise<CryptoKey> {
   const sharedBits = await crypto.subtle.deriveBits(
     { name: 'ECDH', public: publicKey },
     privateKey,

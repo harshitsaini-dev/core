@@ -1,5 +1,10 @@
 import { auditLog, users } from '@core/db';
-import { base64UrlToBytes, bytesToBase64Url, constantTimeEqual, deriveAuthVerifier } from '@core/crypto';
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  constantTimeEqual,
+  deriveAuthVerifier,
+} from '@core/crypto';
 import { eq, sql } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';

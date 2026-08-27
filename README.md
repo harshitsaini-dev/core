@@ -116,17 +116,17 @@ lockout, Turnstile.
 
 ## Stack
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js (App Router) |
-| Styling | Tailwind CSS |
-| State | Zustand |
-| Offline | Dexie / IndexedDB + service worker |
-| Crypto | WebCrypto + Argon2id (WASM) |
-| Database | Cloudflare D1 with Drizzle ORM |
-| Hosting | Cloudflare Pages (Workers runtime) |
-| Email | Resend |
-| CI | GitHub Actions |
+| Layer     | Choice                             |
+| --------- | ---------------------------------- |
+| Framework | Next.js (App Router)               |
+| Styling   | Tailwind CSS                       |
+| State     | Zustand                            |
+| Offline   | Dexie / IndexedDB + service worker |
+| Crypto    | WebCrypto + Argon2id (WASM)        |
+| Database  | Cloudflare D1 with Drizzle ORM     |
+| Hosting   | Cloudflare Pages (Workers runtime) |
+| Email     | Resend                             |
+| CI        | GitHub Actions                     |
 
 Every one of these has a free tier that covers personal use. Running your own
 Core instance costs nothing.
@@ -193,7 +193,7 @@ Project documentation lives in [`docs/`](docs/) —
 ## Contributing
 
 Issues and pull requests are welcome, with one condition: anything touching
-`packages/crypto` needs a clear explanation of *why* it is correct, plus test
+`packages/crypto` needs a clear explanation of _why_ it is correct, plus test
 vectors. Security is the whole product here.
 
 If you believe you have found a vulnerability, please do not open a public

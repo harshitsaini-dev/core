@@ -33,9 +33,7 @@ async function upsert(
 
   return request.post('/api/vault/sync', {
     data: {
-      operations: [
-        { op: 'upsert', id, type: 'login', dataEnc, folderId: null, favorite: false },
-      ],
+      operations: [{ op: 'upsert', id, type: 'login', dataEnc, folderId: null, favorite: false }],
     },
   });
 }
@@ -123,16 +121,18 @@ test.describe('vault sync', () => {
     await request.post('/api/vault/sync', { data: { operations: [{ op: 'delete', id }] } });
 
     const afterDelete = await request.get('/api/vault/sync?since=0');
-    const deleted = ((await afterDelete.json()) as { items: { id: string; deletedAt: number | null }[] })
-      .items.find((item) => item.id === id);
+    const deleted = (
+      (await afterDelete.json()) as { items: { id: string; deletedAt: number | null }[] }
+    ).items.find((item) => item.id === id);
 
     expect(deleted?.deletedAt).not.toBeNull();
 
     await request.post('/api/vault/sync', { data: { operations: [{ op: 'restore', id }] } });
 
     const afterRestore = await request.get('/api/vault/sync?since=0');
-    const restored = ((await afterRestore.json()) as { items: { id: string; deletedAt: number | null }[] })
-      .items.find((item) => item.id === id);
+    const restored = (
+      (await afterRestore.json()) as { items: { id: string; deletedAt: number | null }[] }
+    ).items.find((item) => item.id === id);
 
     expect(restored?.deletedAt).toBeNull();
   });

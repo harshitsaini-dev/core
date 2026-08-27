@@ -38,10 +38,7 @@ export class EnvelopeError extends Error {
 }
 
 /** Import 32 raw bytes as an AES-GCM key. */
-export async function importAesKey(
-  raw: Bytes,
-  extractable = false,
-): Promise<CryptoKey> {
+export async function importAesKey(raw: Bytes, extractable = false): Promise<CryptoKey> {
   if (raw.length !== SIZES.key) {
     throw new RangeError(`AES key must be exactly ${SIZES.key} bytes`);
   }
@@ -151,11 +148,7 @@ export function parseEnvelope(envelope: string): ParsedEnvelope {
  * same `DecryptionError` with the same message. Distinguishing them would leak
  * information to anyone able to submit ciphertexts.
  */
-export async function decryptBytes(
-  key: CryptoKey,
-  envelope: string,
-  aad?: string,
-): Promise<Bytes> {
+export async function decryptBytes(key: CryptoKey, envelope: string, aad?: string): Promise<Bytes> {
   const { iv, ciphertext } = parseEnvelope(envelope);
   // Built imperatively: under exactOptionalPropertyTypes an `additionalData`
   // that is explicitly `undefined` is not the same as an absent one.
@@ -188,11 +181,7 @@ export async function decryptString(
 }
 
 /** Decrypt an envelope and parse it as JSON. */
-export async function decryptJson<T>(
-  key: CryptoKey,
-  envelope: string,
-  aad?: string,
-): Promise<T> {
+export async function decryptJson<T>(key: CryptoKey, envelope: string, aad?: string): Promise<T> {
   const text = await decryptString(key, envelope, aad);
   try {
     return JSON.parse(text) as T;

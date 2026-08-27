@@ -145,7 +145,10 @@ const vectors = {
       { bytesHex: '', encoded: '' },
       { bytesHex: '00', encoded: 'AA' },
       { bytesHex: 'fbffbeff', encoded: b64url(Buffer.from('fbffbeff', 'hex')) },
-      { bytesHex: '000102030405060708090a0b0c0d0e0f', encoded: b64url(Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex')) },
+      {
+        bytesHex: '000102030405060708090a0b0c0d0e0f',
+        encoded: b64url(Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex')),
+      },
     ],
   },
 };

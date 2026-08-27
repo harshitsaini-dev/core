@@ -43,7 +43,7 @@ export type ServerKeyPurpose = keyof typeof INFO;
 export function parsePepper(raw: string | undefined): Bytes {
   if (!raw) {
     throw new Error(
-      'AUTH_PEPPER is not set. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
+      "AUTH_PEPPER is not set. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
     );
   }
   // Accept standard base64 as well as base64url — people paste both.
@@ -76,9 +76,13 @@ export async function deriveServerKey(
     hkdfKey,
     SIZES.key * 8,
   );
-  return crypto.subtle.importKey('raw', new Uint8Array(bits), { name: 'HMAC', hash: 'SHA-256' }, false, [
-    'sign',
-  ]);
+  return crypto.subtle.importKey(
+    'raw',
+    new Uint8Array(bits),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
 }
 
 /** Tag a value under a purpose-specific key. Truncated to 128 bits. */
@@ -94,7 +98,11 @@ export async function serverTag(
 
 /** Normalise an email the same way everywhere. Must match the client. */
 export function normalizeEmail(email: string): string {
-  return email.normalize('NFKC').trim().toLowerCase().replace(/^mailto:/, '');
+  return email
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/^mailto:/, '');
 }
 
 /** The lookup tag for an email address. */

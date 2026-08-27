@@ -1,11 +1,11 @@
 packages:
-  - "apps/*"
-  - "packages/*"
+  - 'apps/*'
+  - 'packages/*'
 
 # Native/postinstall builds must be opted into explicitly. Review each addition.
 allowBuilds:
   esbuild: true
   sharp: true
-  "@tailwindcss/oxide": true
+  '@tailwindcss/oxide': true
   # Cloudflare Workers runtime + its bundler. Needed for `wrangler dev`.
   workerd: true

@@ -157,10 +157,7 @@ export async function deriveKeys(
  * The pepper lives in the Worker's secret store, never in the database. Without
  * it, an attacker with a full database dump cannot even begin an offline attack.
  */
-export async function deriveAuthVerifier(
-  authKey: Bytes,
-  pepper: Bytes,
-): Promise<Bytes> {
+export async function deriveAuthVerifier(authKey: Bytes, pepper: Bytes): Promise<Bytes> {
   if (pepper.length < 16) {
     throw new RangeError('Auth pepper must be at least 16 bytes');
   }
@@ -192,10 +189,7 @@ export interface KdfCalibration {
  * iteration ceiling is set high enough that fast hardware is actually driven up
  * to the target rather than quietly settling below it.
  */
-export async function calibrateKdf(
-  targetMs = 500,
-  maxIterations = 24,
-): Promise<KdfCalibration> {
+export async function calibrateKdf(targetMs = 500, maxIterations = 24): Promise<KdfCalibration> {
   const salt = generateKdfSalt();
   const probe = 'calibration-probe-password';
 

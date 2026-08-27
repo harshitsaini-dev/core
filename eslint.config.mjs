@@ -77,8 +77,14 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['node:*', 'fs', 'crypto', 'path'], message: 'packages/crypto must stay isomorphic - use WebCrypto.' },
-            { group: ['react', 'next', 'next/*'], message: 'packages/crypto must not depend on the framework.' },
+            {
+              group: ['node:*', 'fs', 'crypto', 'path'],
+              message: 'packages/crypto must stay isomorphic - use WebCrypto.',
+            },
+            {
+              group: ['react', 'next', 'next/*'],
+              message: 'packages/crypto must not depend on the framework.',
+            },
           ],
         },
       ],

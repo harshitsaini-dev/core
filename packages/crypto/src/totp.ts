@@ -76,9 +76,13 @@ export async function hotp(
   counter: number,
   { digits = 6, algorithm = 'SHA-1' }: TotpOptions = {},
 ): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: algorithm }, false, [
-    'sign',
-  ]);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    secret,
+    { name: 'HMAC', hash: algorithm },
+    false,
+    ['sign'],
+  );
 
   const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, counterBytes(counter)));
 

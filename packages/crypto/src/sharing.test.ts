@@ -58,7 +58,11 @@ describe('sharing a secret', () => {
     const alice = await newUser();
     const bob = await newUser();
 
-    const envelope = await encryptForRecipient(alice.privateKey, bob.publicKey, 'DB_PASSWORD=hunter2');
+    const envelope = await encryptForRecipient(
+      alice.privateKey,
+      bob.publicKey,
+      'DB_PASSWORD=hunter2',
+    );
     const opened = await decryptFromSender(bob.privateKey, alice.publicKey, envelope);
 
     expect(bytesToUtf8(opened)).toBe('DB_PASSWORD=hunter2');
@@ -85,9 +89,9 @@ describe('sharing a secret', () => {
     const mallory = await newUser();
 
     const envelope = await encryptForRecipient(alice.privateKey, bob.publicKey, 'secret');
-    await expect(
-      decryptFromSender(bob.privateKey, mallory.publicKey, envelope),
-    ).rejects.toThrow(DecryptionError);
+    await expect(decryptFromSender(bob.privateKey, mallory.publicKey, envelope)).rejects.toThrow(
+      DecryptionError,
+    );
   });
 
   it('produces different ciphertext each time for the same payload', async () => {

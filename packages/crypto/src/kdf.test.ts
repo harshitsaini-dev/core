@@ -182,9 +182,7 @@ describe('isBelowCurrentPolicy', () => {
 
   it('flags a weakened pbkdf2 configuration', () => {
     expect(isBelowCurrentPolicy(PBKDF2_FALLBACK_PARAMS)).toBe(false);
-    expect(
-      isBelowCurrentPolicy({ ...PBKDF2_FALLBACK_PARAMS, iterations: 200_000 }),
-    ).toBe(true);
+    expect(isBelowCurrentPolicy({ ...PBKDF2_FALLBACK_PARAMS, iterations: 200_000 })).toBe(true);
   });
 });
 

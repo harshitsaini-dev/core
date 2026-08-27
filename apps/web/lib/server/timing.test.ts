@@ -18,10 +18,7 @@ describe('constantTime', () => {
     // be indistinguishable from outside.
     const time = async (workMs: number): Promise<number> => {
       const started = performance.now();
-      await constantTime(
-        () => new Promise((resolve) => setTimeout(resolve, workMs)),
-        150,
-      );
+      await constantTime(() => new Promise((resolve) => setTimeout(resolve, workMs)), 150);
       return performance.now() - started;
     };
 

@@ -144,9 +144,10 @@ test.describe('creating a vault', () => {
     await submit(page).click();
 
     await expect(page.getByTestId('kit-recovery-key')).toBeVisible({ timeout: 30_000 });
-    const recoveryKey = (
-      (await page.getByTestId('kit-recovery-key').textContent()) ?? ''
-    ).replace(/\s/g, '');
+    const recoveryKey = ((await page.getByTestId('kit-recovery-key').textContent()) ?? '').replace(
+      /\s/g,
+      '',
+    );
 
     expect(outbound.length, 'expected the signup request to have been captured').toBeGreaterThan(0);
 

@@ -94,7 +94,12 @@ test.describe('login', () => {
   });
 
   test('rejects malformed bodies', async ({ request }) => {
-    for (const data of [{}, { email: 'a@b.com' }, { authKey: 'x' }, { email: 'a@b.com', authKey: '!!' }]) {
+    for (const data of [
+      {},
+      { email: 'a@b.com' },
+      { authKey: 'x' },
+      { email: 'a@b.com', authKey: '!!' },
+    ]) {
       const response = await request.post('/api/auth/login', { data });
       expect(response.status()).toBe(400);
     }
@@ -192,11 +197,7 @@ test.describe('end-to-end key recovery', () => {
     const response = await login(request, account.email, account.authKey);
     const body = (await response.json()) as { accountKeyWrapped: string };
 
-    const wrong = await deriveKeys(
-      'wrong password',
-      base64UrlToBytes(account.kdfSalt),
-      FAST_KDF,
-    );
+    const wrong = await deriveKeys('wrong password', base64UrlToBytes(account.kdfSalt), FAST_KDF);
 
     await expect(unwrapAccountKeys(wrong.masterKey, body.accountKeyWrapped)).rejects.toThrow();
   });

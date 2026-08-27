@@ -36,6 +36,7 @@ stores ciphertext, a non-reversible auth verifier and blind indexes. Metadata �
 titles, URLs, folder names, ENV keys — is encrypted too, not just the values.
 
 **Consequences.**
+
 - Search, sort and filter must run client-side, which forces a full vault sync
   to the device and caps practical vault size at tens of thousands of items.
 - Server-side features that need plaintext are permanently impossible: admin
@@ -266,7 +267,7 @@ unless it matches exactly.
 **Consequences.** Ciphertexts are bound to their role and cannot be substituted
 across columns. The strings become part of the on-disk format, so changing one
 breaks existing data; they are covered by the published test vectors. Binding to
-a specific *row id* rather than a role would be stronger still, and remains open
+a specific _row id_ rather than a role would be stronger still, and remains open
 for Phase 2 once the schema exists.
 
 ---
@@ -292,8 +293,8 @@ someone to discover in the schema.
 because the key lives in the Worker secret store rather than in D1. An attacker
 needs both the database and the secret store.
 
-**What it costs.** Core is no longer zero-knowledge with respect to *who its
-users are* — only with respect to what they store. The operator can enumerate
+**What it costs.** Core is no longer zero-knowledge with respect to _who its
+users are_ — only with respect to what they store. The operator can enumerate
 addresses. Anyone who considers that unacceptable should self-host, which is one
 of the reasons self-hosting is a first-class goal rather than a nice-to-have.
 

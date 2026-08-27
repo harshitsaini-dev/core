@@ -101,7 +101,10 @@ export interface FieldProps {
 export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
   return (
     <div className="space-y-2">
-      <label htmlFor={htmlFor} className="block font-mono text-xs uppercase tracking-widest text-muted">
+      <label
+        htmlFor={htmlFor}
+        className="block font-mono text-xs uppercase tracking-widest text-muted"
+      >
         {label}
       </label>
       {children}

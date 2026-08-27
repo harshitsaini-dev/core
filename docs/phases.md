@@ -34,7 +34,7 @@ single feature lands.
 
 ## Phase 1 — The Crypto Brain
 
-**Goal:** `packages/crypto` is complete, tested and provably correct *before*
+**Goal:** `packages/crypto` is complete, tested and provably correct _before_
 anything depends on it. This is the phase that must not be rushed.
 
 **Tasks**
@@ -59,7 +59,7 @@ anything depends on it. This is the phase that must not be rushed.
 - [x] Round-trip property tests: encrypt → decrypt returns the exact input for
       1 000 random payloads including empty strings and 1 MB blobs
 - [x] Tampering any byte of ciphertext, IV or tag causes decryption to throw
-- [x] Wrong master password fails to unwrap the Account Key, and fails *loudly*
+- [x] Wrong master password fails to unwrap the Account Key, and fails _loudly_
 - [x] Calibrated Argon2id parameters land between 400 ms and 900 ms on the dev
       machine (defaults alone cost ~140 ms there, so calibration — not the
       default — is what has to hit the target)

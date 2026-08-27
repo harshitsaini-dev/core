@@ -24,7 +24,14 @@ export default function GlobalError({ reset }: { error: Error; reset: () => void
           padding: '1.5rem',
         }}
       >
-        <div style={{ border: '1px solid #1a1a1a', background: '#0a0a0a', padding: '2rem', maxWidth: '32rem' }}>
+        <div
+          style={{
+            border: '1px solid #1a1a1a',
+            background: '#0a0a0a',
+            padding: '2rem',
+            maxWidth: '32rem',
+          }}
+        >
           <p style={{ color: '#00a82b', fontSize: '0.75rem', letterSpacing: '0.1em', margin: 0 }}>
             $ core 500
           </p>

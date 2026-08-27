@@ -17,9 +17,7 @@ test.describe('landing page', () => {
 
     await expect(page).toHaveTitle(/core/i);
     await expect(page.getByRole('heading', { name: 'core' })).toBeVisible();
-    await expect(
-      page.getByText('zero-knowledge password, secret and .env manager'),
-    ).toBeVisible();
+    await expect(page.getByText('zero-knowledge password, secret and .env manager')).toBeVisible();
   });
 
   test('states the security posture on screen', async ({ page }) => {

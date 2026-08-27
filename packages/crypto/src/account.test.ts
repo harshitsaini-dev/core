@@ -71,9 +71,9 @@ describe('unwrapAccountKeys', () => {
 
   it('fails with a master key from the wrong password', async () => {
     const { wrappedAccountKey } = await createAccountKeys(await masterKeyFor('right'));
-    await expect(
-      unwrapAccountKeys(await masterKeyFor('wrong'), wrappedAccountKey),
-    ).rejects.toThrow(DecryptionError);
+    await expect(unwrapAccountKeys(await masterKeyFor('wrong'), wrappedAccountKey)).rejects.toThrow(
+      DecryptionError,
+    );
   });
 
   it('fails on a tampered wrapper', async () => {

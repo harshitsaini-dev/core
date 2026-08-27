@@ -72,6 +72,7 @@ export function generatePassword({
  * With 256 words, four words give 32 bits — weak alone, which is why the
  * default is six (48 bits) and why the strength meter still has the last word.
  */
+// prettier-ignore
 const WORDS = [
   'amber','anchor','apple','arrow','atlas','autumn','bacon','badge','basil','beacon',
   'birch','bishop','bison','blade','bloom','bolt','bonus','brave','bread','brick',

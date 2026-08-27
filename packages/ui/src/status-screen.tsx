@@ -40,7 +40,9 @@ export function StatusScreen({ code, title, children, actions }: StatusScreenPro
 
         <h1 className="text-accent text-glow mt-3 text-xl font-bold tracking-tight">{title}</h1>
 
-        <div className="text-muted mt-4 space-y-3 font-mono text-sm leading-relaxed">{children}</div>
+        <div className="text-muted mt-4 space-y-3 font-mono text-sm leading-relaxed">
+          {children}
+        </div>
 
         {actions ? <div className="mt-8 flex flex-wrap gap-3">{actions}</div> : null}
       </Panel>

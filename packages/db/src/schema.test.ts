@@ -42,7 +42,16 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     'created_at',
     'updated_at',
   ],
-  folders: ['id', 'user_id', 'parent_id', 'color', 'sort_order', 'created_at', 'updated_at', 'deleted_at'],
+  folders: [
+    'id',
+    'user_id',
+    'parent_id',
+    'color',
+    'sort_order',
+    'created_at',
+    'updated_at',
+    'deleted_at',
+  ],
   vault_items: [
     'id',
     'user_id',
@@ -176,13 +185,18 @@ describe('sensitive fields are actually encrypted', () => {
     shares: ['payload_enc'],
   };
 
-  it.each(Object.entries(MUST_BE_ENCRYPTED))('%s keeps its sensitive columns', (tableName, expected) => {
-    const table = tables.find((candidate) => getTableName(candidate) === tableName);
-    expect(table, `${tableName} is missing from the schema`).toBeDefined();
+  it.each(Object.entries(MUST_BE_ENCRYPTED))(
+    '%s keeps its sensitive columns',
+    (tableName, expected) => {
+      const table = tables.find((candidate) => getTableName(candidate) === tableName);
+      expect(table, `${tableName} is missing from the schema`).toBeDefined();
 
-    const actual = Object.values(getTableColumns(table as SQLiteTable)).map((column) => column.name);
-    for (const column of expected) {
-      expect(actual).toContain(column);
-    }
-  });
+      const actual = Object.values(getTableColumns(table as SQLiteTable)).map(
+        (column) => column.name,
+      );
+      for (const column of expected) {
+        expect(actual).toContain(column);
+      }
+    },
+  );
 });

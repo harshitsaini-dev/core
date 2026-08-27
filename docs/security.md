@@ -9,16 +9,18 @@ is a bug worth reporting.
 ## 1. What Core protects against
 
 ### The server operator
+
 The person running the instance — including the author of this project — cannot
 read stored passwords, secrets, notes, `.env` values, item titles, URLs, folder
 names or project names. All of it is ciphertext by the time it leaves your
 device.
 
 The one exception is your email address, which the server must be able to read
-in order to send to it. That is covered under what Core does *not* protect,
+in order to send to it. That is covered under what Core does _not_ protect,
 below.
 
 ### A full database compromise
+
 An attacker who dumps the entire D1 database obtains encrypted blobs and
 authentication verifiers. Each verifier is `HMAC-SHA256(pepper, authKey)`, and
 the pepper lives in the Worker's secret store rather than the database — so an
@@ -27,25 +29,30 @@ pepper, every password guess still costs a full Argon2id derivation, because the
 Auth Key is itself an Argon2id output.
 
 ### Server source-code and environment compromise
+
 The server's secrets are used for authentication rate-limiting and email. None
 of them participate in data encryption. Possessing the production `.env` does
 not help decrypt any vault.
 
 ### Network interception
+
 HTTPS only, HSTS enforced. Payload fields are already ciphertext before TLS is
 applied, so a broken TLS session still yields nothing readable.
 
 ### Online brute force
+
 Per-IP sliding-window rate limits, per-endpoint throttles, progressive response
 delays, account-level lockout after repeated failures, and Cloudflare Turnstile
 on authentication endpoints.
 
 ### User enumeration and timing analysis
+
 The prelogin endpoint returns a deterministic fake salt for unknown addresses.
 Verifier comparison is constant-time. Login, signup and password-reset endpoints
 return identical generic messages regardless of whether an account exists.
 
 ### Local device theft, partially
+
 The offline cache is encrypted twice: item contents under the Account Key, and
 each stored row again under a per-device key that is non-extractable, so no
 script can copy it out. Auto-lock and a panic button that destroys the cache
@@ -70,14 +77,14 @@ extension on your machine can capture your master password as you type it or
 read plaintext out of the page after unlock. No web application can defend
 against this.
 
-**A malicious or compromised server *serving new code*.** Core's guarantee is
+**A malicious or compromised server _serving new code_.** Core's guarantee is
 about data at rest and in transit. A hostile operator who modifies the
 JavaScript delivered to your browser could make it exfiltrate keys. This is
 inherent to all web-delivered end-to-end encryption, and no header helps against
 the party that sets the headers. Mitigations: the code is public, and you can
 self-host so that you control what is served.
 
-Against *injected* script — an XSS rather than a hostile operator — the Content
+Against _injected_ script — an XSS rather than a hostile operator — the Content
 Security Policy does help, and specifically `connect-src 'self'`: injected code
 can read what the page holds but cannot send it anywhere. One weakness is worth
 stating plainly rather than leaving in the header: `style-src` still allows
@@ -109,18 +116,18 @@ chain attack on a build-time dependency remains a real risk for any web app.
 
 ## 3. Cryptography summary
 
-| Purpose | Primitive |
-|---|---|
-| Key derivation | Argon2id, `m = 64 MiB, t = 3, p = 1`, ~500 ms target |
-| Key separation | HKDF-SHA256 split of one Argon2id output |
-| Auth verifier | HMAC-SHA256 under a server-side pepper |
-| Fallback KDF | PBKDF2-SHA512, 600 000 iterations |
-| Data encryption | AES-256-GCM, 96-bit random IV per operation |
-| Key wrapping | AES-256-GCM |
-| Sharing | ECDH P-256 + HKDF-SHA256 |
-| Sub-key derivation | HKDF-SHA256 with distinct `info` strings |
-| Blind index | HMAC-SHA256, truncated to 128 bits |
-| Randomness | `crypto.getRandomValues` only |
+| Purpose            | Primitive                                            |
+| ------------------ | ---------------------------------------------------- |
+| Key derivation     | Argon2id, `m = 64 MiB, t = 3, p = 1`, ~500 ms target |
+| Key separation     | HKDF-SHA256 split of one Argon2id output             |
+| Auth verifier      | HMAC-SHA256 under a server-side pepper               |
+| Fallback KDF       | PBKDF2-SHA512, 600 000 iterations                    |
+| Data encryption    | AES-256-GCM, 96-bit random IV per operation          |
+| Key wrapping       | AES-256-GCM                                          |
+| Sharing            | ECDH P-256 + HKDF-SHA256                             |
+| Sub-key derivation | HKDF-SHA256 with distinct `info` strings             |
+| Blind index        | HMAC-SHA256, truncated to 128 bits                   |
+| Randomness         | `crypto.getRandomValues` only                        |
 
 Test vectors for every primitive are published alongside `packages/crypto` so
 that an independent implementation can verify compatibility.

@@ -35,7 +35,9 @@ async function hashToken(pepper: Bytes, token: string): Promise<string> {
   const key = await deriveServerKey(pepper, 'sessionToken');
   // Full 256 bits here, unlike the truncated blind indexes: this value is what
   // stands between a database reader and a working session.
-  return bytesToBase64Url(new Uint8Array(await crypto.subtle.sign('HMAC', key, utf8ToBytes(token))));
+  return bytesToBase64Url(
+    new Uint8Array(await crypto.subtle.sign('HMAC', key, utf8ToBytes(token))),
+  );
 }
 
 /** Create a session for a user. */

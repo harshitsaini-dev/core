@@ -94,7 +94,20 @@ function execLocal(sql: string): void {
   try {
     execFileSync(
       'pnpm',
-      ['exec', 'wrangler', 'd1', 'execute', 'core-vault', '--local', '--config', 'apps/web/wrangler.toml', '--persist-to', '.wrangler/state', '--file', file],
+      [
+        'exec',
+        'wrangler',
+        'd1',
+        'execute',
+        'core-vault',
+        '--local',
+        '--config',
+        'apps/web/wrangler.toml',
+        '--persist-to',
+        '.wrangler/state',
+        '--file',
+        file,
+      ],
       { cwd: repoRoot, stdio: 'pipe', shell: process.platform === 'win32' },
     );
   } finally {

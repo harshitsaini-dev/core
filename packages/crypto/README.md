@@ -20,15 +20,15 @@ Enforced by lint rules and by review:
 
 ## Layout
 
-| File | Responsibility |
-|---|---|
-| `encoding.ts` | base64url, UTF-8, hex, concat, constant-time compare, buffer wiping |
-| `random.ts` | `getRandomValues` wrappers, unbiased `randomInt`, shuffle |
-| `kdf.ts` | Argon2id, HKDF split into Auth Key + Master Key, auth verifier, calibration |
-| `aes.ts` | AES-256-GCM envelope: encrypt, decrypt, parse, validate |
-| `account.ts` | Account Key generation, wrapping, recovery, master-password change |
-| `blind-index.ts` | HMAC tags for server-side equality lookups |
-| `sharing.ts` | ECDH P-256 key pairs and recipient-addressed encryption |
+| File             | Responsibility                                                              |
+| ---------------- | --------------------------------------------------------------------------- |
+| `encoding.ts`    | base64url, UTF-8, hex, concat, constant-time compare, buffer wiping         |
+| `random.ts`      | `getRandomValues` wrappers, unbiased `randomInt`, shuffle                   |
+| `kdf.ts`         | Argon2id, HKDF split into Auth Key + Master Key, auth verifier, calibration |
+| `aes.ts`         | AES-256-GCM envelope: encrypt, decrypt, parse, validate                     |
+| `account.ts`     | Account Key generation, wrapping, recovery, master-password change          |
+| `blind-index.ts` | HMAC tags for server-side equality lookups                                  |
+| `sharing.ts`     | ECDH P-256 key pairs and recipient-addressed encryption                     |
 
 ## The shape of the system
 

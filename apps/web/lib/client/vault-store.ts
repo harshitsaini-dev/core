@@ -56,8 +56,7 @@ export const useVault = create<VaultState>((set, get) => ({
 
   unlock: (keys) => set({ state: 'unlocked', keys, lockedAutomatically: false }),
 
-  lock: (automatic = false) =>
-    set({ state: 'locked', keys: null, lockedAutomatically: automatic }),
+  lock: (automatic = false) => set({ state: 'locked', keys: null, lockedAutomatically: automatic }),
 
   setAutoLockMs: (ms) => set({ autoLockMs: ms }),
 

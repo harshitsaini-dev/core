@@ -27,7 +27,7 @@
     "e2e:report": "playwright show-report",
     "e2e:codegen": "playwright codegen http://localhost:3000",
     "e2e:install": "playwright install --with-deps chromium",
-    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "d1": "wrangler d1",
     "cf": "wrangler --config apps/web/wrangler.toml",
     "db:generate": "pnpm --filter @core/db generate",

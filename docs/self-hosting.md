@@ -1,6 +1,6 @@
 # Core — Self-Hosting Guide
 
-> **This guide is written ahead of the code.** Steps marked *(planned)* describe
+> **This guide is written ahead of the code.** Steps marked _(planned)_ describe
 > the intended flow and will be verified against a clean fork before v1.0.0 is
 > tagged. Until then, treat this as the design of the deployment story rather
 > than a working recipe.
@@ -12,13 +12,13 @@ fifteen minutes. Everything below fits inside free tiers.
 
 ## What you need
 
-| Requirement | Notes |
-|---|---|
-| A Cloudflare account | Free. Handles hosting, database, DNS and bot protection. |
-| A GitHub account | To fork the repository and trigger deploys. |
-| Node 20+ and pnpm 9+ | Wrangler ships as a project dependency; no global install needed. |
-| A domain *(optional)* | Cloudflare gives you a free `*.pages.dev` subdomain otherwise. |
-| A Resend account *(optional)* | Only needed for login alerts and magic links. |
+| Requirement                   | Notes                                                             |
+| ----------------------------- | ----------------------------------------------------------------- |
+| A Cloudflare account          | Free. Handles hosting, database, DNS and bot protection.          |
+| A GitHub account              | To fork the repository and trigger deploys.                       |
+| Node 20+ and pnpm 9+          | Wrangler ships as a project dependency; no global install needed. |
+| A domain _(optional)_         | Cloudflare gives you a free `*.pages.dev` subdomain otherwise.    |
+| A Resend account _(optional)_ | Only needed for login alerts and magic links.                     |
 
 ---
 
@@ -103,7 +103,7 @@ magic-link unlocks.
 ## 6. Optional — Turnstile
 
 In the Cloudflare dashboard, create a Turnstile site for your domain in
-*Managed* mode. Put the site key in `.env` as
+_Managed_ mode. Put the site key in `.env` as
 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, then:
 
 ```bash
@@ -118,7 +118,7 @@ pnpm dev
 
 Open <http://localhost:3000>.
 
-## 8. Deploy *(planned)*
+## 8. Deploy _(planned)_
 
 1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**.
 2. Select your fork.
@@ -127,7 +127,7 @@ Open <http://localhost:3000>.
    the KV namespace as `RATE_LIMIT`.
 5. Deploy. Every push to `main` redeploys automatically.
 
-## 9. Custom domain *(planned)*
+## 9. Custom domain _(planned)_
 
 Pages project → **Custom domains** → add your subdomain. If the zone is already
 on Cloudflare the DNS record is created for you. Then set SSL/TLS to
@@ -137,13 +137,13 @@ on Cloudflare the DNS record is created for you. Then set SSL/TLS to
 
 ## Environment variables
 
-| Variable | Type | Required | Purpose |
-|---|---|---|---|
-| `AUTH_PEPPER` | secret | yes | Mixed into auth verifiers; never touches data encryption |
-| `RESEND_API_KEY` | secret | no | Login alerts, magic links |
-| `TURNSTILE_SECRET_KEY` | secret | no | Bot protection on auth endpoints |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | public | no | Turnstile widget |
-| `NEXT_PUBLIC_APP_URL` | public | yes | Canonical URL used in emails and the manifest |
+| Variable                         | Type   | Required | Purpose                                                  |
+| -------------------------------- | ------ | -------- | -------------------------------------------------------- |
+| `AUTH_PEPPER`                    | secret | yes      | Mixed into auth verifiers; never touches data encryption |
+| `RESEND_API_KEY`                 | secret | no       | Login alerts, magic links                                |
+| `TURNSTILE_SECRET_KEY`           | secret | no       | Bot protection on auth endpoints                         |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | public | no       | Turnstile widget                                         |
+| `NEXT_PUBLIC_APP_URL`            | public | yes      | Canonical URL used in emails and the manifest            |
 
 See `.env.example` for the authoritative list.
 
