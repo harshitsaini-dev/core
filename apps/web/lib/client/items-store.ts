@@ -1,9 +1,26 @@
 'use client';
 
-import type { DecryptedItem, SyncedItem, VaultItemData } from '@core/shared';
+import type {
+  DecryptedFolder,
+  DecryptedItem,
+  SyncedFolder,
+  SyncedItem,
+  VaultItemData,
+} from '@core/shared';
 import { create } from 'zustand';
 import * as offline from './offline-db';
-import { decryptCached, newItemId, operationToSynced, pull, push, toUpsert } from './vault-api';
+import {
+  decryptCached,
+  decryptFolders,
+  folderOperationToSynced,
+  isFolderOperation,
+  newItemId,
+  operationToSynced,
+  pull,
+  push,
+  toFolderUpsert,
+  toUpsert,
+} from './vault-api';
 import type { Operation } from './vault-api';
 import { useVault } from './vault-store';
 
@@ -26,6 +43,7 @@ import { useVault } from './vault-store';
 
 interface ItemsState {
   readonly items: readonly DecryptedItem[];
+  readonly folders: readonly DecryptedFolder[];
   readonly cursor: number;
   readonly loading: boolean;
   readonly syncing: boolean;
@@ -35,7 +53,10 @@ interface ItemsState {
   readonly undecryptable: readonly string[];
 
   load: () => Promise<void>;
-  save: (data: VaultItemData, id?: string) => Promise<string>;
+  save: (data: VaultItemData, id?: string, folderId?: string | null) => Promise<string>;
+  saveFolder: (name: string, options?: FolderOptions) => Promise<string>;
+  removeFolder: (id: string) => Promise<void>;
+  moveItem: (id: string, folderId: string | null) => Promise<void>;
   setFavorite: (id: string, favorite: boolean) => Promise<void>;
   markUsed: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -46,8 +67,16 @@ interface ItemsState {
   wipeLocal: () => Promise<void>;
 }
 
+export interface FolderOptions {
+  readonly id?: string;
+  readonly parentId?: string | null;
+  readonly color?: string | null;
+  readonly sortOrder?: number;
+}
+
 const EMPTY = {
   items: [] as readonly DecryptedItem[],
+  folders: [] as readonly DecryptedFolder[],
   cursor: 0,
   loading: false,
   syncing: false,
@@ -59,6 +88,9 @@ const EMPTY = {
 
 /** The wire form of each item, kept so the cache can be written without re-encrypting. */
 const raw = new Map<string, SyncedItem>();
+
+/** The same, for folders. */
+const rawFolders = new Map<string, SyncedFolder>();
 
 function replace(
   items: readonly DecryptedItem[],
@@ -79,11 +111,13 @@ export const useItems = create<ItemsState>((set, get) => ({
 
   reset: () => {
     raw.clear();
+    rawFolders.clear();
     set({ ...EMPTY, online: get().online });
   },
 
   wipeLocal: async () => {
     raw.clear();
+    rawFolders.clear();
     set({ ...EMPTY, online: get().online });
     await offline.wipe();
   },
@@ -104,6 +138,12 @@ export const useItems = create<ItemsState>((set, get) => ({
         const decrypted = await decryptCached(keys, cached);
         set({ items: decrypted.items, undecryptable: decrypted.undecryptable });
       }
+      const cachedFolders = await offline.readFolderCache();
+      if (cachedFolders.length > 0) {
+        for (const row of cachedFolders) rawFolders.set(row.id, row);
+        set({ folders: await decryptFolders(keys, cachedFolders) });
+      }
+
       set({ cursor: await offline.readCursor(), pending: (await offline.readOutbox()).length });
     } catch {
       // A broken cache must not stop the vault opening; the server has it all.
@@ -121,8 +161,13 @@ export const useItems = create<ItemsState>((set, get) => ({
       for (const item of result.items) merged.set(item.id, item);
       for (const row of result.raw) raw.set(row.id, row);
 
+      const mergedFolders = new Map(get().folders.map((folder) => [folder.id, folder]));
+      for (const folder of result.folders) mergedFolders.set(folder.id, folder);
+      for (const row of result.rawFolders) rawFolders.set(row.id, row);
+
       set({
         items: [...merged.values()],
+        folders: [...mergedFolders.values()],
         cursor: result.cursor,
         undecryptable: result.undecryptable,
         loading: false,
@@ -131,6 +176,7 @@ export const useItems = create<ItemsState>((set, get) => ({
       });
 
       await offline.writeCache(result.raw);
+      await offline.writeFolderCache(result.rawFolders);
       await offline.writeCursor(result.cursor);
     } catch {
       set({
@@ -147,7 +193,7 @@ export const useItems = create<ItemsState>((set, get) => ({
     }
   },
 
-  save: async (data, id) => {
+  save: async (data, id, folderId) => {
     const keys = useVault.getState().keys;
     if (!keys) throw new Error('The vault is locked.');
 
@@ -157,7 +203,7 @@ export const useItems = create<ItemsState>((set, get) => ({
 
     const updated: DecryptedItem = {
       id: itemId,
-      folderId: existing?.folderId ?? null,
+      folderId: folderId === undefined ? (existing?.folderId ?? null) : folderId,
       favorite: existing?.favorite ?? false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -183,6 +229,63 @@ export const useItems = create<ItemsState>((set, get) => ({
     );
 
     return itemId;
+  },
+
+  saveFolder: async (name, options = {}) => {
+    const keys = useVault.getState().keys;
+    if (!keys) throw new Error('The vault is locked.');
+
+    const id = options.id ?? newItemId();
+    const now = Date.now();
+    const existing = get().folders.find((folder) => folder.id === id);
+
+    const parentId =
+      (options.parentId === undefined ? existing?.parentId : options.parentId) ?? null;
+
+    const updated: DecryptedFolder = {
+      id,
+      parentId: parentId === id ? null : parentId,
+      name,
+      color: (options.color === undefined ? existing?.color : options.color) ?? null,
+      sortOrder: options.sortOrder ?? existing?.sortOrder ?? 0,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    set({
+      folders: existing
+        ? get().folders.map((folder) => (folder.id === id ? updated : folder))
+        : [...get().folders, updated],
+    });
+
+    await commit(set, get, await toFolderUpsert(keys, updated));
+    return id;
+  },
+
+  removeFolder: async (id) => {
+    const deletedAt = Date.now();
+
+    // The items inside are moved out rather than deleted, matching what the
+    // server does. Doing it locally too means the vault does not briefly show
+    // items filed under a folder that no longer exists.
+    set({
+      folders: get().folders.map((folder) =>
+        folder.id === id ? { ...folder, deletedAt } : folder,
+      ),
+      items: get().items.map((item) => (item.folderId === id ? { ...item, folderId: null } : item)),
+    });
+
+    await commit(set, get, { op: 'folder-delete', id });
+  },
+
+  moveItem: async (id, folderId) => {
+    const keys = useVault.getState().keys;
+    const item = get().items.find((candidate) => candidate.id === id);
+    if (!keys || !item) return;
+
+    set({ items: replace(get().items, id, (current) => ({ ...current, folderId })) });
+    await commit(set, get, await toUpsert(keys, { ...item, folderId }));
   },
 
   setFavorite: async (id, favorite) => {
@@ -261,10 +364,18 @@ type Getter = () => ItemsState;
  * memory.
  */
 async function commit(set: Setter, get: Getter, operation: Operation): Promise<void> {
-  const cached = operationToSynced(operation, raw.get(operation.id));
-  if (cached) {
-    raw.set(operation.id, cached);
-    await offline.writeCache([cached]);
+  if (isFolderOperation(operation)) {
+    const cached = folderOperationToSynced(operation, rawFolders.get(operation.id));
+    if (cached) {
+      rawFolders.set(operation.id, cached);
+      await offline.writeFolderCache([cached]);
+    }
+  } else {
+    const cached = operationToSynced(operation, raw.get(operation.id));
+    if (cached) {
+      raw.set(operation.id, cached);
+      await offline.writeCache([cached]);
+    }
   }
 
   await offline.enqueueOperation(operation);
@@ -320,3 +431,7 @@ export function trashedItems(items: readonly DecryptedItem[]): DecryptedItem[] {
   return items.filter((item) => item.deletedAt !== null);
 }
 
+/** Folders that still exist. Deleted ones stay in state so a sync can undo them. */
+export function activeFolders(folders: readonly DecryptedFolder[]): DecryptedFolder[] {
+  return folders.filter((folder) => folder.deletedAt === null);
+}

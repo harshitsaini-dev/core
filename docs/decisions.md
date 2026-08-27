@@ -403,3 +403,36 @@ The cost is a formatting nicety. The alternative is an HTML injection path into
 the origin holding the master key, defended by a dependency whose failures would
 be silent. If rendering is ever added, it belongs in a sandboxed iframe with its
 own origin and no access to the keys — not inline in this page.
+
+---
+
+## ADR-018 — Folders and tags both exist, and the filters compose
+
+**Date:** 2026-08-27 · **Status:** Accepted
+
+**Context.** Folders and tags overlap enough that most products pick one. A
+vault of a few hundred items argues for both, but only if it is clear which
+question each answers.
+
+**Decision.** Folders answer "where does this live" — one per item, nested,
+named, coloured. Tags answer "what is this about" — many per item, flat, free
+text. Applying both narrows twice rather than the second replacing the first,
+and both narrow the pool _before_ search ranks it.
+
+Folder names are encrypted under the Account Key like every other user value.
+Colours are not: a swatch reveals nothing, and the list has to paint before
+anything is decrypted. Colours come from a fixed palette of five rather than a
+picker — the interface is a single hue on black, and arbitrary colours would
+either break that or produce swatches nobody can tell apart.
+
+**Consequences.** The server holds a folder tree it cannot read. It can enforce
+ownership and reject a folder that names itself as its own parent; it cannot see
+a longer cycle, so the client treats the shape it is given as untrusted, breaks
+cycles when ordering, and appends anything unreachable rather than hiding it.
+
+Deleting a folder is soft and moves its items out rather than down with it.
+Losing a folder must never mean losing what was inside — on a product with no
+password reset that would be a second way to lose data permanently.
+
+Ranking before filtering was rejected: a folder holding three items would show
+two, because the ones the filter hid had already taken the top places.

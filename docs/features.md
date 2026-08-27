@@ -76,10 +76,10 @@ P5 Hardening+Deploy · P6 Post-v1
 | ------ | ---------------------------------------------- | ----- | ------ |
 | ORG-01 | Client-side fuzzy search tolerant of typos     | P3    | DONE   |
 | ORG-02 | Global command palette (Ctrl/Cmd + K)          | P3    | TODO   |
-| ORG-03 | Tags with `#` syntax                           | P3    | TODO   |
-| ORG-04 | Nested folders, unlimited depth                | P3    | TODO   |
-| ORG-05 | Colour-coded folders and tags                  | P3    | TODO   |
-| ORG-06 | Multi-level combined filtering                 | P3    | TODO   |
+| ORG-03 | Tags with `#` syntax                           | P3    | DONE   |
+| ORG-04 | Nested folders, unlimited depth                | P3    | DONE   |
+| ORG-05 | Colour-coded folders and tags                  | P3    | DONE   |
+| ORG-06 | Multi-level combined filtering                 | P3    | DONE   |
 | ORG-07 | Sort by A-Z, Z-A, modified, created, most-used | P3    | DONE   |
 | ORG-08 | Pinned / favourite items at the top            | P3    | DONE   |
 | ORG-09 | Password age indicator per item                | P4    | TODO   |

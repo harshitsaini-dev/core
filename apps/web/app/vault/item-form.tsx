@@ -1,11 +1,12 @@
 'use client';
 
 import { parseOtpauth } from '@core/crypto';
+import { orderFolders } from '@core/shared';
 import type { CustomField, DecryptedItem, LoginFields, VaultItemData } from '@core/shared';
 import { Button, Field, Input } from '@core/ui';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
-import { useItems } from '@/lib/client/items-store';
+import { activeFolders, useItems } from '@/lib/client/items-store';
 
 /**
  * Create or edit an item.
@@ -71,6 +72,79 @@ interface FormProps {
   onCancel: () => void;
 }
 
+/** `tags: ['a', 'b']` from `"a, b"`, deduplicated, blanks dropped. */
+function parseTags(input: string): string[] {
+  const seen = new Set<string>();
+  for (const part of input.split(',')) {
+    const trimmed = part.trim();
+    if (trimmed !== '') seen.add(trimmed);
+  }
+  return [...seen];
+}
+
+/**
+ * Where an item is filed.
+ *
+ * Folders and tags answer different questions — "where does this live" and
+ * "what is this about" — so both exist and neither replaces the other. They
+ * share this component because both types of item need them and the two
+ * controls are one line of thought.
+ *
+ * Nested folders are shown with their depth in the option label. A `<select>`
+ * cannot indent, and a flat list of names loses the distinction between two
+ * folders that happen to share one.
+ */
+function Organisation({
+  folderId,
+  tags,
+  onFolderChange,
+  onTagsChange,
+}: {
+  folderId: string | null;
+  tags: string;
+  onFolderChange: (value: string | null) => void;
+  onTagsChange: (value: string) => void;
+}) {
+  const folderFieldId = useId();
+  const tagsFieldId = useId();
+
+  const folders = useItems((state) => state.folders);
+  const ordered = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
+
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      <Field label="folder" htmlFor={folderFieldId}>
+        <select
+          id={folderFieldId}
+          value={folderId ?? ''}
+          onChange={(event) => onFolderChange(event.target.value || null)}
+          data-testid="item-folder"
+          className="border-line text-fg focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm"
+        >
+          <option value="">no folder</option>
+          {ordered.map(({ folder, depth }) => (
+            <option key={folder.id} value={folder.id}>
+              {`${'\u00a0\u00a0'.repeat(depth)}${depth > 0 ? '\u2514 ' : ''}${folder.name}`}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="tags" htmlFor={tagsFieldId} hint="Comma separated.">
+        <Input
+          id={tagsFieldId}
+          value={tags}
+          onChange={(event) => onTagsChange(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="work, banking"
+          data-testid="item-tags"
+        />
+      </Field>
+    </div>
+  );
+}
+
 /**
  * A note.
  *
@@ -93,6 +167,8 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
 
   const [title, setTitle] = useState(fields?.title ?? '');
   const [body, setBody] = useState(fields?.body ?? '');
+  const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
+  const [tags, setTags] = useState((fields?.tags ?? []).join(', '));
   const [busy, setBusy] = useState(false);
 
   const save = useItems((state) => state.save);
@@ -109,15 +185,19 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
 
     setBusy(true);
     try {
+      const parsedTags = parseTags(tags);
+
       const id = await save(
         {
           type: 'note',
           fields: {
             title: derivedTitle,
             ...(body ? { body } : {}),
+            ...(parsedTags.length > 0 ? { tags: parsedTags } : {}),
           },
         },
         existing?.id,
+        folderId,
       );
       onDone(id);
     } finally {
@@ -150,6 +230,13 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
           className={TEXTAREA_CLASS}
         />
       </Field>
+
+      <Organisation
+        folderId={folderId}
+        tags={tags}
+        onFolderChange={setFolderId}
+        onTagsChange={setTags}
+      />
 
       <div className="flex flex-wrap gap-3">
         <Button
@@ -186,6 +273,8 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
   const [totpError, setTotpError] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState((fields.recoveryCodes ?? []).join('\n'));
   const [custom, setCustom] = useState<CustomField[]>(fields.customFields ?? []);
+  const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
+  const [tags, setTags] = useState((fields.tags ?? []).join(', '));
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -228,6 +317,7 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
         .filter((code) => code !== '');
 
       const cleanedCustom = custom.filter((field) => field.label.trim() !== '');
+      const parsedTags = parseTags(tags);
 
       const id = await save(
         {
@@ -242,10 +332,12 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
             ...(url.trim() ? { url: url.trim() } : {}),
             ...(totpSecret ? { totpSecret } : {}),
             ...(codes.length > 0 ? { recoveryCodes: codes } : {}),
+            ...(parsedTags.length > 0 ? { tags: parsedTags } : {}),
             ...(cleanedCustom.length > 0 ? { customFields: cleanedCustom } : {}),
           },
         },
         existing?.id,
+        folderId,
       );
       onDone(id);
     } finally {
@@ -357,6 +449,13 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
           className={TEXTAREA_CLASS}
         />
       </Field>
+
+      <Organisation
+        folderId={folderId}
+        tags={tags}
+        onFolderChange={setFolderId}
+        onTagsChange={setTags}
+      />
 
       <CustomFields fields={custom} onChange={setCustom} />
 

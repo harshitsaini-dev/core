@@ -147,9 +147,68 @@ describe('pinFavourites', () => {
     const starred = item('Starred', { favorite: true });
     const another = item('Another');
 
-    expect(pinFavourites([plain, starred, another])).toEqual([plain, starred, another].sort(
-      (x, y) => Number(y.favorite) - Number(x.favorite),
-    ));
+    expect(pinFavourites([plain, starred, another])).toEqual(
+      [plain, starred, another].sort((x, y) => Number(y.favorite) - Number(x.favorite)),
+    );
     expect(pinFavourites([plain, starred, another])[0]).toBe(starred);
+  });
+});
+
+describe('performance', () => {
+  /**
+   * The Phase 3 exit criterion: search across a thousand items in under 50ms.
+   *
+   * It matters because searching is the only way to find anything, and it runs
+   * on every keystroke over the whole decrypted vault — there is no index and
+   * no server to ask. If this ever regresses, typing gets laggy on a phone
+   * before it gets slow on a desktop, which is the wrong order to find out.
+   */
+  const vault = Array.from({ length: 1000 }, (_, index) =>
+    item(
+      `Account ${index} at service-${index % 97}.example.com`,
+      {
+        id: `item-${index}`,
+        favorite: index % 50 === 0,
+      },
+      {
+        username: `user${index}@example.com`,
+        tags: [`group-${index % 13}`],
+      },
+    ),
+  );
+
+  function timed(work: () => unknown): number {
+    const started = performance.now();
+    work();
+    return performance.now() - started;
+  }
+
+  it('ranks a thousand items in under 50ms', () => {
+    // Warm once so the measurement is not dominated by first-call costs.
+    search(vault, 'service');
+
+    const worst = Math.max(
+      timed(() => search(vault, 'service')),
+      // A query matching almost nothing still walks every item.
+      timed(() => search(vault, 'zzzz')),
+      // Subsequence matching is the expensive path.
+      timed(() => search(vault, 'srvc')),
+      timed(() => search(vault, 'a')),
+    );
+
+    expect(worst).toBeLessThan(50);
+  });
+
+  it('sorts and pins a thousand items in under 50ms', () => {
+    // The no-query path, which is what the list shows by default.
+    const elapsed = timed(() => pinFavourites(sortItems(vault, 'recent')));
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it('stays fast as a query grows', () => {
+    // A long query means more subsequence work per item; the cost should not
+    // run away.
+    const elapsed = timed(() => search(vault, 'account at service example com'));
+    expect(elapsed).toBeLessThan(50);
   });
 });

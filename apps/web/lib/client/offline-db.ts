@@ -1,7 +1,7 @@
 'use client';
 
 import type { Bytes } from '@core/crypto';
-import type { SyncedItem } from '@core/shared';
+import type { SyncedFolder, SyncedItem } from '@core/shared';
 import Dexie from 'dexie';
 import type { Table } from 'dexie';
 import type { Operation } from './vault-api';
@@ -73,6 +73,7 @@ interface SecretRow {
 class CoreDatabase extends Dexie {
   keys!: Table<KeyRow, string>;
   cache!: Table<CacheRow, string>;
+  folders!: Table<CacheRow, string>;
   outbox!: Table<OutboxRow, string>;
   meta!: Table<MetaRow, string>;
   secrets!: Table<SecretRow, string>;
@@ -92,6 +93,18 @@ class CoreDatabase extends Dexie {
     this.version(2).stores({
       keys: 'id',
       cache: 'id, updatedAt',
+      outbox: 'id, queuedAt',
+      meta: 'key',
+      secrets: 'id',
+    });
+
+    // Folders live in their own store rather than beside items. They share a
+    // cursor on the wire, but mixing them here would mean every cache read
+    // decrypting every folder to find out it was not an item.
+    this.version(3).stores({
+      keys: 'id',
+      cache: 'id, updatedAt',
+      folders: 'id, updatedAt',
       outbox: 'id, queuedAt',
       meta: 'key',
       secrets: 'id',
@@ -183,6 +196,32 @@ export async function writeCache(items: readonly SyncedItem[]): Promise<void> {
   );
 
   await db().cache.bulkPut(rows);
+}
+
+// ---------------------------------------------------------------------------
+// Cached folders
+// ---------------------------------------------------------------------------
+
+export async function readFolderCache(): Promise<SyncedFolder[]> {
+  if (!isSupported()) return [];
+
+  const rows = await db().folders.toArray();
+  const opened = await Promise.all(rows.map((row) => open<SyncedFolder>(row)));
+  return opened.filter((folder): folder is SyncedFolder => folder !== null);
+}
+
+export async function writeFolderCache(list: readonly SyncedFolder[]): Promise<void> {
+  if (!isSupported() || list.length === 0) return;
+
+  const rows = await Promise.all(
+    list.map(async (folder) => ({
+      id: folder.id,
+      ...(await seal(folder)),
+      updatedAt: folder.updatedAt,
+    })),
+  );
+
+  await db().folders.bulkPut(rows);
 }
 
 // ---------------------------------------------------------------------------

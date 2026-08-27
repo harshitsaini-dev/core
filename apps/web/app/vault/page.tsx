@@ -1,12 +1,18 @@
 'use client';
 
-import { itemSubtitle } from '@core/shared';
-import type { DecryptedItem } from '@core/shared';
+import { FOLDER_COLORS, collectTags, itemSubtitle, orderFolders } from '@core/shared';
+import type { DecryptedFolder, DecryptedItem } from '@core/shared';
 import { Button, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
-import { activeItems, trashedItems, useItems, watchConnectivity } from '@/lib/client/items-store';
+import {
+  activeFolders,
+  activeItems,
+  trashedItems,
+  useItems,
+  watchConnectivity,
+} from '@/lib/client/items-store';
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { ItemForm } from './item-form';
@@ -20,7 +26,20 @@ import { TotpCode } from './totp-code';
  * constraint rather than a choice — and it is also why searching is instant.
  */
 
-type View = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: string } | { kind: 'trash' };
+type View =
+  | { kind: 'list' }
+  | { kind: 'new' }
+  | { kind: 'edit'; id: string }
+  | { kind: 'trash' }
+  | { kind: 'folders' };
+
+/**
+ * Which items the filters admit.
+ *
+ * `null` means everything; `'none'` means the items filed nowhere, which is a
+ * genuinely different question from "all items" once folders exist.
+ */
+type FolderFilter = string | 'none' | null;
 
 export default function VaultPage() {
   const router = useRouter();
@@ -31,6 +50,7 @@ export default function VaultPage() {
   const panic = useVault((vault) => vault.panic);
 
   const items = useItems((store) => store.items);
+  const folders = useItems((store) => store.folders);
   const loading = useItems((store) => store.loading);
   const error = useItems((store) => store.error);
   const undecryptable = useItems((store) => store.undecryptable);
@@ -41,6 +61,8 @@ export default function VaultPage() {
 
   const [view, setView] = useState<View>({ kind: 'list' });
   const [query, setQuery] = useState('');
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   useEffect(() => startAutoLock(), []);
   useEffect(() => watchConnectivity(), []);
@@ -57,16 +79,50 @@ export default function VaultPage() {
     }
   }, [state, load, reset]);
 
+  const live = useMemo(() => activeItems(items), [items]);
+
   const visible = useMemo(() => {
-    const live = activeItems(items);
+    // Filters narrow before search ranks. Ranking first and filtering after
+    // would let a folder with three items show two, because the ones it hid
+    // had already taken the top places.
+    let pool = live;
+
+    if (folderFilter === 'none') {
+      pool = pool.filter((item) => item.folderId === null);
+    } else if (folderFilter !== null) {
+      pool = pool.filter((item) => item.folderId === folderFilter);
+    }
+
+    if (tagFilter !== null) {
+      pool = pool.filter((item) => item.data.fields.tags?.includes(tagFilter) ?? false);
+    }
+
     const ranked =
       query.trim() === ''
-        ? sortItems(live, 'recent')
-        : search(live, query).map((result) => result.item);
+        ? sortItems(pool, 'recent')
+        : search(pool, query).map((result) => result.item);
     return pinFavourites(ranked);
-  }, [items, query]);
+  }, [live, query, folderFilter, tagFilter]);
 
   const trashed = useMemo(() => trashedItems(items), [items]);
+  const tags = useMemo(() => collectTags(live), [live]);
+  const visibleFolders = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
+
+  // A filter pointing at a folder that has since been deleted would show an
+  // empty vault with no way back, so it falls away with the folder.
+  useEffect(() => {
+    if (
+      folderFilter !== null &&
+      folderFilter !== 'none' &&
+      !visibleFolders.some((entry) => entry.folder.id === folderFilter)
+    ) {
+      setFolderFilter(null);
+    }
+  }, [folderFilter, visibleFolders]);
+
+  useEffect(() => {
+    if (tagFilter !== null && !tags.includes(tagFilter)) setTagFilter(null);
+  }, [tagFilter, tags]);
 
   if (state === 'locked') {
     return (
@@ -128,6 +184,16 @@ export default function VaultPage() {
             </Button>
           </div>
 
+          <Filters
+            folders={visibleFolders}
+            tags={tags}
+            folderFilter={folderFilter}
+            tagFilter={tagFilter}
+            onFolder={setFolderFilter}
+            onTag={setTagFilter}
+            onManage={() => setView({ kind: 'folders' })}
+          />
+
           {error ? (
             <p
               role="status"
@@ -156,6 +222,14 @@ export default function VaultPage() {
           <footer className="border-line mt-10 flex flex-wrap gap-3 border-t pt-6">
             <Button type="button" variant="ghost" onClick={() => lock(false)} data-testid="lock">
               lock
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setView({ kind: 'folders' })}
+              data-testid="open-folders"
+            >
+              folders
             </Button>
             {trashed.length > 0 ? (
               <Button
@@ -192,7 +266,284 @@ export default function VaultPage() {
       {view.kind === 'trash' ? (
         <Trash items={trashed} onBack={() => setView({ kind: 'list' })} />
       ) : null}
+
+      {view.kind === 'folders' ? (
+        <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
+      ) : null}
     </main>
+  );
+}
+
+/**
+ * Folder and tag filters.
+ *
+ * Chips rather than a sidebar: the vault is one column on a phone and the same
+ * one column on a desktop, and a filter that only exists at one width is a
+ * filter half the users never find.
+ *
+ * Nothing renders at all until there is something to filter by. An empty row of
+ * controls on a new vault teaches nothing and takes the space the list needs.
+ */
+function Filters({
+  folders,
+  tags,
+  folderFilter,
+  tagFilter,
+  onFolder,
+  onTag,
+  onManage,
+}: {
+  folders: readonly { folder: DecryptedFolder; depth: number }[];
+  tags: readonly string[];
+  folderFilter: FolderFilter;
+  tagFilter: string | null;
+  onFolder: (value: FolderFilter) => void;
+  onTag: (value: string | null) => void;
+  onManage: () => void;
+}) {
+  if (folders.length === 0 && tags.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-2" data-testid="filters">
+      {folders.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="folder-filters">
+          <Chip active={folderFilter === null} onClick={() => onFolder(null)} testId="folder-all">
+            all
+          </Chip>
+          {folders.map(({ folder, depth }) => (
+            <Chip
+              key={folder.id}
+              active={folderFilter === folder.id}
+              onClick={() => onFolder(folderFilter === folder.id ? null : folder.id)}
+              testId="folder-chip"
+              color={folder.color}
+            >
+              {depth > 0 ? <span aria-hidden="true">└ </span> : null}
+              {folder.name}
+            </Chip>
+          ))}
+          <Chip
+            active={folderFilter === 'none'}
+            onClick={() => onFolder(folderFilter === 'none' ? null : 'none')}
+            testId="folder-none"
+          >
+            unfiled
+          </Chip>
+          <button
+            type="button"
+            onClick={onManage}
+            className="text-muted hover:text-accent font-mono text-xs underline-offset-4 hover:underline"
+            data-testid="manage-folders"
+          >
+            manage
+          </button>
+        </div>
+      ) : null}
+
+      {tags.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="tag-filters">
+          {tags.map((tag) => (
+            <Chip
+              key={tag}
+              active={tagFilter === tag}
+              onClick={() => onTag(tagFilter === tag ? null : tag)}
+              testId="tag-chip"
+            >
+              #{tag}
+            </Chip>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+  testId,
+  color,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  testId: string;
+  color?: string | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      data-testid={testId}
+      className={
+        active
+          ? 'border-accent text-accent shadow-glow-soft border px-2 py-1 font-mono text-xs'
+          : 'border-line text-muted hover:border-accent hover:text-accent border px-2 py-1 font-mono text-xs'
+      }
+    >
+      {color ? (
+        <span
+          aria-hidden="true"
+          className="mr-1 inline-block h-2 w-2 align-middle"
+          style={{ backgroundColor: color }}
+        />
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Managing folders.
+ *
+ * Deleting one says how many items are inside, because the answer changes what
+ * a person does next — and then keeps them anyway, moving them out rather than
+ * down with the folder.
+ */
+function Folders({
+  folders,
+  items,
+  onBack,
+}: {
+  folders: readonly { folder: DecryptedFolder; depth: number }[];
+  items: readonly DecryptedItem[];
+  onBack: () => void;
+}) {
+  const saveFolder = useItems((store) => store.saveFolder);
+  const removeFolder = useItems((store) => store.removeFolder);
+
+  const [name, setName] = useState('');
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [color, setColor] = useState<string>(FOLDER_COLORS[0]);
+
+  const counts = useMemo(() => {
+    const tally = new Map<string, number>();
+    for (const item of items) {
+      if (item.folderId === null) continue;
+      tally.set(item.folderId, (tally.get(item.folderId) ?? 0) + 1);
+    }
+    return tally;
+  }, [items]);
+
+  async function create(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (name.trim() === '') return;
+
+    await saveFolder(name.trim(), { parentId, color });
+    setName('');
+    setParentId(null);
+  }
+
+  return (
+    <Panel className="mt-6">
+      <h2 className="text-accent mb-6 font-mono text-sm tracking-widest uppercase">folders</h2>
+
+      <form onSubmit={(event) => void create(event)} className="flex flex-wrap gap-2">
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="folder name"
+          aria-label="folder name"
+          autoComplete="off"
+          data-testid="folder-name"
+          className="min-w-0 flex-1"
+        />
+        <select
+          value={parentId ?? ''}
+          onChange={(event) => setParentId(event.target.value || null)}
+          aria-label="parent folder"
+          data-testid="folder-parent"
+          className="border-line text-fg focus:border-accent border bg-black px-3 py-2 font-mono text-sm focus:outline-none"
+        >
+          <option value="">top level</option>
+          {folders.map(({ folder }) => (
+            <option key={folder.id} value={folder.id}>
+              {folder.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" disabled={name.trim() === ''} data-testid="folder-create">
+          create
+        </Button>
+      </form>
+
+      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="folder colour">
+        {FOLDER_COLORS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setColor(option)}
+            aria-pressed={color === option}
+            aria-label={`colour ${option}`}
+            data-testid="folder-color"
+            className={
+              color === option
+                ? 'border-accent shadow-glow-soft h-6 w-6 border-2'
+                : 'border-line h-6 w-6 border'
+            }
+            style={{ backgroundColor: option }}
+          />
+        ))}
+      </div>
+
+      {folders.length === 0 ? (
+        <p className="text-muted mt-8 font-mono text-sm" data-testid="folders-empty">
+          <span aria-hidden="true">&gt; </span>
+          no folders yet
+        </p>
+      ) : (
+        <ul className="border-line mt-8 border-t" data-testid="folder-list">
+          {folders.map(({ folder, depth }) => (
+            <li
+              key={folder.id}
+              className="border-line flex items-center justify-between gap-3 border-b py-3"
+              data-testid="folder-row"
+            >
+              <span
+                className="text-fg flex min-w-0 items-center gap-2 truncate font-mono text-sm"
+                style={{ paddingLeft: `${depth * 16}px` }}
+              >
+                {folder.color ? (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2 w-2 shrink-0"
+                    style={{ backgroundColor: folder.color }}
+                  />
+                ) : null}
+                {folder.name}
+                <span className="text-muted text-xs">({counts.get(folder.id) ?? 0})</span>
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void removeFolder(folder.id)}
+                aria-label={`delete folder ${folder.name}`}
+                data-testid="folder-delete"
+              >
+                delete
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="text-muted mt-6 font-mono text-xs">
+        <span aria-hidden="true">&gt; </span>
+        Deleting a folder keeps everything inside it. The items move out, not away.
+      </p>
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onBack}
+        className="mt-6"
+        data-testid="folders-back"
+      >
+        back
+      </Button>
+    </Panel>
   );
 }
 
@@ -300,6 +651,14 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
             </p>
           ) : null}
           <p className="text-muted truncate font-mono text-xs">{itemSubtitle(item.data)}</p>
+          {item.data.fields.tags?.length ? (
+            <p
+              className="text-accent-dim mt-1 truncate font-mono text-[10px]"
+              data-testid="item-row-tags"
+            >
+              {item.data.fields.tags.map((tag) => `#${tag}`).join(' ')}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 flex-wrap justify-end gap-2">

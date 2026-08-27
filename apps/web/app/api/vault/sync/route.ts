@@ -1,6 +1,6 @@
-import { vaultItems } from '@core/db';
+import { folders, vaultItems } from '@core/db';
 import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
-import type { SyncedItem } from '@core/shared';
+import type { SyncedFolder, SyncedItem } from '@core/shared';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -37,6 +37,24 @@ const blindIndex = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .max(64);
 
+const folderUpsertSchema = z.object({
+  op: z.literal('folder-upsert'),
+  id: z.uuid(),
+  nameEnc: envelope,
+  parentId: z.uuid().nullable().default(null),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .nullable()
+    .default(null),
+  sortOrder: z.number().int().min(0).max(10_000).default(0),
+});
+
+const folderDeleteSchema = z.object({
+  op: z.literal('folder-delete'),
+  id: z.uuid(),
+});
+
 const upsertSchema = z.object({
   op: z.literal('upsert'),
   id: z.uuid(),
@@ -59,7 +77,17 @@ const restoreSchema = z.object({
 });
 
 const pushSchema = z.object({
-  operations: z.array(z.discriminatedUnion('op', [upsertSchema, deleteSchema, restoreSchema])).max(500),
+  operations: z
+    .array(
+      z.discriminatedUnion('op', [
+        upsertSchema,
+        deleteSchema,
+        restoreSchema,
+        folderUpsertSchema,
+        folderDeleteSchema,
+      ]),
+    )
+    .max(500),
 });
 
 /**
@@ -86,6 +114,19 @@ function toWire(row: typeof vaultItems.$inferSelect): SyncedItem {
   };
 }
 
+function folderToWire(row: typeof folders.$inferSelect): SyncedFolder {
+  return {
+    id: row.id,
+    parentId: row.parentId,
+    nameEnc: row.nameEnc,
+    color: row.color,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+    deletedAt: row.deletedAt?.getTime() ?? null,
+  };
+}
+
 export async function GET(request: NextRequest): Promise<Response> {
   let context: ReturnType<typeof getRequestContext>;
   try {
@@ -101,26 +142,41 @@ export async function GET(request: NextRequest): Promise<Response> {
   const since = sinceParam === null ? 0 : Number(sinceParam);
   if (!Number.isFinite(since) || since < 0) return badRequest();
 
-  const rows = await context.db
-    .select()
-    .from(vaultItems)
-    .where(
-      and(
-        eq(vaultItems.userId, current.session.userId),
-        // Deleted rows are included deliberately: a client that pulled an item
-        // before it was trashed has to be told it is gone, and a filtered query
-        // would leave it holding a copy forever.
-        gt(vaultItems.updatedAt, new Date(since)),
+  // Folders and items share one cursor and one round trip. Two endpoints with
+  // two cursors would let a client hold items pointing at folders it has not
+  // pulled yet, which renders as everything sitting in "no folder".
+  const [itemRows, folderRows] = await Promise.all([
+    context.db
+      .select()
+      .from(vaultItems)
+      .where(
+        and(
+          eq(vaultItems.userId, current.session.userId),
+          // Deleted rows are included deliberately: a client that pulled an item
+          // before it was trashed has to be told it is gone, and a filtered query
+          // would leave it holding a copy forever.
+          gt(vaultItems.updatedAt, new Date(since)),
+        ),
       ),
-    );
+    context.db
+      .select()
+      .from(folders)
+      .where(
+        and(eq(folders.userId, current.session.userId), gt(folders.updatedAt, new Date(since))),
+      ),
+  ]);
 
-  const items = rows.map(toWire);
+  const items = itemRows.map(toWire);
+  const folderList = folderRows.map(folderToWire);
 
   // The cursor is the newest updatedAt seen, not "now". Using the clock would
   // skip anything written between the query and the response.
-  const cursor = items.reduce((newest, item) => Math.max(newest, item.updatedAt), since);
+  const cursor = [...items, ...folderList].reduce(
+    (newest, row) => Math.max(newest, row.updatedAt),
+    since,
+  );
 
-  return ok({ items, cursor });
+  return ok({ items, folders: folderList, cursor });
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -150,22 +206,87 @@ export async function POST(request: NextRequest): Promise<Response> {
   const userId = current.session.userId;
   const now = new Date();
 
-  // Which of the named ids this user actually owns. Everything below is
-  // filtered through this, so an operation naming another user's item is
+  // Which of the named ids this user actually owns, per table. Everything below
+  // is filtered through these, so an operation naming another user's row is
   // silently ignored rather than rejected — a rejection would confirm it exists.
-  const ids = [...new Set(operations.map((operation) => operation.id))];
-  const owned = new Set(
-    ids.length === 0
-      ? []
-      : (
-          await db
-            .select({ id: vaultItems.id })
-            .from(vaultItems)
-            .where(and(eq(vaultItems.userId, userId), inArray(vaultItems.id, ids)))
-        ).map((row) => row.id),
-  );
+  const itemIds = [
+    ...new Set(
+      operations
+        .filter((operation) => !operation.op.startsWith('folder-'))
+        .map((operation) => operation.id),
+    ),
+  ];
+  const folderIds = [
+    ...new Set(
+      operations
+        .filter((operation) => operation.op.startsWith('folder-'))
+        .map((operation) => operation.id),
+    ),
+  ];
+
+  const [ownedItems, ownedFolders] = await Promise.all([
+    itemIds.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({ id: vaultItems.id })
+          .from(vaultItems)
+          .where(and(eq(vaultItems.userId, userId), inArray(vaultItems.id, itemIds))),
+    folderIds.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({ id: folders.id })
+          .from(folders)
+          .where(and(eq(folders.userId, userId), inArray(folders.id, folderIds))),
+  ]);
+
+  const owned = new Set(ownedItems.map((row) => row.id));
+  const ownedFolderIds = new Set(ownedFolders.map((row) => row.id));
 
   for (const operation of operations) {
+    if (operation.op === 'folder-upsert') {
+      const values = {
+        nameEnc: unsafeAsEncrypted(operation.nameEnc),
+        // A folder claiming itself as parent would make the tree unwalkable.
+        // The client also guards against this; the server cannot check for
+        // longer cycles, since it cannot read the names or reason about intent.
+        parentId: operation.parentId === operation.id ? null : operation.parentId,
+        color: operation.color,
+        sortOrder: operation.sortOrder,
+        updatedAt: now,
+      };
+
+      if (ownedFolderIds.has(operation.id)) {
+        await db
+          .update(folders)
+          .set(values)
+          .where(and(eq(folders.id, operation.id), eq(folders.userId, userId)));
+      } else {
+        await db
+          .insert(folders)
+          .values({ id: operation.id, userId, createdAt: now, ...values })
+          .onConflictDoNothing();
+      }
+      continue;
+    }
+
+    if (operation.op === 'folder-delete') {
+      if (!ownedFolderIds.has(operation.id)) continue;
+
+      // Soft, like items. The items inside are not touched: the schema clears
+      // their folder reference on delete, and losing a folder should never mean
+      // losing what was in it.
+      await db
+        .update(folders)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(and(eq(folders.id, operation.id), eq(folders.userId, userId)));
+
+      await db
+        .update(vaultItems)
+        .set({ folderId: null, updatedAt: now })
+        .where(and(eq(vaultItems.folderId, operation.id), eq(vaultItems.userId, userId)));
+      continue;
+    }
+
     if (operation.op === 'upsert') {
       if (owned.has(operation.id)) {
         await db

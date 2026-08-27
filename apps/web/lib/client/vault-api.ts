@@ -1,7 +1,19 @@
-import { blindIndexUrl, decryptJson, encryptJson } from '@core/crypto';
+import {
+  blindIndexUrl,
+  decryptJson,
+  decryptString,
+  encryptJson,
+  encryptString,
+} from '@core/crypto';
 import type { AccountKeys } from '@core/crypto';
 import { vaultItemDataSchema } from '@core/shared';
-import type { DecryptedItem, SyncedItem, VaultItemData } from '@core/shared';
+import type {
+  DecryptedFolder,
+  DecryptedItem,
+  SyncedFolder,
+  SyncedItem,
+  VaultItemData,
+} from '@core/shared';
 
 /**
  * Reading and writing the vault.
@@ -19,6 +31,7 @@ import type { DecryptedItem, SyncedItem, VaultItemData } from '@core/shared';
 
 interface SyncResponse {
   items: SyncedItem[];
+  folders: SyncedFolder[];
   cursor: number;
 }
 
@@ -32,6 +45,8 @@ export interface PullResult {
    * different ciphertext for the same item and defeat any later comparison.
    */
   readonly raw: SyncedItem[];
+  readonly folders: DecryptedFolder[];
+  readonly rawFolders: SyncedFolder[];
   /** Items the server sent that this client could not decrypt. */
   readonly undecryptable: string[];
   readonly cursor: number;
@@ -56,6 +71,40 @@ async function decryptItem(keys: AccountKeys, row: SyncedItem): Promise<Decrypte
   } catch {
     return null;
   }
+}
+
+/**
+ * A folder whose name will not open is still shown, under a placeholder.
+ *
+ * The alternative is dropping it, which would silently hide every item inside
+ * it — the same failure as losing the items, arrived at from the other side.
+ */
+async function decryptFolder(keys: AccountKeys, row: SyncedFolder): Promise<DecryptedFolder> {
+  let name: string;
+  try {
+    name = await decryptString(keys.dataKey, row.nameEnc);
+  } catch {
+    name = 'Unreadable folder';
+  }
+
+  return {
+    id: row.id,
+    parentId: row.parentId,
+    name,
+    color: row.color,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    deletedAt: row.deletedAt,
+  };
+}
+
+/** Decrypt folder rows that came from the cache rather than the network. */
+export async function decryptFolders(
+  keys: AccountKeys,
+  rows: readonly SyncedFolder[],
+): Promise<DecryptedFolder[]> {
+  return Promise.all(rows.map((row) => decryptFolder(keys, row)));
 }
 
 /**
@@ -89,7 +138,16 @@ export async function pull(keys: AccountKeys, cursor = 0): Promise<PullResult> {
     }
   });
 
-  return { items, raw: body.items, undecryptable, cursor: body.cursor };
+  const folders = await decryptFolders(keys, body.folders ?? []);
+
+  return {
+    items,
+    raw: body.items,
+    folders,
+    rawFolders: body.folders ?? [],
+    undecryptable,
+    cursor: body.cursor,
+  };
 }
 
 /**
@@ -123,6 +181,8 @@ export async function decryptCached(
  * has ever reached the server.
  */
 export function operationToSynced(operation: Operation, existing?: SyncedItem): SyncedItem | null {
+  if (isFolderOperation(operation)) return null;
+
   if (operation.op !== 'upsert') {
     if (!existing) return null;
     return {
@@ -147,7 +207,46 @@ export function operationToSynced(operation: Operation, existing?: SyncedItem): 
   };
 }
 
+/** The wire form of a locally-created folder, for the same reason as items. */
+export function folderOperationToSynced(
+  operation: FolderOperation,
+  existing?: SyncedFolder,
+): SyncedFolder | null {
+  const now = Date.now();
+
+  if (operation.op === 'folder-delete') {
+    return existing ? { ...existing, deletedAt: now, updatedAt: now } : null;
+  }
+
+  return {
+    id: operation.id,
+    parentId: operation.parentId,
+    nameEnc: operation.nameEnc,
+    color: operation.color,
+    sortOrder: operation.sortOrder,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+}
+
+export type FolderOperation =
+  | {
+      op: 'folder-upsert';
+      id: string;
+      nameEnc: string;
+      parentId: string | null;
+      color: string | null;
+      sortOrder: number;
+    }
+  | { op: 'folder-delete'; id: string };
+
+export function isFolderOperation(operation: Operation): operation is FolderOperation {
+  return operation.op === 'folder-upsert' || operation.op === 'folder-delete';
+}
+
 export type Operation =
+  | FolderOperation
   | {
       op: 'upsert';
       id: string;
@@ -207,6 +306,35 @@ export async function push(operations: Operation[]): Promise<number> {
 
   const body = (await response.json()) as { cursor: number };
   return body.cursor;
+}
+
+/**
+ * Encrypt a folder into the operation that will store it.
+ *
+ * A folder cannot be its own parent — the server rejects that too, but catching
+ * it here means the tree never briefly renders as unwalkable while the round
+ * trip is in flight.
+ */
+export async function toFolderUpsert(
+  keys: AccountKeys,
+  folder: {
+    id: string;
+    name: string;
+    parentId?: string | null;
+    color?: string | null;
+    sortOrder?: number;
+  },
+): Promise<FolderOperation> {
+  const parentId = folder.parentId ?? null;
+
+  return {
+    op: 'folder-upsert',
+    id: folder.id,
+    nameEnc: await encryptString(keys.dataKey, folder.name),
+    parentId: parentId === folder.id ? null : parentId,
+    color: folder.color ?? null,
+    sortOrder: folder.sortOrder ?? 0,
+  };
 }
 
 /** A fresh item id. Generated client-side so an item exists before it syncs. */

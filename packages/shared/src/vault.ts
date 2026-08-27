@@ -157,3 +157,104 @@ export function itemSubtitle(data: VaultItemData): string {
       return data.fields.host ?? '';
   }
 }
+
+/**
+ * A folder, as the client holds it.
+ *
+ * The name is encrypted like everything else; the colour is not, because a
+ * swatch reveals nothing and the list needs it to render before anything is
+ * decrypted.
+ */
+export interface DecryptedFolder {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly color: string | null;
+  readonly sortOrder: number;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly deletedAt: number | null;
+}
+
+/** A folder on the wire. */
+export interface SyncedFolder {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly nameEnc: string;
+  readonly color: string | null;
+  readonly sortOrder: number;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly deletedAt: number | null;
+}
+
+/**
+ * Folder colours.
+ *
+ * A fixed set rather than a free colour picker. The palette is a single hue by
+ * design, and letting people choose arbitrary colours would either break that
+ * or produce swatches indistinguishable from each other on a black background.
+ */
+export const FOLDER_COLORS = ['#00FF41', '#00A82B', '#FFB020', '#FF3B30', '#7A7A7A'] as const;
+
+/**
+ * Order folders as a tree, depth-first.
+ *
+ * Returns a flat list with a depth on each, which is what a list renders. A
+ * cycle — which the server cannot prevent, since it cannot read the names or
+ * check the shape — is broken by refusing to visit a folder twice, so a
+ * corrupted parent chain shows a flat list rather than hanging the tab.
+ */
+export function orderFolders(
+  folders: readonly DecryptedFolder[],
+): { folder: DecryptedFolder; depth: number }[] {
+  const byParent = new Map<string | null, DecryptedFolder[]>();
+  for (const folder of folders) {
+    const siblings = byParent.get(folder.parentId) ?? [];
+    siblings.push(folder);
+    byParent.set(folder.parentId, siblings);
+  }
+
+  for (const siblings of byParent.values()) {
+    siblings.sort(
+      (a, b) =>
+        a.sortOrder - b.sortOrder ||
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
+  }
+
+  const ordered: { folder: DecryptedFolder; depth: number }[] = [];
+  const visited = new Set<string>();
+
+  const walk = (parentId: string | null, depth: number): void => {
+    for (const folder of byParent.get(parentId) ?? []) {
+      if (visited.has(folder.id)) continue;
+      visited.add(folder.id);
+      ordered.push({ folder, depth });
+      walk(folder.id, depth + 1);
+    }
+  };
+
+  walk(null, 0);
+
+  // Anything unreachable from the root — an orphan whose parent was deleted, or
+  // a member of a cycle — is appended rather than dropped. Hiding a folder
+  // because its parent is missing would look like data loss.
+  for (const folder of folders) {
+    if (!visited.has(folder.id)) ordered.push({ folder, depth: 0 });
+  }
+
+  return ordered;
+}
+
+/** Every tag in use, sorted, deduplicated. */
+export function collectTags(items: readonly DecryptedItem[]): string[] {
+  const tags = new Set<string>();
+  for (const item of items) {
+    for (const tag of item.data.fields.tags ?? []) {
+      const trimmed = tag.trim();
+      if (trimmed !== '') tags.add(trimmed);
+    }
+  }
+  return [...tags].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}

@@ -139,11 +139,15 @@ PWA-01 … PWA-11, UI-04 … UI-09, SEC-03/04/05/11, AUTH-09, AUTH-14, ZK-14, ZK
 
 **Exit criteria**
 
-- [ ] Airplane mode: unlock, read, create and edit all work; changes sync on
-      reconnect without loss
-- [ ] IndexedDB inspected in DevTools shows only ciphertext
-- [ ] Locking the vault leaves no plaintext reachable from the console
-- [ ] Search across 1 000 seeded items returns in under 50 ms
+- [x] Airplane mode: unlock, read, create and edit all work; changes sync on
+      reconnect without loss — `offline.spec.ts`, verified against a real
+      Workers build
+- [x] IndexedDB inspected in DevTools shows only ciphertext — asserted by
+      "the cache holds nothing readable"
+- [x] Locking the vault leaves no plaintext reachable from the console —
+      asserted by "locking clears the decrypted items from memory"
+- [x] Search across 1 000 seeded items returns in under 50 ms — measured in
+      `search.test.ts` across four query shapes, not assumed
 - [ ] Installable on Android and iOS, launches standalone
 - [ ] The author has migrated at least 20 real accounts into it and uses it daily
 
