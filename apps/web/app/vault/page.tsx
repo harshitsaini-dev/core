@@ -294,6 +294,11 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
             {item.favorite ? <span aria-label="favourite">★ </span> : null}
             {item.data.fields.title}
           </p>
+          {item.data.type !== 'login' ? (
+            <p className="text-accent-dim font-mono text-[10px] tracking-widest uppercase">
+              {item.data.type}
+            </p>
+          ) : null}
           <p className="text-muted truncate font-mono text-xs">{itemSubtitle(item.data)}</p>
         </div>
 
@@ -345,6 +350,24 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
           </Button>
         </div>
       </div>
+
+      {item.data.type === 'note' && item.data.fields.body ? (
+        <details className="mt-3" data-testid="note-body-view">
+          <summary className="text-muted cursor-pointer font-mono text-xs">
+            <span aria-hidden="true">&gt; </span>
+            read
+          </summary>
+          {/*
+            Rendered as text, with line breaks preserved — never parsed as
+            Markdown or HTML. A note is the easiest place in the product for
+            hostile content to arrive, and turning it into markup would inject
+            it into the one origin that holds the vault keys.
+          */}
+          <p className="text-fg mt-2 max-h-64 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap">
+            {item.data.fields.body}
+          </p>
+        </details>
+      ) : null}
 
       {fields?.totpSecret ? (
         <div className="mt-3" data-testid="item-totp-row">

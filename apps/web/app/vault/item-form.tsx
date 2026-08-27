@@ -1,18 +1,26 @@
 'use client';
 
 import { parseOtpauth } from '@core/crypto';
-import type { CustomField, DecryptedItem, LoginFields } from '@core/shared';
+import type { CustomField, DecryptedItem, LoginFields, VaultItemData } from '@core/shared';
 import { Button, Field, Input } from '@core/ui';
 import { useId, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
 import { useItems } from '@/lib/client/items-store';
 
 /**
- * Create or edit a login.
+ * Create or edit an item.
  *
- * Only logins so far. The other item types share this shape and will reuse most
- * of it; shipping five half-finished forms would be worse than one that works.
+ * Two types so far: logins and notes. They share the save path and the custom
+ * fields; everything else differs enough that a single set of inputs would suit
+ * neither.
  */
+
+/** Shared by both types, so the textarea styling lives in one place. */
+const TEXTAREA_CLASS =
+  'border-line text-fg placeholder:text-muted/60 focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm';
+
+type ItemType = VaultItemData['type'];
+
 export function ItemForm({
   existing,
   onDone,
@@ -25,6 +33,142 @@ export function ItemForm({
   onDone: (id: string) => void;
   onCancel: () => void;
 }) {
+  // The type is fixed once an item exists. Changing it would silently discard
+  // whichever fields the other type does not have.
+  const [type, setType] = useState<ItemType>(existing?.data.type ?? 'login');
+
+  return (
+    <div className="space-y-6">
+      {existing ? null : (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="item type">
+          {(['login', 'note'] as const).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant={type === option ? 'primary' : 'ghost'}
+              onClick={() => setType(option)}
+              aria-pressed={type === option}
+              data-testid={`type-${option}`}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {type === 'note' ? (
+        <NoteForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
+      ) : (
+        <LoginForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
+      )}
+    </div>
+  );
+}
+
+interface FormProps {
+  existing?: DecryptedItem | undefined;
+  onDone: (id: string) => void;
+  onCancel: () => void;
+}
+
+/**
+ * A note.
+ *
+ * Free-form text, stored as written. Deliberately **not** rendered as Markdown,
+ * despite the field being Markdown-friendly: turning user text into HTML means
+ * running a parser and injecting its output into the one origin that holds the
+ * vault keys. A note is the easiest place in the product for hostile content to
+ * arrive — pasted from anywhere, synced from another device — and rendering it
+ * would trade a real risk for a formatting nicety.
+ *
+ * So the text is shown exactly as typed, with line breaks preserved. Markdown
+ * syntax survives for anyone who wants to paste it elsewhere; it simply is not
+ * interpreted here.
+ */
+function NoteForm({ existing, onDone, onCancel }: FormProps) {
+  const titleId = useId();
+  const bodyId = useId();
+
+  const fields = existing?.data.type === 'note' ? existing.data.fields : undefined;
+
+  const [title, setTitle] = useState(fields?.title ?? '');
+  const [body, setBody] = useState(fields?.body ?? '');
+  const [busy, setBusy] = useState(false);
+
+  const save = useItems((state) => state.save);
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+
+    // A note with only a body is a normal thing to write. Rather than refusing
+    // it, take the first line as the title — which is what the person typing
+    // almost certainly meant by it.
+    const derivedTitle = title.trim() || body.trim().split('\n')[0]?.slice(0, 80) || '';
+    if (derivedTitle === '') return;
+
+    setBusy(true);
+    try {
+      const id = await save(
+        {
+          type: 'note',
+          fields: {
+            title: derivedTitle,
+            ...(body ? { body } : {}),
+          },
+        },
+        existing?.id,
+      );
+      onDone(id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-6" noValidate>
+      <Field label="title" htmlFor={titleId} hint="Optional. The first line is used if left blank.">
+        <Input
+          id={titleId}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          autoComplete="off"
+          data-testid="note-title"
+        />
+      </Field>
+
+      <Field label="note" htmlFor={bodyId}>
+        <textarea
+          id={bodyId}
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          rows={14}
+          spellCheck
+          autoFocus
+          placeholder="Write anything. It is encrypted before it leaves this device."
+          data-testid="note-body"
+          className={TEXTAREA_CLASS}
+        />
+      </Field>
+
+      <div className="flex flex-wrap gap-3">
+        <Button
+          type="submit"
+          disabled={busy || (title.trim() === '' && body.trim() === '')}
+          data-testid="item-save"
+        >
+          {busy ? '... saving' : 'save'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel} data-testid="item-cancel">
+          cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** A login. */
+function LoginForm({ existing, onDone, onCancel }: FormProps) {
   const titleId = useId();
   const usernameId = useId();
   const passwordId = useId();
@@ -32,7 +176,7 @@ export function ItemForm({
   const totpId = useId();
   const codesId = useId();
 
-  const fields = (existing?.data.fields ?? {}) as LoginFields;
+  const fields = (existing?.data.type === 'login' ? existing.data.fields : {}) as LoginFields;
 
   const [title, setTitle] = useState(fields.title ?? '');
   const [username, setUsername] = useState(fields.username ?? '');
@@ -50,9 +194,9 @@ export function ItemForm({
   /**
    * Accept either a bare base32 secret or a whole `otpauth://` URI.
    *
-   * Pasting the URI is what people actually do when a site shows "can't scan
-   * the code?", and silently storing it as if it were a secret would produce a
-   * TOTP field that never generates a working code.
+   * Pasting the URI is what people do when a site shows "can't scan the code?",
+   * and silently storing it as if it were a secret would produce a TOTP field
+   * that never generates a working code.
    */
   function onTotpChange(value: string): void {
     const trimmed = value.trim();
@@ -210,7 +354,7 @@ export function ItemForm({
           rows={4}
           spellCheck={false}
           data-testid="item-recovery-codes"
-          className="border-line text-fg placeholder:text-muted/60 focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm"
+          className={TEXTAREA_CLASS}
         />
       </Field>
 
@@ -232,8 +376,8 @@ export function ItemForm({
  * Arbitrary extra fields.
  *
  * The `hidden` flag is the point of these. Security question answers, PINs and
- * licence keys are all secrets that do not fit any named field, and storing
- * them in the notes means they render in the clear next to everything else.
+ * licence keys are all secrets that fit no named field, and storing them in the
+ * notes means they render in the clear next to everything else.
  */
 function CustomFields({
   fields,

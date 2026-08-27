@@ -372,3 +372,33 @@ runs only the specs that need workerd — smoke, prelogin and offline. Running
 everything twice cost double for almost no extra signal, and the sustained load
 was what destabilised a single `wrangler dev` process. If a focused run ever
 brings it down again, that is a real signal rather than an artefact of scale.
+
+---
+
+## ADR-017 — Notes are text, not rendered Markdown
+
+**Date:** 2026-08-27 · **Status:** Accepted · **Supersedes part of** the
+feature catalogue, which said "secure notes with Markdown rendering"
+
+**Context.** The note field was specified as Markdown. Rendering it means
+running a parser over user-supplied text and injecting the resulting HTML into
+the page.
+
+That page is the one place in the product where the vault keys exist in
+plaintext. A note is also the easiest place for hostile content to arrive:
+pasted from anywhere, synced from another device, or written by an attacker who
+briefly had access. Every Markdown renderer that has ever shipped has had an
+injection bug at some point, and the sanitiser is a second dependency with the
+same history.
+
+**Decision.** Notes are stored exactly as typed and displayed as text with line
+breaks preserved. No parser, no HTML generation, no sanitiser.
+
+**Consequences.** No headings, no bold, no lists. Markdown syntax survives in
+the stored text, so anyone who wants formatting can paste it into something that
+renders — the text is theirs and is returned unchanged.
+
+The cost is a formatting nicety. The alternative is an HTML injection path into
+the origin holding the master key, defended by a dependency whose failures would
+be silent. If rendering is ever added, it belongs in a sandboxed iframe with its
+own origin and no access to the keys — not inline in this page.
