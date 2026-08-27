@@ -3,7 +3,7 @@
 import { parseOtpauth } from '@core/crypto';
 import { orderFolders } from '@core/shared';
 import type { CustomField, DecryptedItem, LoginFields, VaultItemData } from '@core/shared';
-import { Button, Field, Input } from '@core/ui';
+import { Button, Field, Input, Select, Textarea } from '@core/ui';
 import { useId, useMemo, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
 import { activeFolders, useItems } from '@/lib/client/items-store';
@@ -15,10 +15,6 @@ import { activeFolders, useItems } from '@/lib/client/items-store';
  * fields; everything else differs enough that a single set of inputs would suit
  * neither.
  */
-
-/** Shared by both types, so the textarea styling lives in one place. */
-const TEXTAREA_CLASS =
-  'border-line text-fg placeholder:text-muted/60 focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm';
 
 type ItemType = VaultItemData['type'];
 
@@ -90,9 +86,9 @@ function parseTags(input: string): string[] {
  * share this component because both types of item need them and the two
  * controls are one line of thought.
  *
- * Nested folders are shown with their depth in the option label. A `<select>`
- * cannot indent, and a flat list of names loses the distinction between two
- * folders that happen to share one.
+ * Nested folders are indented rather than prefixed. The dropdown is ours, so
+ * it can indent — a native `<select>` could not, and a flat list of names loses
+ * the distinction between two folders that happen to share one.
  */
 function Organisation({
   folderId,
@@ -114,20 +110,21 @@ function Organisation({
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       <Field label="folder" htmlFor={folderFieldId}>
-        <select
+        <Select
           id={folderFieldId}
           value={folderId ?? ''}
-          onChange={(event) => onFolderChange(event.target.value || null)}
+          onChange={(next) => onFolderChange(next || null)}
           data-testid="item-folder"
-          className="border-line text-fg focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm"
-        >
-          <option value="">no folder</option>
-          {ordered.map(({ folder, depth }) => (
-            <option key={folder.id} value={folder.id}>
-              {`${'\u00a0\u00a0'.repeat(depth)}${depth > 0 ? '\u2514 ' : ''}${folder.name}`}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: '', label: 'no folder' },
+            ...ordered.map(({ folder, depth }) => ({
+              value: folder.id,
+              label: folder.name,
+              depth,
+              color: folder.color,
+            })),
+          ]}
+        />
       </Field>
 
       <Field label="tags" htmlFor={tagsFieldId} hint="Comma separated.">
@@ -218,7 +215,7 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
       </Field>
 
       <Field label="note" htmlFor={bodyId}>
-        <textarea
+        <Textarea
           id={bodyId}
           value={body}
           onChange={(event) => setBody(event.target.value)}
@@ -227,7 +224,6 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
           autoFocus
           placeholder="Write anything. It is encrypted before it leaves this device."
           data-testid="note-body"
-          className={TEXTAREA_CLASS}
         />
       </Field>
 
@@ -439,14 +435,13 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
         htmlFor={codesId}
         hint="One per line. Kept apart from the password, since they are what survives losing it."
       >
-        <textarea
+        <Textarea
           id={codesId}
           value={recoveryCodes}
           onChange={(event) => setRecoveryCodes(event.target.value)}
           rows={4}
           spellCheck={false}
           data-testid="item-recovery-codes"
-          className={TEXTAREA_CLASS}
         />
       </Field>
 

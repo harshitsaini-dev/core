@@ -2,6 +2,12 @@ import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Off because the badge is pinned to the bottom-left corner, which is where
+  // this app puts its own navigation bar on a phone. It sat on top of it and
+  // swallowed the taps — in development only, but that is also where the tests
+  // run.
+  devIndicators: false,
+
   reactStrictMode: true,
   poweredByHeader: false,
   // Workspace packages ship TypeScript source, so Next has to compile them.

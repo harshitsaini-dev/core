@@ -129,7 +129,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | PWA-03 | Dexie / IndexedDB encrypted offline vault        | P3    | DONE   |
 | PWA-04 | Offline read _and_ write with outbox queue       | P3    | DONE   |
 | PWA-05 | Offline / online indicator dot                   | P3    | DONE   |
-| PWA-06 | Bottom navigation bar on mobile                  | P3    | TODO   |
+| PWA-06 | Bottom navigation bar on mobile                  | P3    | DONE   |
 | PWA-07 | Pull-to-refresh manual sync                      | P3    | DONE   |
 | PWA-08 | Swipe actions: copy username / copy password     | P3    | DONE   |
 | PWA-09 | Haptic feedback on copy (Vibration API)          | P3    | DONE   |

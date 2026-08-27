@@ -6,5 +6,6 @@
  */
 
 export { THEME } from '@core/shared';
+export * from './controls.js';
 export * from './primitives.js';
 export * from './status-screen.js';

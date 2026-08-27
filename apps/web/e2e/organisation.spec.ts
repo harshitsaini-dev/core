@@ -41,10 +41,22 @@ async function openVault(page: Page, label: string): Promise<string> {
   return email;
 }
 
+/**
+ * Pick an option from one of our dropdowns.
+ *
+ * `selectOption` does not apply: these are listboxes, not `<select>` elements —
+ * a native popup is drawn by the OS and cannot be themed.
+ */
+async function choose(page: Page, testId: string, label: string): Promise<void> {
+  await page.getByTestId(testId).click();
+  await page.getByTestId(`${testId}-option`).filter({ hasText: label }).first().click();
+  await expect(page.getByTestId(testId)).toContainText(label);
+}
+
 async function makeFolder(page: Page, name: string, parent?: string): Promise<void> {
   await page.getByTestId('open-folders').click();
   await page.getByTestId('folder-name').fill(name);
-  if (parent) await page.getByTestId('folder-parent').selectOption({ label: parent });
+  if (parent) await choose(page, 'folder-parent', parent);
   await page.getByTestId('folder-create').click();
   await expect(page.getByTestId('folder-list')).toContainText(name);
   await page.getByTestId('folders-back').click();
@@ -58,7 +70,7 @@ async function makeLogin(
   await page.getByTestId('new-item').click();
   await page.getByTestId('item-title').fill(title);
   if (options.folder) {
-    await page.getByTestId('item-folder').selectOption({ label: options.folder });
+    await choose(page, 'item-folder', options.folder);
   }
   if (options.tags) await page.getByTestId('item-tags').fill(options.tags);
   await page.getByTestId('item-save').click();

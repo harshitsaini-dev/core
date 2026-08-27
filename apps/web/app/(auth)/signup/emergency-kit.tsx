@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Panel, Warning } from '@core/ui';
+import { Button, Checkbox, Panel, Warning } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -102,18 +102,12 @@ export function EmergencyKit({ email, recoveryKey }: EmergencyKitProps) {
         </div>
 
         <div className="border-line mt-8 border-t pt-6 print:hidden">
-          <label className="flex cursor-pointer items-start gap-3 font-mono text-xs">
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(event) => setAcknowledged(event.target.checked)}
-              data-testid="kit-acknowledge"
-              className="accent-accent mt-0.5"
-            />
-            <span className="text-fg">
-              I have stored this recovery key somewhere safe. I understand it cannot be shown again.
-            </span>
-          </label>
+          <Checkbox
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+            data-testid="kit-acknowledge"
+            label="I have stored this recovery key somewhere safe. I understand it cannot be shown again."
+          />
 
           <Button
             type="button"

@@ -2,7 +2,7 @@
 
 import { FOLDER_COLORS, collectTags, itemSubtitle, orderFolders } from '@core/shared';
 import type { DecryptedFolder, DecryptedItem } from '@core/shared';
-import { Button, Input, Panel } from '@core/ui';
+import { Button, Input, Panel, Select } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
@@ -159,6 +159,11 @@ export default function VaultPage() {
     if (state !== 'unlocked') return;
 
     const onKeyDown = (event: KeyboardEvent): void => {
+      // Something nearer the keystroke already dealt with it — an open dropdown
+      // closing on Escape, say. Without this check that same Escape also threw
+      // away the form the dropdown was in.
+      if (event.defaultPrevented) return;
+
       if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         setPaletteOpen((open) => !open);
@@ -250,7 +255,7 @@ export default function VaultPage() {
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-3xl px-4 py-8 sm:px-6">
+    <main className="mx-auto min-h-dvh max-w-3xl px-4 pt-8 pb-28 sm:px-6 sm:pb-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-accent text-glow text-lg font-bold tracking-tight">
           <span className="cursor">core</span>
@@ -276,6 +281,22 @@ export default function VaultPage() {
               data-testid="search"
               className="flex-1"
             />
+            {query !== '' ? (
+              // Replaces the browser's own clear button, which is hidden in
+              // globals.css because it is drawn grey on a black field.
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setQuery('');
+                  searchRef.current?.focus();
+                }}
+                aria-label="clear search"
+                data-testid="clear-search"
+              >
+                clear
+              </Button>
+            ) : null}
             <Button type="button" onClick={() => setView({ kind: 'new' })} data-testid="new-item">
               new
             </Button>
@@ -322,7 +343,18 @@ export default function VaultPage() {
           </PullToRefresh>
 
           <footer className="border-line mt-10 flex flex-wrap gap-3 border-t pt-6">
-            <Button type="button" variant="ghost" onClick={() => lock(false)} data-testid="lock">
+            {/*
+              Duplicated by the bottom bar on a phone, so hidden there — except
+              panic, which stays. A destructive action does not belong in a
+              navigation bar where a thumb rests between taps.
+            */}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => lock(false)}
+              data-testid="lock"
+              className="hidden sm:inline-flex"
+            >
               lock
             </Button>
             <Button
@@ -330,6 +362,7 @@ export default function VaultPage() {
               variant="ghost"
               onClick={() => setView({ kind: 'folders' })}
               data-testid="open-folders"
+              className="hidden sm:inline-flex"
             >
               folders
             </Button>
@@ -339,6 +372,7 @@ export default function VaultPage() {
                 variant="ghost"
                 onClick={() => setView({ kind: 'trash' })}
                 data-testid="open-trash"
+                className="hidden sm:inline-flex"
               >
                 trash ({trashed.length})
               </Button>
@@ -369,6 +403,13 @@ export default function VaultPage() {
         <Trash items={trashed} onBack={() => setView({ kind: 'list' })} />
       ) : null}
 
+      <BottomNav
+        view={view.kind}
+        trashed={trashed.length}
+        onGo={(kind) => setView({ kind })}
+        onLock={() => lock(false)}
+      />
+
       {paletteOpen ? (
         <CommandPalette
           items={live}
@@ -382,6 +423,82 @@ export default function VaultPage() {
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
       ) : null}
     </main>
+  );
+}
+
+/**
+ * The bottom bar, on phones only.
+ *
+ * A phone holds a thumb at the bottom of the screen and a header at the top,
+ * and the vault is one scrolling column between them. Everything here is also
+ * reachable from the footer on a wider screen, where a bar fixed to the bottom
+ * of a 27-inch display would be absurd.
+ *
+ * Panic is not in it. A bar is where a thumb rests between taps, which is the
+ * worst possible place for a button that destroys the local vault.
+ */
+function BottomNav({
+  view,
+  trashed,
+  onGo,
+  onLock,
+}: {
+  view: View['kind'];
+  trashed: number;
+  onGo: (kind: 'list' | 'new' | 'folders' | 'trash') => void;
+  onLock: () => void;
+}) {
+  const tab = (
+    kind: 'list' | 'new' | 'folders' | 'trash',
+    label: string,
+    glyph: string,
+    badge?: number,
+  ) => (
+    <button
+      type="button"
+      onClick={() => onGo(kind)}
+      aria-current={view === kind ? 'page' : undefined}
+      data-testid={`nav-${kind}`}
+      // 44px minimum, and the label always visible: an icon-only bar in a
+      // product people use half-awake is a guessing game.
+      className={
+        view === kind
+          ? 'text-accent text-glow flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 font-mono text-[10px] tracking-widest uppercase'
+          : 'text-muted flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 font-mono text-[10px] tracking-widest uppercase'
+      }
+    >
+      <span aria-hidden="true" className="text-sm">
+        {glyph}
+      </span>
+      {label}
+      {badge ? <span className="sr-only">{badge} items</span> : null}
+    </button>
+  );
+
+  return (
+    <nav
+      aria-label="vault"
+      data-testid="bottom-nav"
+      // `pb-[env(safe-area-inset-bottom)]` keeps the labels clear of the iOS
+      // home indicator, which otherwise sits directly on top of them.
+      className="border-line fixed inset-x-0 bottom-0 z-40 flex border-t bg-black pb-[env(safe-area-inset-bottom)] sm:hidden"
+    >
+      {tab('list', 'vault', '▤')}
+      {tab('folders', 'folders', '▸')}
+      {tab('new', 'new', '+')}
+      {trashed > 0 ? tab('trash', 'trash', '␡', trashed) : null}
+      <button
+        type="button"
+        onClick={onLock}
+        data-testid="nav-lock"
+        className="text-muted flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 font-mono text-[10px] tracking-widest uppercase"
+      >
+        <span aria-hidden="true" className="text-sm">
+          ▪
+        </span>
+        lock
+      </button>
+    </nav>
   );
 }
 
@@ -596,20 +713,23 @@ function Folders({
           data-testid="folder-name"
           className="min-w-0 flex-1"
         />
-        <select
-          value={parentId ?? ''}
-          onChange={(event) => setParentId(event.target.value || null)}
-          aria-label="parent folder"
-          data-testid="folder-parent"
-          className="border-line text-fg focus:border-accent border bg-black px-3 py-2 font-mono text-sm focus:outline-none"
-        >
-          <option value="">top level</option>
-          {folders.map(({ folder }) => (
-            <option key={folder.id} value={folder.id}>
-              {folder.name}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-40 flex-1">
+          <Select
+            value={parentId ?? ''}
+            onChange={(next) => setParentId(next || null)}
+            aria-label="parent folder"
+            data-testid="folder-parent"
+            options={[
+              { value: '', label: 'top level' },
+              ...folders.map(({ folder, depth }) => ({
+                value: folder.id,
+                label: folder.name,
+                depth,
+                color: folder.color,
+              })),
+            ]}
+          />
+        </div>
         <Button type="submit" disabled={name.trim() === ''} data-testid="folder-create">
           create
         </Button>

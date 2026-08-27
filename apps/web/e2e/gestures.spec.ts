@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * Touch gestures: swipe to copy, pull to sync.
+ * The phone layout: swipe to copy, pull to sync, and the bottom bar.
  *
- * Phone only. Playwright drives these by dispatching real `TouchEvent`s in the
- * page, because it has no swipe primitive — `touchscreen` can only tap.
+ * Playwright drives the gestures by dispatching real `TouchEvent`s in the page,
+ * because it has no swipe primitive — `touchscreen` can only tap.
  */
 
 const PASSWORD = 'correct-horse-battery-staple-7391';
@@ -209,4 +209,79 @@ test.describe('pull to sync', () => {
     await page.getByTestId('new-item').click();
     await expect(page.getByTestId('item-title')).toBeVisible();
   });
+});
+
+test.describe('bottom navigation', () => {
+  test.slow();
+  test.skip(({ isMobile }) => isMobile !== true, 'phones only');
+
+  test('reaches every screen', async ({ page }) => {
+    await openVault(page, 'nav');
+
+    await page.getByTestId('nav-new').click();
+    await expect(page.getByTestId('item-title')).toBeVisible();
+
+    await page.getByTestId('nav-folders').click();
+    await expect(page.getByTestId('folder-name')).toBeVisible();
+
+    await page.getByTestId('nav-list').click();
+    await expect(page.getByTestId('search')).toBeVisible();
+  });
+
+  test('marks where you are', async ({ page }) => {
+    await openVault(page, 'nav-current');
+
+    await expect(page.getByTestId('nav-list')).toHaveAttribute('aria-current', 'page');
+    await page.getByTestId('nav-new').click();
+    await expect(page.getByTestId('nav-new')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('shows trash only once there is something in it', async ({ page }) => {
+    await openVault(page, 'nav-trash');
+    await expect(page.getByTestId('nav-trash')).toHaveCount(0);
+
+    await makeLogin(page, 'Disposable', { password: 'secret' });
+    await page.getByTestId('delete-item').click();
+
+    await page.getByTestId('nav-trash').click();
+    await expect(page.getByTestId('trash-list')).toContainText('Disposable');
+  });
+
+  test('locks from the bar', async ({ page }) => {
+    await openVault(page, 'nav-lock');
+
+    await page.getByTestId('nav-lock').click();
+    await expect(page.getByTestId('vault-state')).toContainText('locked');
+  });
+
+  test('carries nothing destructive', async ({ page }) => {
+    // A bar is where a thumb rests between taps. Panic stays in the footer.
+    await openVault(page, 'nav-safe');
+
+    const labels = (await page.getByTestId('bottom-nav').innerText()).toLowerCase();
+    expect(labels).not.toContain('panic');
+    expect(labels).not.toContain('delete');
+    await expect(page.getByTestId('panic')).toBeVisible();
+  });
+
+  test('does not cover the end of the list', async ({ page }) => {
+    await openVault(page, 'nav-clearance');
+    await makeLogin(page, 'Last', { password: 'secret' });
+
+    const bar = await page.getByTestId('bottom-nav').boundingBox();
+    const row = await page.getByTestId('item-row').last().boundingBox();
+
+    if (!bar || !row) throw new Error('expected both the bar and a row to be laid out');
+    expect(row.y + row.height).toBeLessThan(bar.y);
+  });
+});
+
+test('the bottom bar is not there on a desktop', async ({ page, isMobile }) => {
+  // Outside the describe above, which skips everything that is not a phone.
+  test.slow();
+  test.skip(isMobile === true, 'this is the desktop half of the bottom bar');
+
+  await openVault(page, 'nav-desktop');
+  await expect(page.getByTestId('bottom-nav')).toBeHidden();
+  await expect(page.getByTestId('lock')).toBeVisible();
 });

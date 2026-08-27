@@ -172,3 +172,131 @@ html {
     animation: none;
   }
 }
+
+/*
+ * Checkbox and radio.
+ *
+ * `appearance: none` removes the platform drawing — the rounded blue Windows
+ * widget, the iOS blue tick — and leaves a real input behind it. Everything
+ * that matters about a checkbox (focus, labels, the accessibility tree, a
+ * screen reader saying "checked") is still the browser's job; only the paint
+ * is ours.
+ *
+ * The mark is a pseudo-element rather than a sibling node, so there is nothing
+ * to keep in sync with the input's state: `:checked` does it.
+ */
+.control-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  /* 2px, not 1: this sits next to text at 12px and a hairline disappears. */
+  margin-top: 0.05rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  cursor: inherit;
+}
+
+.control-toggle::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--color-accent);
+  /* Scaled rather than toggled between display values, so the box does not
+     resize as the mark appears. */
+  transform: scale(0);
+  transition: transform 90ms steps(2, end);
+}
+
+/* A radio is square too — the zero-radius rule has no exceptions. What tells
+   them apart is the mark: a checkbox fills, a radio shows a dot. */
+.control-toggle-radio::after {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+}
+
+.control-toggle:checked {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 8px rgb(0 255 65 / 0.3);
+}
+
+.control-toggle:checked::after {
+  transform: scale(1);
+}
+
+.control-toggle:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 10px rgb(0 255 65 / 0.45);
+}
+
+.control-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/*
+ * Bigger under a thumb.
+ *
+ * 17px is a fine target for a pointer and a poor one for a finger. The label
+ * beside it is clickable too, so this is not the only way in — but the box is
+ * what people aim at.
+ */
+@media (pointer: coarse) {
+  .control-toggle {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+
+  .control-toggle::after {
+    width: 0.65rem;
+    height: 0.65rem;
+  }
+
+  .control-toggle-radio::after {
+    width: 0.55rem;
+    height: 0.55rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control-toggle::after {
+    transition: none;
+  }
+}
+
+/*
+ * Chrome the browser adds to inputs on its own.
+ *
+ * All three are drawn by the platform in its own colours, and all three sit
+ * inside a field this app has already styled. The password reveal is the clear
+ * case: there is a themed show/hide button beside it doing the same job, so the
+ * native one is both a duplicate and the only pale thing on the screen.
+ */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Edge's eye, and its clear button. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
+/* Chromium's autofill fills the box with its own pale yellow and ignores
+   `background-color`. The inset shadow is the only way to paint over it. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-fg);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-bg) inset;
+  caret-color: var(--color-fg);
+  transition: background-color 100000s ease-in-out 0s;
+}

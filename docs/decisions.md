@@ -436,3 +436,53 @@ password reset that would be a second way to lose data permanently.
 
 Ranking before filtering was rejected: a folder holding three items would show
 two, because the ones the filter hid had already taken the top places.
+
+---
+
+## ADR-019 — Form controls are drawn by us, and the dropdown is rebuilt
+
+**Date:** 2026-08-27 · **Status:** Accepted · **Extends** ADR-007 (the terminal
+theme)
+
+**Context.** The theme is pure black, one hue, square corners, 1px borders.
+Native form controls ignore all of it: a checkbox arrives as a rounded blue
+Windows widget, a `<select>` opens a white OS menu in the middle of a black
+terminal, and Edge adds its own reveal eye beside the app's own show/hide
+button. No amount of styling around them helps, because the platform paints
+them.
+
+**Decision.** Two different problems, solved two different ways.
+
+Checkboxes and radios keep the native input. `appearance: none` removes the
+platform drawing and leaves a real, focusable, labellable control behind it —
+everything that matters (focus, the accessibility tree, a screen reader saying
+"checked", Playwright's `.check()`) is still the browser's job. Only the paint
+is ours, and the mark is a `::after` driven by `:checked`, so there is no second
+node to keep in sync.
+
+The dropdown cannot be done that way: a `<select>`'s popup is drawn by the OS
+and is not reachable from CSS. So it is rebuilt as a listbox — a button, a
+panel, and the keyboard behaviour a select has: arrows move, Home and End jump,
+Enter and Space commit, Escape cancels, Tab closes, and typing jumps to the
+matching option.
+
+Both radios and checkboxes stay square. The zero-radius rule gets no exception;
+what tells them apart is the mark, not the box.
+
+**Consequences.** Rebuilding a select spends something real. The native control
+is free, maintained by the platform, correct on every device, and behaves
+properly with a phone's own picker UI. All of that is now ours to keep right,
+and this is the component most likely to have a bug a native one would not.
+
+It is spent because the alternative is a white menu in the middle of a black
+terminal, which is the one thing the theme exists to avoid.
+
+Tests assert the paint as well as the behaviour, because this failure mode is
+silent: a native checkbox on a black page is a rounded blue square nobody
+catches in review and every user sees.
+
+Two knock-ons found while doing it. Escape closing a dropdown also threw away
+the form it was in — the global shortcut handler now ignores events that were
+already handled. And Next's development indicator sits in the bottom-left
+corner, on top of the app's own bottom navigation bar, swallowing taps; it is
+switched off.
