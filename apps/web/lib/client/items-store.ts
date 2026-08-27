@@ -320,12 +320,3 @@ export function trashedItems(items: readonly DecryptedItem[]): DecryptedItem[] {
   return items.filter((item) => item.deletedAt !== null);
 }
 
-/**
- * Destroy everything held on this device.
- *
- * A free function as well as a store action, so `vault-store` can call it
- * without the two stores importing each other at module load.
- */
-export async function wipeLocal(): Promise<void> {
-  await useItems.getState().wipeLocal();
-}

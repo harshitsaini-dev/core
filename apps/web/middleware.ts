@@ -119,11 +119,20 @@ export function middleware(request: NextRequest): NextResponse {
 
 export const config = {
   /*
-   * Everything except static assets.
+   * Documents only.
    *
    * `_next/static` is content-hashed and immutable, and running middleware for
    * each chunk would add a nonce nothing reads to hundreds of responses per
    * page load.
+   *
+   * `/api` is excluded for a second and better reason. A JSON response has no
+   * scripts, so a script policy on it protects nothing — and the auth routes
+   * pad themselves to a fixed duration to hide whether an account exists.
+   * Middleware runs outside that padding, so every millisecond it costs is
+   * variance the padding cannot absorb. It showed up as the prelogin timing
+   * assertion drifting from under 5ms to 9ms.
    */
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico|webmanifest)$).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon[.]ico|.*[.](?:png|svg|ico|webmanifest)$).*)',
+  ],
 };

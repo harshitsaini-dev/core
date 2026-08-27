@@ -241,11 +241,18 @@ test.describe('offline vault', () => {
     await page.getByTestId('panic').click();
     await expect(page.getByTestId('vault-state')).toContainText('locked');
 
-    const rows = await page.evaluate(async () => {
-      const databases = await indexedDB.databases();
-      return databases.filter((entry) => entry.name === 'core-vault').length;
-    });
-
-    expect(rows).toBe(0);
+    // Polled rather than read once. The wipe is asynchronous, and checking
+    // immediately after the click passed locally and failed under CI's slower,
+    // parallel run — a race in the test, not in the wipe.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const databases = await indexedDB.databases();
+            return databases.filter((entry) => entry.name === 'core-vault').length;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(0);
   });
 });

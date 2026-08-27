@@ -3,6 +3,7 @@
 import type { AccountKeys } from '@core/crypto';
 import { create } from 'zustand';
 import { logout } from './auth';
+import * as offline from './offline-db';
 
 /**
  * Vault lock state.
@@ -70,8 +71,14 @@ export const useVault = create<VaultState>((set, get) => ({
     // vault on the device, which is exactly what this button exists to remove.
     // Anything the outbox had not delivered is lost with it; that is the right
     // trade for a control somebody presses because they want the data gone.
-    const { wipeLocal } = await import('./items-store');
-    await wipeLocal();
+    //
+    // Called directly rather than through a dynamic import of the items store.
+    // That import was there to avoid a cycle between the two stores, and it
+    // made the wipe depend on a chunk loading — so pressing panic offline, with
+    // that chunk uncached, would have locked the vault and left the cache
+    // sitting on disk. The one control that must work under adverse conditions
+    // cannot be the one that needs the network.
+    await offline.wipe();
 
     await logout();
   },
