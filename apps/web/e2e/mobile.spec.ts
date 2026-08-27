@@ -140,10 +140,18 @@ test.describe('glow', () => {
     await page.getByLabel('confirm master password').fill('correct-horse-battery-7391');
     await button.hover();
 
-    const hovered = await button.evaluate((element) => getComputedStyle(element).boxShadow);
-
     expect(resting).toBe('none');
-    expect(hovered).not.toBe('none');
+
+    // Polled rather than read once. The pointer landing and the style being
+    // recomputed are two separate frames, and under a loaded machine the second
+    // one is not always there yet — which failed this test in a full-suite run
+    // while passing every time it ran alone.
+    const shadow = expect.poll(async () =>
+      button.evaluate((element) => getComputedStyle(element).boxShadow),
+    ).not;
+    await shadow.toBe('none');
+
+    const hovered = await button.evaluate((element) => getComputedStyle(element).boxShadow);
     expect(hovered).toContain('rgba(0, 255, 65');
   });
 
