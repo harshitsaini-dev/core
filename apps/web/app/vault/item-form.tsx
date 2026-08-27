@@ -4,8 +4,9 @@ import { parseOtpauth } from '@core/crypto';
 import { orderFolders } from '@core/shared';
 import type { CustomField, DecryptedItem, LoginFields, VaultItemData } from '@core/shared';
 import { Button, Field, Input, Select, Textarea } from '@core/ui';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
+import { usePrivacy } from '@/lib/client/privacy-store';
 import { activeFolders, useItems } from '@/lib/client/items-store';
 
 /**
@@ -273,6 +274,14 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
   const [tags, setTags] = useState((fields.tags ?? []).join(', '));
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Blurring the screen has to take a revealed password with it. The blur only
+  // covers displayed values — a field being typed into cannot be blurred and
+  // still be typed into — so the reveal is closed instead.
+  const blurred = usePrivacy((state) => state.blurred);
+  useEffect(() => {
+    if (blurred) setReveal(false);
+  }, [blurred]);
 
   const save = useItems((state) => state.save);
 

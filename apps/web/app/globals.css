@@ -300,3 +300,70 @@ textarea:-webkit-autofill {
   caret-color: var(--color-fg);
   transition: background-color 100000s ease-in-out 0s;
 }
+
+/*
+ * Blur-all.
+ *
+ * `.secret` marks anything that is a value rather than a label: a title, a
+ * username, a note body, a folder name. When the switch is on, those blur and
+ * everything else stays legible — the structure of the vault is not the secret,
+ * what is in it is.
+ *
+ * Marked at the point of rendering rather than by traversing the DOM for
+ * likely-looking text: a heuristic that guesses would eventually guess wrong,
+ * and the direction it fails in is the one that shows a password.
+ */
+.blurred .secret {
+  /* `filter` rather than `color: transparent`: the text stays selectable and
+     copyable, and the layout does not move as it toggles. */
+  filter: blur(6px);
+  /* Otherwise a long title reflows as it blurs, and the list jumps. */
+  user-select: none;
+  transition: filter 120ms ease-out;
+}
+
+/*
+ * No hover-to-reveal, on purpose.
+ *
+ * It is the obvious affordance and it breaks the feature in the exact case it
+ * exists for: a screen share, where the presenter's cursor wanders across the
+ * list. Reading one value means turning the switch off, which is a deliberate
+ * act and visible in the interface.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .blurred .secret {
+    transition: none;
+  }
+}
+
+/*
+ * Typewriter reveal.
+ *
+ * A view heading types itself in on first paint. `clip-path` rather than an
+ * animated width: width has to be resolved against something, and a heading
+ * whose length is not known in advance either needs a character count passed in
+ * by hand or resolves against its parent and reveals nothing.
+ *
+ * Never applied to a value. Revealing a secret one character at a time is the
+ * opposite of what this product is for, and it would be legible for longer than
+ * the finished text.
+ */
+@keyframes typewriter-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.typewriter {
+  animation: typewriter-reveal 320ms steps(16, end) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typewriter {
+    animation: none;
+  }
+}

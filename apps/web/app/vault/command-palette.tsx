@@ -199,10 +199,14 @@ export function CommandPalette({
                   </>
                 ) : (
                   <>
-                    <span className="truncate" data-testid="palette-item-title">
+                    {/* Marked as values, so the blur switch reaches them. The
+                        palette renders outside the vault's subtree, and a
+                        switch that missed it would claim the screen was
+                        covered while one part of it was not. */}
+                    <span className="secret truncate" data-testid="palette-item-title">
                       {row.item.data.fields.title}
                     </span>
-                    <span className="text-muted shrink-0 truncate text-xs">
+                    <span className="text-muted secret shrink-0 truncate text-xs">
                       {itemSubtitle(row.item.data)}
                     </span>
                   </>

@@ -57,6 +57,10 @@ interface ItemsState {
   saveFolder: (name: string, options?: FolderOptions) => Promise<string>;
   removeFolder: (id: string) => Promise<void>;
   moveItem: (id: string, folderId: string | null) => Promise<void>;
+  removeMany: (ids: readonly string[]) => Promise<void>;
+  restoreMany: (ids: readonly string[]) => Promise<void>;
+  moveMany: (ids: readonly string[], folderId: string | null) => Promise<void>;
+  tagMany: (ids: readonly string[], tag: string) => Promise<void>;
   setFavorite: (id: string, favorite: boolean) => Promise<void>;
   markUsed: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -288,6 +292,84 @@ export const useItems = create<ItemsState>((set, get) => ({
     await commit(set, get, await toUpsert(keys, { ...item, folderId }));
   },
 
+  removeMany: async (ids) => {
+    const deletedAt = Date.now();
+    const set_ = new Set(ids);
+
+    set({
+      items: get().items.map((item) => (set_.has(item.id) ? { ...item, deletedAt } : item)),
+    });
+
+    await commitMany(
+      set,
+      get,
+      ids.map((id) => ({ op: 'delete' as const, id })),
+    );
+  },
+
+  restoreMany: async (ids) => {
+    const set_ = new Set(ids);
+
+    set({
+      items: get().items.map((item) => (set_.has(item.id) ? { ...item, deletedAt: null } : item)),
+    });
+
+    await commitMany(
+      set,
+      get,
+      ids.map((id) => ({ op: 'restore' as const, id })),
+    );
+  },
+
+  moveMany: async (ids, folderId) => {
+    const keys = useVault.getState().keys;
+    if (!keys) return;
+
+    const wanted = new Set(ids);
+    const affected = get().items.filter((item) => wanted.has(item.id));
+
+    set({
+      items: get().items.map((item) => (wanted.has(item.id) ? { ...item, folderId } : item)),
+    });
+
+    await commitMany(
+      set,
+      get,
+      await Promise.all(affected.map((item) => toUpsert(keys, { ...item, folderId }))),
+    );
+  },
+
+  tagMany: async (ids, tag) => {
+    const keys = useVault.getState().keys;
+    const trimmed = tag.trim();
+    if (!keys || trimmed === '') return;
+
+    const wanted = new Set(ids);
+    const now = Date.now();
+
+    // Added, never replaced. A bulk action that discarded the tags an item
+    // already had would be a silent edit of every item it touched.
+    const updated = get().items.map((item) => {
+      if (!wanted.has(item.id)) return item;
+      const existing = item.data.fields.tags ?? [];
+      if (existing.includes(trimmed)) return item;
+
+      return {
+        ...item,
+        updatedAt: now,
+        data: {
+          ...item.data,
+          fields: { ...item.data.fields, tags: [...existing, trimmed] },
+        },
+      } as DecryptedItem;
+    });
+
+    set({ items: updated });
+
+    const changed = updated.filter((item) => wanted.has(item.id));
+    await commitMany(set, get, await Promise.all(changed.map((item) => toUpsert(keys, item))));
+  },
+
   setFavorite: async (id, favorite) => {
     const keys = useVault.getState().keys;
     const item = get().items.find((candidate) => candidate.id === id);
@@ -381,6 +463,37 @@ async function commit(set: Setter, get: Getter, operation: Operation): Promise<v
   await offline.enqueueOperation(operation);
   set({ pending: (await offline.readOutbox()).length });
 
+  await get().flush();
+}
+
+/**
+ * Persist a batch, then send it once.
+ *
+ * The single-operation path flushes after every change, which is right when a
+ * change is something a person just typed. For a bulk action it would be one
+ * round trip per item — fifty selected items, fifty requests, and fifty chances
+ * for the network to fail halfway through a single intended action.
+ */
+async function commitMany(set: Setter, get: Getter, operations: Operation[]): Promise<void> {
+  for (const operation of operations) {
+    if (isFolderOperation(operation)) {
+      const cached = folderOperationToSynced(operation, rawFolders.get(operation.id));
+      if (cached) {
+        rawFolders.set(operation.id, cached);
+        await offline.writeFolderCache([cached]);
+      }
+    } else {
+      const cached = operationToSynced(operation, raw.get(operation.id));
+      if (cached) {
+        raw.set(operation.id, cached);
+        await offline.writeCache([cached]);
+      }
+    }
+
+    await offline.enqueueOperation(operation);
+  }
+
+  set({ pending: (await offline.readOutbox()).length });
   await get().flush();
 }
 

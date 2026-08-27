@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ServiceWorker } from './service-worker';
+import { Toaster } from './toaster';
 
 /**
  * Metadata and link previews.
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="bg-bg text-fg min-h-dvh antialiased">
         {children}
+        <Toaster />
         <ServiceWorker />
       </body>
     </html>

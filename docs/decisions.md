@@ -486,3 +486,50 @@ the form it was in — the global shortcut handler now ignores events that were
 already handled. And Next's development indicator sits in the bottom-left
 corner, on top of the app's own bottom navigation bar, swallowing taps; it is
 switched off.
+
+---
+
+## ADR-020 — A toast never carries a value, and blur-all has no hover reveal
+
+**Date:** 2026-08-27 · **Status:** Accepted
+
+**Context.** Two interface features that both touch what is visible on screen,
+and both have an obvious version that quietly undoes the point.
+
+**Decision — toasts.** A toast states what happened and never what it was.
+"Password copied", never "Copied hunter2". Toasts appear unprompted, they
+linger, and they sit in the corner of the frame a screen recording captures.
+The value adds nothing a person did not already know and shows it to everyone
+else.
+
+A second line: a toast is for an _event_. A _condition_ — offline, four changes
+waiting to sync — stays in the interface, because a message that disappears is
+the wrong shape for something that has not stopped being true. Only a toast with
+an action stays until it is answered; withdrawing an "undo" on a timer takes the
+way back away while somebody is still reading what happened.
+
+**Decision — blur-all.** No hover-to-reveal. It is the obvious affordance and it
+breaks the feature in the exact case it exists for: a screen share, where the
+presenter's cursor wanders across the list. Reading one value means turning the
+switch off, which is deliberate and visible.
+
+The blur covers values and leaves the structure legible — how many items there
+are is not the secret, what is in them is. Values are marked at the point they
+are rendered rather than found by walking the DOM for likely-looking text: a
+heuristic would eventually guess wrong, and it would fail in the direction that
+shows a password.
+
+The class goes on the document, not on the vault's subtree, because the command
+palette and the toast stack render outside it. A switch that missed either would
+be worse than no switch — it would claim the screen was covered while part of it
+was not.
+
+**Consequences.** The promise is narrow and worth stating plainly: blur-all
+stops a person looking at the screen. It does not stop a screenshot taken by
+software on the device, and it is no defence against anything running in the
+page. It is also not persisted — a blur that survives a reload is a setting, and
+this is a gesture. The vault it protects does not survive a reload either.
+
+A revealed password in an open form is closed when the switch goes on. A field
+being typed into cannot be blurred and still be typed into, so the reveal is
+what gives way.

@@ -2,11 +2,15 @@
 
 import { FOLDER_COLORS, collectTags, itemSubtitle, orderFolders } from '@core/shared';
 import type { DecryptedFolder, DecryptedItem } from '@core/shared';
-import { Button, Input, Panel, Select } from '@core/ui';
+import type { Layout } from '@/lib/client/view-store';
+import { Button, Checkbox, Input, Panel, Select } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
+import { usePrivacy } from '@/lib/client/privacy-store';
+import { toast } from '@/lib/client/toast-store';
+import { useView } from '@/lib/client/view-store';
 import {
   activeFolders,
   activeItems,
@@ -86,7 +90,21 @@ export default function VaultPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const layout = useView((state) => state.layout);
+  const setLayout = useView((state) => state.setLayout);
+  const hydrateLayout = useView((state) => state.hydrate);
+  const selecting = useView((state) => state.selecting);
+  const startSelecting = useView((state) => state.startSelecting);
+  const stopSelecting = useView((state) => state.stopSelecting);
+
+  const blurred = usePrivacy((state) => state.blurred);
+  const toggleBlur = usePrivacy((state) => state.toggle);
+  const setBlur = usePrivacy((state) => state.set);
+
   useEffect(() => startAutoLock(), []);
+  // After mount, not during render: reading storage while rendering disagrees
+  // with what the server produced and React throws the tree away.
+  useEffect(() => hydrateLayout(), [hydrateLayout]);
   useEffect(() => watchConnectivity(), []);
 
   useEffect(() => {
@@ -97,9 +115,10 @@ export default function VaultPage() {
       // clipboard with them. Leaving either behind would make the lock
       // cosmetic.
       reset();
+      stopSelecting();
       void clearClipboardNow();
     }
-  }, [state, load, reset]);
+  }, [state, load, reset, stopSelecting]);
 
   const live = useMemo(() => activeItems(items), [items]);
 
@@ -140,12 +159,13 @@ export default function VaultPage() {
         label: 'clear the clipboard now',
         run: () => void clearClipboardNow(),
       },
+      { id: 'blur', label: 'blur every value on screen', hint: 'b', run: toggleBlur },
       { id: 'lock', label: 'lock the vault', hint: 'l', run: () => lock(false) },
     ],
     // Delete and panic are deliberately absent: see the note in
     // command-palette.tsx. Nothing irreversible should be one Enter away from a
     // fuzzy match.
-    [lock],
+    [lock, toggleBlur],
   );
 
   /**
@@ -192,6 +212,12 @@ export default function VaultPage() {
         return;
       }
 
+      if (event.key === 'b') {
+        event.preventDefault();
+        toggleBlur();
+        return;
+      }
+
       if (event.key === 'l') {
         event.preventDefault();
         lock(false);
@@ -200,12 +226,30 @@ export default function VaultPage() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [state, paletteOpen, lock]);
+  }, [state, paletteOpen, lock, toggleBlur]);
 
   // The palette holds decrypted titles. Locking has to take it with them.
   useEffect(() => {
     if (state !== 'unlocked') setPaletteOpen(false);
   }, [state]);
+
+  /**
+   * The blur class lives on the document, not on this subtree.
+   *
+   * The palette and the toasts render outside it, and a switch that missed
+   * either would be worse than no switch at all — it would say the screen was
+   * covered while one part of it was not.
+   */
+  useEffect(() => {
+    document.documentElement.classList.toggle('blurred', blurred);
+    return () => document.documentElement.classList.remove('blurred');
+  }, [blurred]);
+
+  // Unlocked is the only state that has anything to hide, and leaving the class
+  // behind would blur the lock screen.
+  useEffect(() => {
+    if (state !== 'unlocked') setBlur(false);
+  }, [state, setBlur]);
   const tags = useMemo(() => collectTags(live), [live]);
   const visibleFolders = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
 
@@ -261,6 +305,20 @@ export default function VaultPage() {
           <span className="cursor">core</span>
         </h1>
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={toggleBlur}
+            aria-pressed={blurred}
+            data-testid="toggle-blur"
+            className={
+              blurred
+                ? 'text-accent text-glow font-mono text-xs'
+                : 'text-muted hover:text-accent font-mono text-xs'
+            }
+          >
+            <span aria-hidden="true">{blurred ? '▨ ' : '▧ '}</span>
+            {blurred ? 'blurred' : 'blur'}
+          </button>
           <ConnectionStatus online={online} pending={pending} />
           <p className="text-muted font-mono text-xs" data-testid="vault-state">
             vault unlocked
@@ -295,6 +353,26 @@ export default function VaultPage() {
                 data-testid="clear-search"
               >
                 clear
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLayout(layout === 'list' ? 'grid' : 'list')}
+              aria-label={layout === 'list' ? 'switch to grid' : 'switch to list'}
+              data-testid="toggle-layout"
+            >
+              {layout === 'list' ? '▤ list' : '▦ grid'}
+            </Button>
+            {visible.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => (selecting ? stopSelecting() : startSelecting())}
+                aria-pressed={selecting}
+                data-testid="toggle-select"
+              >
+                {selecting ? 'done' : 'select'}
               </Button>
             ) : null}
             <Button type="button" onClick={() => setView({ kind: 'new' })} data-testid="new-item">
@@ -338,8 +416,17 @@ export default function VaultPage() {
             </p>
           ) : null}
 
+          {selecting ? <BulkBar visible={visible} folders={visibleFolders} /> : null}
+
           <PullToRefresh onRefresh={load}>
-            <ItemList items={visible} loading={loading} query={query} onEdit={openItem} />
+            <ItemList
+              items={visible}
+              loading={loading}
+              query={query}
+              layout={layout}
+              selecting={selecting}
+              onEdit={openItem}
+            />
           </PullToRefresh>
 
           <footer className="border-line mt-10 flex flex-wrap gap-3 border-t pt-6">
@@ -386,7 +473,7 @@ export default function VaultPage() {
 
       {view.kind === 'new' || view.kind === 'edit' ? (
         <Panel className="mt-6">
-          <h2 className="text-accent mb-6 font-mono text-sm tracking-widest uppercase">
+          <h2 className="text-accent typewriter mb-6 font-mono text-sm tracking-widest uppercase">
             {view.kind === 'new' ? 'new item' : 'edit item'}
           </h2>
           <ItemForm
@@ -423,6 +510,134 @@ export default function VaultPage() {
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
       ) : null}
     </main>
+  );
+}
+
+/**
+ * What a selection can do.
+ *
+ * Three actions, and all three are things somebody would otherwise do one row
+ * at a time. Delete offers undo, because a bulk delete is the single easiest
+ * way to lose a lot at once — and unlike a single delete, it is not obvious
+ * from the screen what just went.
+ */
+/** The "no folder" choice, as a value that cannot collide with a folder id. */
+const UNFILED = '__unfiled__';
+
+function BulkBar({
+  visible,
+  folders,
+}: {
+  visible: readonly DecryptedItem[];
+  folders: readonly { folder: DecryptedFolder; depth: number }[];
+}) {
+  const selected = useView((store) => store.selected);
+  const selectAll = useView((store) => store.selectAll);
+  const clear = useView((store) => store.clear);
+  const stopSelecting = useView((store) => store.stopSelecting);
+
+  const removeMany = useItems((store) => store.removeMany);
+  const restoreMany = useItems((store) => store.restoreMany);
+  const moveMany = useItems((store) => store.moveMany);
+  const tagMany = useItems((store) => store.tagMany);
+
+  const [tag, setTag] = useState('');
+
+  const ids = [...selected];
+  const count = ids.length;
+
+  return (
+    <div
+      className="border-accent mt-4 flex flex-wrap items-center gap-2 border p-3"
+      data-testid="bulk-bar"
+    >
+      <p className="text-accent mr-auto font-mono text-xs" aria-live="polite">
+        <span aria-hidden="true">&gt; </span>
+        <span data-testid="bulk-count">{count}</span> selected
+      </p>
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => selectAll(visible.map((item) => item.id))}
+        data-testid="bulk-all"
+      >
+        all
+      </Button>
+      <Button type="button" variant="ghost" onClick={clear} data-testid="bulk-none">
+        none
+      </Button>
+
+      {count > 0 ? (
+        <>
+          <div className="min-w-40">
+            <Select
+              value=""
+              placeholder="move to…"
+              aria-label="move to folder"
+              data-testid="bulk-move"
+              onChange={(folderId) => {
+                void moveMany(ids, folderId === UNFILED ? null : folderId);
+                toast(`${count} item(s) moved.`);
+                clear();
+              }}
+              options={[
+                // Not the empty string: this Select is an action menu held at
+                // `value=""` so the trigger keeps reading "move to…". An option
+                // valued `''` would match it and the prompt would be replaced
+                // by "no folder" before anything had been chosen.
+                { value: UNFILED, label: 'no folder' },
+                ...folders.map(({ folder, depth }) => ({
+                  value: folder.id,
+                  label: folder.name,
+                  depth,
+                  color: folder.color,
+                })),
+              ]}
+            />
+          </div>
+
+          <Input
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+            placeholder="tag…"
+            aria-label="tag the selection"
+            data-testid="bulk-tag"
+            className="w-32"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={tag.trim() === ''}
+            onClick={() => {
+              void tagMany(ids, tag);
+              toast(`${count} item(s) tagged.`);
+              setTag('');
+              clear();
+            }}
+            data-testid="bulk-tag-apply"
+          >
+            add tag
+          </Button>
+
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => {
+              void removeMany(ids);
+              toast(`${count} item(s) moved to trash.`, {
+                tone: 'warning',
+                action: { label: 'undo', run: () => void restoreMany(ids) },
+              });
+              stopSelecting();
+            }}
+            data-testid="bulk-delete"
+          >
+            delete
+          </Button>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -701,7 +916,9 @@ function Folders({
 
   return (
     <Panel className="mt-6">
-      <h2 className="text-accent mb-6 font-mono text-sm tracking-widest uppercase">folders</h2>
+      <h2 className="text-accent typewriter mb-6 font-mono text-sm tracking-widest uppercase">
+        folders
+      </h2>
 
       <form onSubmit={(event) => void create(event)} className="flex flex-wrap gap-2">
         <Input
@@ -846,11 +1063,15 @@ function ItemList({
   items,
   loading,
   query,
+  layout,
+  selecting,
   onEdit,
 }: {
   items: readonly DecryptedItem[];
   loading: boolean;
   query: string;
+  layout: Layout;
+  selecting: boolean;
   onEdit: (id: string) => void;
 }) {
   if (loading && items.length === 0) {
@@ -872,21 +1093,38 @@ function ItemList({
   }
 
   return (
-    <ul className="border-line mt-6 border-t" data-testid="item-list">
+    <ul
+      className={layout === 'grid' ? 'mt-6 grid gap-3 sm:grid-cols-2' : 'border-line mt-6 border-t'}
+      data-layout={layout}
+      data-testid="item-list"
+    >
       {items.map((item) => (
-        <ItemRow key={item.id} item={item} onEdit={onEdit} />
+        <ItemRow key={item.id} item={item} layout={layout} selecting={selecting} onEdit={onEdit} />
       ))}
     </ul>
   );
 }
 
-function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) => void }) {
+function ItemRow({
+  item,
+  layout,
+  selecting,
+  onEdit,
+}: {
+  item: DecryptedItem;
+  layout: Layout;
+  selecting: boolean;
+  onEdit: (id: string) => void;
+}) {
   const [copied, setCopied] = useState<'username' | 'password' | null>(null);
-  const [failed, setFailed] = useState(false);
 
   const markUsed = useItems((store) => store.markUsed);
   const setFavorite = useItems((store) => store.setFavorite);
   const remove = useItems((store) => store.remove);
+  const restore = useItems((store) => store.restore);
+
+  const selected = useView((store) => store.selected.has(item.id));
+  const toggleSelected = useView((store) => store.toggle);
 
   const fields = item.data.type === 'login' ? item.data.fields : null;
 
@@ -894,26 +1132,46 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
     if (!value) return;
 
     const ok = await copySecret(value);
-    setFailed(!ok);
-    if (!ok) return;
+
+    if (!ok) {
+      toast('The browser refused clipboard access. Reveal the value and copy it by hand.', {
+        tone: 'danger',
+      });
+      return;
+    }
 
     pulse();
     setCopied(which);
     void markUsed(item.id);
+
+    // Never the value itself — a toast lingers, unprompted, in exactly the
+    // frame a screen recording captures.
+    toast(`${which} copied. The clipboard clears in 30 seconds.`);
+
     setTimeout(() => setCopied(null), 2000);
   }
 
   // Left copies the password, right copies the username — the same two actions
   // as the buttons, reachable with one thumb. Rows with nothing to copy do not
   // move at all, rather than sliding to reveal an action that does nothing.
+  // Off while selecting. A thumb reaching for a checkbox that instead put a
+  // password on the clipboard would be the worst kind of surprise.
   const swipe = useSwipe({
-    ...(fields?.password ? { onSwipeLeft: () => void copy('password', fields.password) } : {}),
-    ...(fields?.username ? { onSwipeRight: () => void copy('username', fields.username) } : {}),
+    ...(fields?.password && !selecting
+      ? { onSwipeLeft: () => void copy('password', fields.password) }
+      : {}),
+    ...(fields?.username && !selecting
+      ? { onSwipeRight: () => void copy('username', fields.username) }
+      : {}),
   });
 
   return (
     <li
-      className="border-line relative overflow-hidden border-b py-4"
+      className={
+        layout === 'grid'
+          ? 'border-line relative overflow-hidden border p-4'
+          : 'border-line relative overflow-hidden border-b py-4'
+      }
       data-testid="item-row"
       {...swipe.handlers}
     >
@@ -933,32 +1191,48 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
       ) : null}
 
       <div
-        className="flex items-start justify-between gap-3"
+        className={
+          layout === 'grid' ? 'flex flex-col gap-3' : 'flex items-start justify-between gap-3'
+        }
         style={
           swipe.offset === 0
             ? undefined
             : { transform: `translateX(${swipe.offset}px)`, willChange: 'transform' }
         }
       >
-        <div className="min-w-0">
-          <p className="text-fg truncate font-mono text-sm" data-testid="item-row-title">
-            {item.favorite ? <span aria-label="favourite">★ </span> : null}
-            {item.data.fields.title}
-          </p>
-          {item.data.type !== 'login' ? (
-            <p className="text-accent-dim font-mono text-[10px] tracking-widest uppercase">
-              {item.data.type}
-            </p>
+        <div className="flex min-w-0 items-start gap-3">
+          {selecting ? (
+            <Checkbox
+              checked={selected}
+              onChange={() => toggleSelected(item.id)}
+              aria-label={`select ${item.data.fields.title}`}
+              data-testid="select-item"
+              label=""
+              className="shrink-0"
+            />
           ) : null}
-          <p className="text-muted truncate font-mono text-xs">{itemSubtitle(item.data)}</p>
-          {item.data.fields.tags?.length ? (
-            <p
-              className="text-accent-dim mt-1 truncate font-mono text-[10px]"
-              data-testid="item-row-tags"
-            >
-              {item.data.fields.tags.map((tag) => `#${tag}`).join(' ')}
+          <div className="min-w-0">
+            <p className="text-fg secret truncate font-mono text-sm" data-testid="item-row-title">
+              {item.favorite ? <span aria-label="favourite">★ </span> : null}
+              {item.data.fields.title}
             </p>
-          ) : null}
+            {item.data.type !== 'login' ? (
+              <p className="text-accent-dim font-mono text-[10px] tracking-widest uppercase">
+                {item.data.type}
+              </p>
+            ) : null}
+            <p className="text-muted secret truncate font-mono text-xs">
+              {itemSubtitle(item.data)}
+            </p>
+            {item.data.fields.tags?.length ? (
+              <p
+                className="text-accent-dim secret mt-1 truncate font-mono text-[10px]"
+                data-testid="item-row-tags"
+              >
+                {item.data.fields.tags.map((tag) => `#${tag}`).join(' ')}
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -1002,7 +1276,13 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
           <Button
             type="button"
             variant="ghost"
-            onClick={() => void remove(item.id)}
+            onClick={() => {
+              void remove(item.id);
+              toast('Moved to trash.', {
+                tone: 'warning',
+                action: { label: 'undo', run: () => void restore(item.id) },
+              });
+            }}
             data-testid="delete-item"
           >
             delete
@@ -1022,7 +1302,7 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
             hostile content to arrive, and turning it into markup would inject
             it into the one origin that holds the vault keys.
           */}
-          <p className="text-fg mt-2 max-h-64 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap">
+          <p className="text-fg secret mt-2 max-h-64 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap">
             {item.data.fields.body}
           </p>
         </details>
@@ -1056,17 +1336,11 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
         </dl>
       ) : null}
 
-      {failed ? (
-        <p role="alert" className="text-danger mt-2 font-mono text-xs">
-          <span aria-hidden="true">! </span>
-          The browser refused clipboard access. Reveal the value and copy it manually.
-        </p>
-      ) : copied ? (
-        <p className="text-muted mt-2 font-mono text-xs" aria-live="polite">
-          <span aria-hidden="true">&gt; </span>
-          Clipboard clears in 30 seconds, as long as this tab stays open.
-        </p>
-      ) : null}
+      {/*
+        Both of these used to be printed under the row. The toast says the same
+        thing once, in one place, rather than the list growing a paragraph
+        under whichever row was last touched.
+      */}
     </li>
   );
 }
@@ -1076,7 +1350,9 @@ function Trash({ items, onBack }: { items: readonly DecryptedItem[]; onBack: () 
 
   return (
     <Panel className="mt-6">
-      <h2 className="text-accent mb-2 font-mono text-sm tracking-widest uppercase">trash</h2>
+      <h2 className="text-accent typewriter mb-2 font-mono text-sm tracking-widest uppercase">
+        trash
+      </h2>
       <p className="text-muted mb-6 font-mono text-xs">
         <span aria-hidden="true">&gt; </span>
         Deleted items stay here for 30 days.

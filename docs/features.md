@@ -65,7 +65,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-10 | Inline editing directly in the list                          | P3    | TODO   |
 | VLT-11 | Item version history with per-version restore                | P4    | TODO   |
 | VLT-12 | Trash with 30-day retention and restore                      | P3    | DONE   |
-| VLT-13 | Bulk select: delete, move, tag                               | P3    | TODO   |
+| VLT-13 | Bulk select: delete, move, tag                               | P3    | DONE   |
 | VLT-14 | Drag-and-drop items into folders (desktop)                   | P4    | TODO   |
 | VLT-15 | Linked items (DB credential linked to an ENV project)        | P4    | TODO   |
 | VLT-16 | Duplicate item detection                                     | P6    | TODO   |
@@ -83,7 +83,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ORG-07 | Sort by A-Z, Z-A, modified, created, most-used | P3    | DONE   |
 | ORG-08 | Pinned / favourite items at the top            | P3    | DONE   |
 | ORG-09 | Password age indicator per item                | P4    | TODO   |
-| ORG-10 | Grid vs list view toggle                       | P3    | TODO   |
+| ORG-10 | Grid vs list view toggle                       | P3    | DONE   |
 | ORG-11 | Recently used section                          | P3    | DONE   |
 | ORG-12 | Saved filter views                             | P6    | TODO   |
 
@@ -144,12 +144,12 @@ P5 Hardening+Deploy · P6 Post-v1
 | UI-01 | Cyber-brutalist terminal theme, pure black background   | P1    | DONE   |
 | UI-02 | Matrix-green accent (`#00FF41`), monospace everywhere   | P1    | DONE   |
 | UI-03 | Zero border radius, 1px hard borders                    | P1    | DONE   |
-| UI-04 | Blinking cursor motif on headings and inputs            | P3    | TODO   |
-| UI-05 | Typewriter reveal on first paint of a view              | P3    | TODO   |
-| UI-06 | Invert-on-hover interaction (black text on green block) | P3    | TODO   |
-| UI-07 | Toast notifications, bottom-anchored                    | P3    | TODO   |
-| UI-08 | Command-line style empty and error states               | P3    | TODO   |
-| UI-09 | Anti-screenshot blur-all toggle                         | P3    | TODO   |
+| UI-04 | Blinking cursor motif on headings and inputs            | P3    | DONE   |
+| UI-05 | Typewriter reveal on first paint of a view              | P3    | DONE   |
+| UI-06 | Invert-on-hover interaction (black text on green block) | P3    | DONE   |
+| UI-07 | Toast notifications, bottom-anchored                    | P3    | DONE   |
+| UI-08 | Command-line style empty and error states               | P3    | DONE   |
+| UI-09 | Anti-screenshot blur-all toggle                         | P3    | DONE   |
 | UI-10 | True OLED black for battery saving                      | P1    | DONE   |
 | UI-11 | Reduced-motion support                                  | P5    | TODO   |
 | UI-12 | Full keyboard navigation and visible focus rings        | P5    | TODO   |
