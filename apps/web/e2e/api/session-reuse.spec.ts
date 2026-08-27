@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +47,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
  * shell on Windows, and the shell then splits it on whitespace — wrangler sees
  * `SELECT` and rejects the rest as unknown arguments.
  */
-function execLocal(sql: string): string {
+function execLocal(sql: string, attempt = 1): string {
   const file = resolve(repoRoot, '.wrangler', `e2e-${crypto.randomUUID()}.sql`);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, sql, 'utf8');
@@ -71,6 +71,24 @@ function execLocal(sql: string): string {
       ],
       { cwd: repoRoot, encoding: 'utf8', shell: process.platform === 'win32' },
     );
+  } catch (cause) {
+    /*
+     * The dev server holds this same SQLite file open, so a write here can lose
+     * the lock to it — more often now that four workers keep the server busy.
+     * It is contention, not a failure of anything under test, and the answer to
+     * contention is to wait and try again.
+     *
+     * Three attempts, then give up loudly with whatever wrangler said. A retry
+     * loop that swallows the reason turns a five-minute diagnosis into an
+     * afternoon.
+     */
+    if (attempt >= 3) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`wrangler failed after ${attempt} attempts: ${detail}`);
+    }
+
+    execSync(`node -e "setTimeout(()=>{}, ${attempt * 400})"`);
+    return execLocal(sql, attempt + 1);
   } finally {
     rmSync(file, { force: true });
   }
