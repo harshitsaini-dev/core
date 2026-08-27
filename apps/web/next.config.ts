@@ -22,15 +22,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // A floor for responses the middleware matcher skips — static assets,
-        // mostly. The real policy, including the per-request CSP nonce, lives
-        // in middleware.ts; duplicating it here would guarantee the two drift.
+        /*
+         * Only the one header that is useful on responses the middleware skips,
+         * and that middleware therefore does not set.
+         *
+         * Everything else lives in middleware.ts. Setting a header in both
+         * places appends rather than replaces on the Workers runtime, which
+         * produced `X-Frame-Options: DENY, DENY` — and neither location is
+         * obviously the culprit when reading either one.
+         */
         source: '/:path*',
-        headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'no-referrer' },
-        ],
+        headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }],
       },
     ];
   },

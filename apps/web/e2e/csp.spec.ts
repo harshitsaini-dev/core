@@ -72,6 +72,27 @@ test.describe('policy shape', () => {
     expect(directive(policy, 'form-action')).toBe("form-action 'self'");
   });
 
+  test('permits WebAssembly, without permitting eval', async ({ page }) => {
+    // Argon2id is WebAssembly. Without `wasm-unsafe-eval` the browser refuses
+    // to instantiate it, and the product has no key derivation at all — no
+    // signup, no unlock, no recovery. Development hid this behind
+    // `unsafe-eval`, which permits WebAssembly as a side effect, so the first
+    // production build could not create an account.
+    const scriptSrc = directive(await cspOf(page), 'script-src');
+
+    expect(scriptSrc).toContain("'wasm-unsafe-eval'");
+  });
+
+  test('sets each header exactly once', async ({ page }) => {
+    // Setting a header in both next.config.ts and the middleware appends rather
+    // than replaces on the Workers runtime, producing `DENY, DENY`.
+    const response = await page.goto('/');
+    const value = response?.headers()['x-frame-options'] ?? '';
+
+    expect(value).toBe('DENY');
+    expect(value).not.toContain(',');
+  });
+
   test('sets the rest of the hardening headers', async ({ page }) => {
     const response = await page.goto('/');
     const headers = response?.headers() ?? {};

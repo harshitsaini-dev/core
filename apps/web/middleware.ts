@@ -28,12 +28,22 @@ function policy(nonce: string, isDev: boolean): string {
     // every hashed filename being listed. Without it, a nonce-based policy and
     // a code-split app are close to incompatible.
     //
-    // `unsafe-eval` is development only: the dev server's HMR client needs it,
-    // and shipping it would leave the widest hole in an otherwise strict
-    // policy.
+    // `wasm-unsafe-eval` is not optional here, despite the name. Argon2id runs
+    // as WebAssembly, and without this the browser refuses to instantiate it —
+    // which means no key derivation, so no signup, no unlock and no recovery.
+    // Development hid this behind `unsafe-eval`, which permits WebAssembly as a
+    // side effect; the first build without it could not create an account.
+    //
+    // It is a far narrower grant than `unsafe-eval`: it allows compiling
+    // WebAssembly and nothing else. No `eval`, no `new Function`, no string
+    // timers.
+    //
+    // `unsafe-eval` itself is development only, for the dev server's HMR
+    // client, and shipping it would leave the widest hole in an otherwise
+    // strict policy.
     isDev
-      ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`
-      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+      ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval' 'unsafe-eval'`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'`,
 
     // Styles keep `unsafe-inline`, and that is a real weakness stated rather
     // than hidden. React and Next both inject inline styles, and nonce-ing
@@ -89,11 +99,11 @@ export function middleware(request: NextRequest): NextResponse {
 
   response.headers.set('Content-Security-Policy', policy(nonce, isDev));
 
-  // Referrer-Policy is set here as well as in next.config.ts so that it applies
-  // to every response this middleware touches, including ones the config's
-  // matcher would miss.
+  // Each of these is set here and nowhere else. Setting the same header in
+  // next.config.ts as well appended rather than replaced on the Workers
+  // runtime, producing `X-Frame-Options: DENY, DENY` — valid-looking, and
+  // rejected as malformed by anything strict about parsing it.
   response.headers.set('Referrer-Policy', 'no-referrer');
-  response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set(
     'Permissions-Policy',
