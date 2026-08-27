@@ -81,7 +81,12 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
     headless: !headed,
-    trace: 'on-first-retry',
+    // `on-first-retry` captures nothing locally, because there are no retries
+    // here — which is exactly when a failure that only appears under a full
+    // parallel run has to be explicable from the artefacts alone. A trace has
+    // the network, the console and the DOM at each step; a screenshot has the
+    // end state and no idea how it got there.
+    trace: isCI ? 'on-first-retry' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: isCI ? 'retain-on-failure' : 'off',
     // Generous even headless. The suite runs against `next dev` — production
