@@ -1,7 +1,8 @@
 'use client';
 
+import { parseOtpauth } from '@core/crypto';
+import type { CustomField, DecryptedItem, LoginFields } from '@core/shared';
 import { Button, Field, Input } from '@core/ui';
-import type { DecryptedItem, LoginFields } from '@core/shared';
 import { useId, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
 import { useItems } from '@/lib/client/items-store';
@@ -9,8 +10,8 @@ import { useItems } from '@/lib/client/items-store';
 /**
  * Create or edit a login.
  *
- * Only logins for now. The other item types share this shape and will reuse it,
- * but shipping five half-finished forms would be worse than one that works.
+ * Only logins so far. The other item types share this shape and will reuse most
+ * of it; shipping five half-finished forms would be worse than one that works.
  */
 export function ItemForm({
   existing,
@@ -28,6 +29,8 @@ export function ItemForm({
   const usernameId = useId();
   const passwordId = useId();
   const urlId = useId();
+  const totpId = useId();
+  const codesId = useId();
 
   const fields = (existing?.data.fields ?? {}) as LoginFields;
 
@@ -35,10 +38,39 @@ export function ItemForm({
   const [username, setUsername] = useState(fields.username ?? '');
   const [password, setPassword] = useState(fields.password ?? '');
   const [url, setUrl] = useState(fields.url ?? '');
+  const [totpSecret, setTotpSecret] = useState(fields.totpSecret ?? '');
+  const [totpError, setTotpError] = useState('');
+  const [recoveryCodes, setRecoveryCodes] = useState((fields.recoveryCodes ?? []).join('\n'));
+  const [custom, setCustom] = useState<CustomField[]>(fields.customFields ?? []);
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const save = useItems((state) => state.save);
+
+  /**
+   * Accept either a bare base32 secret or a whole `otpauth://` URI.
+   *
+   * Pasting the URI is what people actually do when a site shows "can't scan
+   * the code?", and silently storing it as if it were a secret would produce a
+   * TOTP field that never generates a working code.
+   */
+  function onTotpChange(value: string): void {
+    const trimmed = value.trim();
+    setTotpError('');
+
+    if (trimmed.toLowerCase().startsWith('otpauth://')) {
+      const parsed = parseOtpauth(trimmed);
+      if (!parsed) {
+        setTotpSecret(trimmed);
+        setTotpError('That otpauth link could not be read.');
+        return;
+      }
+      setTotpSecret(parsed.secret);
+      return;
+    }
+
+    setTotpSecret(trimmed);
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -46,17 +78,27 @@ export function ItemForm({
 
     setBusy(true);
     try {
+      const codes = recoveryCodes
+        .split('\n')
+        .map((code) => code.trim())
+        .filter((code) => code !== '');
+
+      const cleanedCustom = custom.filter((field) => field.label.trim() !== '');
+
       const id = await save(
         {
           type: 'login',
           fields: {
             title: title.trim(),
-            // Empty strings are dropped rather than stored. An item that
-            // records `username: ""` is indistinguishable from one that has a
-            // username when read back, and the list would show a blank line.
+            // Empty values are dropped rather than stored. An item recording
+            // `username: ""` reads back as though it has one, and the list
+            // shows a blank line under the title.
             ...(username.trim() ? { username: username.trim() } : {}),
             ...(password ? { password } : {}),
             ...(url.trim() ? { url: url.trim() } : {}),
+            ...(totpSecret ? { totpSecret } : {}),
+            ...(codes.length > 0 ? { recoveryCodes: codes } : {}),
+            ...(cleanedCustom.length > 0 ? { customFields: cleanedCustom } : {}),
           },
         },
         existing?.id,
@@ -91,16 +133,17 @@ export function ItemForm({
       </Field>
 
       <Field label="password" htmlFor={passwordId}>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Input
             id={passwordId}
-            // Typed in the clear only when asked. Shoulder-surfing is the threat
+            // Shown in the clear only when asked. Shoulder-surfing is the threat
             // this screen actually faces day to day.
             type={reveal ? 'text' : 'password'}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="off"
             data-testid="item-password"
+            className="min-w-0 flex-1"
           />
           <Button
             type="button"
@@ -138,6 +181,41 @@ export function ItemForm({
         />
       </Field>
 
+      <Field
+        label="one-time code secret"
+        htmlFor={totpId}
+        error={totpError || undefined}
+        hint={totpError ? undefined : 'Paste the base32 secret, or the whole otpauth:// link.'}
+      >
+        <Input
+          id={totpId}
+          value={totpSecret}
+          onChange={(event) => onTotpChange(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          invalid={totpError !== ''}
+          data-testid="item-totp"
+        />
+      </Field>
+
+      <Field
+        label="recovery codes"
+        htmlFor={codesId}
+        hint="One per line. Kept apart from the password, since they are what survives losing it."
+      >
+        <textarea
+          id={codesId}
+          value={recoveryCodes}
+          onChange={(event) => setRecoveryCodes(event.target.value)}
+          rows={4}
+          spellCheck={false}
+          data-testid="item-recovery-codes"
+          className="border-line text-fg placeholder:text-muted/60 focus:border-accent focus:shadow-glow-soft w-full border bg-black px-3 py-2 font-mono text-base focus:outline-none sm:text-sm"
+        />
+      </Field>
+
+      <CustomFields fields={custom} onChange={setCustom} />
+
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={busy || title.trim() === ''} data-testid="item-save">
           {busy ? '... saving' : 'save'}
@@ -147,5 +225,84 @@ export function ItemForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Arbitrary extra fields.
+ *
+ * The `hidden` flag is the point of these. Security question answers, PINs and
+ * licence keys are all secrets that do not fit any named field, and storing
+ * them in the notes means they render in the clear next to everything else.
+ */
+function CustomFields({
+  fields,
+  onChange,
+}: {
+  fields: CustomField[];
+  onChange: (fields: CustomField[]) => void;
+}) {
+  function update(index: number, patch: Partial<CustomField>): void {
+    onChange(
+      fields.map((field, position) => (position === index ? { ...field, ...patch } : field)),
+    );
+  }
+
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-muted font-mono text-xs tracking-widest uppercase">
+        custom fields
+      </legend>
+
+      {fields.map((field, index) => (
+        <div key={index} className="flex flex-wrap gap-2">
+          <Input
+            value={field.label}
+            onChange={(event) => update(index, { label: event.target.value })}
+            placeholder="label"
+            aria-label={`custom field ${index + 1} label`}
+            data-testid="custom-label"
+            className="min-w-0 flex-1"
+          />
+          <Input
+            type={field.hidden ? 'password' : 'text'}
+            value={field.value}
+            onChange={(event) => update(index, { value: event.target.value })}
+            placeholder="value"
+            aria-label={`custom field ${index + 1} value`}
+            data-testid="custom-value"
+            className="min-w-0 flex-1"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => update(index, { hidden: !field.hidden })}
+            aria-pressed={field.hidden}
+            aria-label={field.hidden ? 'show this field' : 'hide this field'}
+            data-testid="custom-hidden"
+          >
+            {field.hidden ? 'hidden' : 'visible'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onChange(fields.filter((_, position) => position !== index))}
+            aria-label={`remove custom field ${index + 1}`}
+            data-testid="custom-remove"
+          >
+            remove
+          </Button>
+        </div>
+      ))}
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => onChange([...fields, { label: '', value: '', hidden: false }])}
+        data-testid="custom-add"
+      >
+        add field
+      </Button>
+    </fieldset>
   );
 }

@@ -20,6 +20,9 @@
  *      -> Account Key encrypts every item ...........  aes.ts
  *      -> Account Key derives the blind-index key ...  blind-index.ts
  *      -> Account Key wraps the ECDH private key ....  sharing.ts
+ *
+ * Also here, because it is HMAC arithmetic and belongs beside the rest:
+ *      TOTP / HOTP (RFC 6238, RFC 4226) ...............  totp.ts
  */
 
 export * from './encoding.js';
@@ -29,3 +32,4 @@ export * from './aes.js';
 export * from './account.js';
 export * from './blind-index.js';
 export * from './sharing.js';
+export * from './totp.js';

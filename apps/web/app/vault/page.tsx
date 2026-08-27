@@ -10,6 +10,7 @@ import { activeItems, trashedItems, useItems, watchConnectivity } from '@/lib/cl
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { ItemForm } from './item-form';
+import { TotpCode } from './totp-code';
 
 /**
  * The vault.
@@ -344,6 +345,34 @@ function ItemRow({ item, onEdit }: { item: DecryptedItem; onEdit: (id: string) =
           </Button>
         </div>
       </div>
+
+      {fields?.totpSecret ? (
+        <div className="mt-3" data-testid="item-totp-row">
+          <TotpCode secret={fields.totpSecret} />
+        </div>
+      ) : null}
+
+      {fields?.recoveryCodes?.length ? (
+        <p className="text-muted mt-2 font-mono text-xs" data-testid="item-recovery-count">
+          <span aria-hidden="true">&gt; </span>
+          {fields.recoveryCodes.length} recovery code(s) stored
+        </p>
+      ) : null}
+
+      {fields?.customFields?.length ? (
+        <dl className="mt-2 space-y-1" data-testid="item-custom-fields">
+          {fields.customFields.map((field, index) => (
+            <div key={index} className="flex gap-2 font-mono text-xs">
+              <dt className="text-muted">{field.label}</dt>
+              <dd className="text-fg">
+                {/* Hidden fields stay hidden in the list. Revealing them here
+                    would undo the reason somebody marked them hidden. */}
+                {field.hidden ? '••••••••' : field.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
 
       {failed ? (
         <p role="alert" className="text-danger mt-2 font-mono text-xs">

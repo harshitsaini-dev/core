@@ -54,9 +54,9 @@ P5 Hardening+Deploy · P6 Post-v1
 | ID | Feature | Phase | Status |
 |---|---|---|---|
 | VLT-01 | Login items: title, username, password, URL, notes | P3 | DONE |
-| VLT-02 | Arbitrary custom fields (text, hidden, date, number) | P3 | TODO |
-| VLT-03 | Isolated recovery-code storage per item | P3 | TODO |
-| VLT-04 | Built-in TOTP generator with live countdown ring | P3 | TODO |
+| VLT-02 | Arbitrary custom fields (text, hidden, date, number) | P3 | DONE |
+| VLT-03 | Isolated recovery-code storage per item | P3 | DONE |
+| VLT-04 | Built-in TOTP generator with live countdown ring | P3 | DONE |
 | VLT-05 | Secure notes with Markdown rendering | P4 | TODO |
 | VLT-06 | Credit-card items (number, CVV, expiry, PIN) | P4 | TODO |
 | VLT-07 | Identity profiles (name, address, phone) | P4 | TODO |
