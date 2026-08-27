@@ -268,7 +268,7 @@ Offline mode is fully read-write; writes queue until connectivity returns.
 | Layer | Control |
 |---|---|
 | Transport | HTTPS only, HSTS with preload, no mixed content |
-| Headers | strict nonce-based CSP (no `unsafe-inline`), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, COOP/COEP |
+| Headers | nonce-based CSP with `strict-dynamic`, `connect-src 'self'`, `frame-ancestors 'none'`, COOP, `Referrer-Policy: no-referrer`. `style-src` still permits inline styles — see the threat model. |
 | Supply chain | SRI on external assets, pinned lockfile, Dependabot, `pnpm audit` in CI |
 | Auth endpoints | Turnstile, IP rate limit, account lockout, progressive delay, constant-time compare |
 | Session | short-lived token in `HttpOnly; Secure; SameSite=Strict` cookie plus rotating refresh |

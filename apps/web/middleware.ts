@@ -1,0 +1,129 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+/**
+ * Security headers, and the Content Security Policy in particular.
+ *
+ * For a zero-knowledge product this is not one hardening measure among many.
+ * The whole design rests on the master key never leaving the browser, and the
+ * one thing that can take it is script running in this origin. Every other
+ * protection here — the encryption, the wrapped keys, the non-extractable
+ * CryptoKeys — assumes the page has not been turned against the user.
+ *
+ * So the directive that matters most is `connect-src 'self'`. An injected
+ * script can still read what the page holds, but it cannot post it anywhere:
+ * no fetch, no XHR, no WebSocket, no beacon to an attacker's server. That turns
+ * a total compromise into a local one, which is a large difference.
+ *
+ * Set in middleware rather than `next.config.ts` because the nonce has to be
+ * generated per request. A nonce reused across responses is decorative.
+ */
+
+/** Directives that never change between requests. */
+function policy(nonce: string, isDev: boolean): string {
+  const directives = [
+    "default-src 'self'",
+
+    // `strict-dynamic` lets a nonced script load the chunks it needs without
+    // every hashed filename being listed. Without it, a nonce-based policy and
+    // a code-split app are close to incompatible.
+    //
+    // `unsafe-eval` is development only: the dev server's HMR client needs it,
+    // and shipping it would leave the widest hole in an otherwise strict
+    // policy.
+    isDev
+      ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+
+    // Styles keep `unsafe-inline`, and that is a real weakness stated rather
+    // than hidden. React and Next both inject inline styles, and nonce-ing
+    // every one of them is not currently possible through the framework.
+    // Injected CSS can do damage — background-image URLs can exfiltrate, and
+    // an overlay can phish — but it cannot read a CryptoKey, which is the
+    // property this product actually depends on.
+    "style-src 'self' 'unsafe-inline'",
+
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+
+    // The one that matters most. Same-origin only: nothing this page holds can
+    // be posted anywhere else.
+    "connect-src 'self'",
+
+    // No plugins, no embedded content, and nothing may frame this page —
+    // clickjacking a vault is a real attack, not a theoretical one.
+    "object-src 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+
+    // Restricts where a nonced script can navigate the top level, which closes
+    // the "redirect to a lookalike and collect the master password" path.
+    "base-uri 'self'",
+    "form-action 'self'",
+
+    // The Emergency Kit is printed from this page; nothing else is embedded.
+    "media-src 'none'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+  ];
+
+  if (!isDev) {
+    // Only meaningful over HTTPS, and it would break a plain-HTTP localhost.
+    directives.push('upgrade-insecure-requests');
+  }
+
+  return directives.join('; ');
+}
+
+export function middleware(request: NextRequest): NextResponse {
+  const isDev = process.env.NODE_ENV === 'development';
+
+  // 128 bits, base64. Regenerated per request; a shared nonce is no nonce.
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+
+  const headers = new Headers(request.headers);
+  // Next reads this to stamp the nonce onto the scripts it emits.
+  headers.set('x-nonce', nonce);
+
+  const response = NextResponse.next({ request: { headers } });
+
+  response.headers.set('Content-Security-Policy', policy(nonce, isDev));
+
+  // Referrer-Policy is set here as well as in next.config.ts so that it applies
+  // to every response this middleware touches, including ones the config's
+  // matcher would miss.
+  response.headers.set('Referrer-Policy', 'no-referrer');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set(
+    'Permissions-Policy',
+    // Nothing here needs a camera, a microphone or a location, and a vault is
+    // a poor place to leave those available to injected script.
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+  );
+
+  // Isolates this origin from other windows, so a page that opens Core cannot
+  // reach into it through `window.opener`.
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+
+  if (!isDev) {
+    // Two years, subdomains included. Preload is deliberately omitted until the
+    // domain has been served over HTTPS long enough to be confident: getting
+    // onto the preload list is easy and getting off it is not.
+    response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  }
+
+  return response;
+}
+
+export const config = {
+  /*
+   * Everything except static assets.
+   *
+   * `_next/static` is content-hashed and immutable, and running middleware for
+   * each chunk would add a nonce nothing reads to hundreds of responses per
+   * page load.
+   */
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico|webmanifest)$).*)'],
+};

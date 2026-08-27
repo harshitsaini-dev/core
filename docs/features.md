@@ -170,7 +170,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-09 | Suspicious-activity email alerts | P5 | TODO |
 | SEC-10 | One-time self-destructing share links | P6 | TODO |
 | SEC-11 | Auto-lock on tab blur (optional) | P3 | TODO |
-| SEC-12 | Local security self-check page (CSP, HTTPS, SW status) | P5 | TODO |
+| SEC-12 | Local security self-check page (CSP, HTTPS, SW status) | P5 | WIP |
 
 ## RL — Rate Limiting & Abuse Prevention
 

@@ -12,7 +12,7 @@
     "dev": "pnpm --filter @core/web dev",
     "build": "pnpm --filter @core/web build",
     "start": "pnpm --filter @core/web start",
-    "typecheck": "tsc --build && pnpm --filter @core/web exec tsc --noEmit",
+    "typecheck": "tsc --build && pnpm --filter @core/web exec tsc --noEmit && pnpm --filter @core/web exec tsc --noEmit -p e2e/tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

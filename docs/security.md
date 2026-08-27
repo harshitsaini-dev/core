@@ -73,9 +73,17 @@ against this.
 **A malicious or compromised server *serving new code*.** Core's guarantee is
 about data at rest and in transit. A hostile operator who modifies the
 JavaScript delivered to your browser could make it exfiltrate keys. This is
-inherent to all web-delivered end-to-end encryption. Mitigations: the code is
-public and reproducible, a strict CSP limits where data can be sent, and you can
+inherent to all web-delivered end-to-end encryption, and no header helps against
+the party that sets the headers. Mitigations: the code is public, and you can
 self-host so that you control what is served.
+
+Against *injected* script — an XSS rather than a hostile operator — the Content
+Security Policy does help, and specifically `connect-src 'self'`: injected code
+can read what the page holds but cannot send it anywhere. One weakness is worth
+stating plainly rather than leaving in the header: `style-src` still allows
+inline styles, because React and Next both inject them and the framework offers
+no way to nonce every one. Injected CSS can exfiltrate through a background-image
+URL and can overlay a convincing prompt; it cannot read a `CryptoKey`.
 
 **A weak master password.** Argon2id makes guessing expensive, not impossible.
 If your master password is short or reused, the design cannot save you.

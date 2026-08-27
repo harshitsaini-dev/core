@@ -22,12 +22,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // A floor for responses the middleware matcher skips — static assets,
+        // mostly. The real policy, including the per-request CSP nonce, lives
+        // in middleware.ts; duplicating it here would guarantee the two drift.
         source: '/:path*',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'no-referrer' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },
     ];
