@@ -15,3 +15,16 @@ RESEND_API_KEY=
 # Self-hosters: change this to a domain you control and have verified.
 RESEND_FROM_EMAIL="Core <no-reply@kernel.harshitsaini.in>"
 TURNSTILE_SECRET_KEY=
+
+# Rate limiting: name the caller with a header instead of the connection.
+#
+# Locally, workerd sets `cf-connecting-ip` itself, so the limiter is fully live
+# and every test in the suite shares one address — three signups per ten
+# minutes, and the fourth test fails along with the four hundred after it.
+#
+# With this set, the limiter takes its caller from the `x-core-caller` header
+# and does not limit a request that omits it. That gives each test its own
+# bucket and leaves the rest of the suite alone.
+#
+# Never set this in production. There, the header is not read at all.
+RATE_LIMIT_TEST_MODE=1

@@ -12,13 +12,14 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Extra knobs:
  *   HEADED=0            force headless
+ *   WORKERS=1           run one at a time, and slow it down so it is followable
  *   SLOWMO=500          milliseconds of delay between actions
  *   DEVTOOLS=1          open Chrome DevTools alongside the run
  *
- * One caveat worth knowing: the API specs (prelogin, signup, login) drive HTTP
- * directly, so a headed run shows a browser window sitting on a blank page.
- * There is nothing to render until there is a UI. The smoke spec is the one
- * that actually paints Core.
+ * One caveat worth knowing: the specs under `e2e/api` drive HTTP directly, so a
+ * headed run shows a browser window sitting on a blank page. There is nothing
+ * to render until there is a UI. They also run on the desktop project only —
+ * see the note on the mobile project below.
  */
 
 const isCI = !!process.env.CI;
@@ -27,17 +28,46 @@ const isCI = !!process.env.CI;
 // summary line never will. Opt out with HEADED=0 for a quick unattended run.
 const headed = !isCI && process.env.HEADED !== '0';
 
-// A run you cannot follow is not much use, so headed runs are slowed by default.
-const slowMo = Number(process.env.SLOWMO ?? (headed ? 300 : 0));
+/**
+ * How many at once.
+ *
+ * Four locally, on a machine with cores to spare. The ceiling is not the CPU —
+ * it is the single `next dev` process every worker shares, which compiles
+ * routes on demand and serves them from one event loop. Past four, workers
+ * spend their time queueing behind each other rather than doing anything.
+ *
+ * CI stays at two: those runners have far less to work with, and a suite that
+ * thrashes is slower than one that queues.
+ */
+const workers = Number(process.env.WORKERS ?? (isCI ? 2 : 4));
+
+/**
+ * Pacing, and why it is not on by default any more.
+ *
+ * A headed run exists to be watched, and 300ms between actions is what makes
+ * one followable. But it is also the single largest cost in the suite: several
+ * hundred tests times dozens of actions each, and the delay dwarfs the work.
+ *
+ * With four browsers open at once there is nothing to follow anyway — they
+ * overlap and none of them is legible. So the pacing now comes with the thing
+ * that makes it useful: `WORKERS=1 pnpm e2e` runs one window, slowly, the way
+ * it was before. Everything else runs at full speed, still headed, still
+ * visible.
+ */
+const slowMo = Number(process.env.SLOWMO ?? (headed && workers === 1 ? 300 : 0));
 
 export default defineConfig({
   testDir: './apps/web/e2e',
   globalSetup: './apps/web/e2e/global-setup.ts',
   outputDir: './test-results',
 
-  // Serial and unretried locally: a flaky headed run is confusing to watch.
-  fullyParallel: isCI,
-  workers: isCI ? 2 : 1,
+  // Parallel everywhere. Tests share one dev server and one local D1, so this
+  // only works because each one creates its own account and touches nothing it
+  // did not make — which is worth keeping true, and is the kind of thing that
+  // breaks quietly the first time a test reaches for "the newest session".
+  fullyParallel: true,
+  workers,
+  // Unretried locally, so a flake is seen rather than smoothed over.
   retries: isCI ? 2 : 0,
   forbidOnly: isCI,
 
@@ -78,6 +108,17 @@ export default defineConfig({
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
+      /*
+       * Everything under `e2e/api` drives HTTP directly and never opens a page.
+       * Running it a second time at a phone's viewport asserts nothing a
+       * desktop run did not already assert — it is the same requests, the same
+       * responses, and half the suite.
+       *
+       * The split is a directory rather than a per-file annotation so that a
+       * new spec lands on the right side of it by where it is put, rather than
+       * by somebody remembering to add a line.
+       */
+      testIgnore: '**/api/**',
     },
     /*
      * Firefox and WebKit are opt-in, via E2E_ALL_BROWSERS=1.

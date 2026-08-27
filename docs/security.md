@@ -41,15 +41,45 @@ applied, so a broken TLS session still yields nothing readable.
 
 ### Online brute force
 
-Per-IP sliding-window rate limits, per-endpoint throttles, progressive response
-delays, account-level lockout after repeated failures, and Cloudflare Turnstile
-on authentication endpoints.
+A token bucket per caller per endpoint, sized to the endpoint: five logins in a
+burst refilling at five a minute, twenty preloginses, a hundred syncs. Repeated
+requests from one caller also lengthen the padded response time, doubling up to
+a cap, so a guessing loop slows to a crawl while somebody who mistyped their
+password twice notices nothing.
+
+Ten consecutive failures against one account lock it for fifteen minutes. The
+window expires on its own, so nobody is ever stranded, and a locked account
+answers exactly like a wrong password — see the note on enumeration below.
+
+Two limits of this, stated plainly. The buckets live in Workers KV, which is
+eventually consistent, so it is a throttle rather than an exact ceiling: a
+burst spread across Cloudflare locations can overshoot. And the limiter needs to
+know who is calling — behind Cloudflare it always does, but an instance exposed
+directly with no proxy setting `cf-connecting-ip` or `x-forwarded-for` has no
+rate limiting at all, and says so in its logs. Both are documented in
+self-hosting.md.
+
+Neither is the first line of defence. Argon2id is: every guess costs the
+attacker real time and memory on their own hardware before a request is sent.
+
+Cloudflare Turnstile (RL-05) is specified and **not yet built**.
 
 ### User enumeration and timing analysis
 
 The prelogin endpoint returns a deterministic fake salt for unknown addresses.
 Verifier comparison is constant-time. Login, signup and password-reset endpoints
 return identical generic messages regardless of whether an account exists.
+
+The account lockout is arranged around the same rule and pays for it. A locked
+account returns the same status, the same body and the same padded time as a
+wrong password, because saying "this account is locked" would confirm the
+account exists. The cost is real: somebody whose account has been attacked is
+told "incorrect" for fifteen minutes while their correct password is refused,
+with nothing explaining why. That is the wrong trade in most products and the
+right one here, where the entire claim is that the server knows nothing.
+
+The rate limit's own refusal is safe to distinguish, and is: it depends only on
+the caller's address, which the caller already knows.
 
 ### Local device theft, partially
 

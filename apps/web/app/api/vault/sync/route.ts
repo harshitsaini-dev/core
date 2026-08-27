@@ -5,7 +5,8 @@ import { and, eq, gt, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
-import { authFailure, badRequest, ok, serverError } from '@/lib/server/responses';
+import { checkLimit } from '@/lib/server/rate-limit';
+import { authFailure, badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
 import { requireSession } from '@/lib/server/session-guard';
 
 /**
@@ -135,6 +136,18 @@ export async function GET(request: NextRequest): Promise<Response> {
     return serverError();
   }
 
+  // Before any work. The decision depends only on the caller's own address, so
+  // it reveals nothing about whether any account exists — which is why it can
+  // sit outside the constant-time block without becoming an oracle of its own.
+  const retryAfter = await checkLimit(
+    request,
+    context.kv,
+    context.pepper,
+    'sync',
+    context.rateLimitTestMode,
+  );
+  if (retryAfter !== null) return tooManyRequests(retryAfter);
+
   const current = await requireSession(request, context);
   if (!current) return authFailure();
 
@@ -186,6 +199,15 @@ export async function POST(request: NextRequest): Promise<Response> {
   } catch {
     return serverError();
   }
+
+  const retryAfter = await checkLimit(
+    request,
+    context.kv,
+    context.pepper,
+    'sync',
+    context.rateLimitTestMode,
+  );
+  if (retryAfter !== null) return tooManyRequests(retryAfter);
 
   const current = await requireSession(request, context);
   if (!current) return authFailure();

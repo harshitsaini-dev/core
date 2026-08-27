@@ -10,7 +10,8 @@ import { eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
-import { authFailure, badRequest, serverError } from '@/lib/server/responses';
+import { checkLimit } from '@/lib/server/rate-limit';
+import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailIndex, hashIp, hashUserAgent } from '@/lib/server/secrets';
 import { issueSession, revokeAllSessions, sessionCookie } from '@/lib/server/session';
 import { constantTime } from '@/lib/server/timing';
@@ -81,6 +82,18 @@ export async function POST(request: NextRequest): Promise<Response> {
   } catch {
     return serverError();
   }
+
+  // Before any work. The decision depends only on the caller's own address, so
+  // it reveals nothing about whether any account exists — which is why it can
+  // sit outside the constant-time block without becoming an oracle of its own.
+  const retryAfter = await checkLimit(
+    request,
+    context.kv,
+    context.pepper,
+    'recover',
+    context.rateLimitTestMode,
+  );
+  if (retryAfter !== null) return tooManyRequests(retryAfter);
 
   const { db, pepper } = context;
 

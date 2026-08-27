@@ -42,7 +42,20 @@ jobs:
           {
             echo "AUTH_PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
             echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+            # Locally and here, workerd sets cf-connecting-ip itself, so the
+            # rate limiter is live and the whole suite shares one address.
+            # In test mode it takes the caller from a header instead, and does
+            # not limit a request that omits one — so the rate-limit spec gets
+            # real buckets and nothing else in the run is throttled.
+            echo "RATE_LIMIT_TEST_MODE=1"
           } > apps/web/.dev.vars
+
+      - name: Make key derivation cheap for the test run
+        # Argon2id at production settings allocates 64 MiB per hash and runs
+        # twice per browser test. Several at once starves the runner, and tests
+        # then fail on assertions that had time but no CPU. The algorithm and
+        # every property the suite asserts are unchanged; only the cost is.
+        run: echo "NEXT_PUBLIC_TEST_KDF=1" > apps/web/.env.local
 
       - run: pnpm exec playwright install --with-deps chromium
 

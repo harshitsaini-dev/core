@@ -9,10 +9,37 @@ import { eq, sql } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
-import { authFailure, badRequest, serverError } from '@/lib/server/responses';
+import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rate-limit';
+import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailIndex, hashIp, hashUserAgent } from '@/lib/server/secrets';
 import { issueSession, sessionCookie } from '@/lib/server/session';
-import { constantTime } from '@/lib/server/timing';
+import { AUTH_RESPONSE_BUDGET_MS, constantTime } from '@/lib/server/timing';
+
+/**
+ * Account lockout (RL-06).
+ *
+ * Ten consecutive failures lock the account for fifteen minutes, and the window
+ * expires on its own. That last part is the whole design: an earlier note in
+ * this file worried that enforcing a lockout would strand a real user until a
+ * magic-link path existed, and a self-healing window answers it — nobody is
+ * ever locked out permanently, and no second channel is needed to get back in.
+ *
+ * **A locked account answers exactly like a wrong password.** Same status, same
+ * body, same padded time. That is not a cosmetic choice: saying "this account is
+ * locked" would confirm the account exists, which is the one thing every other
+ * decision on this path has been arranged to avoid.
+ *
+ * It costs something real, and it is worth being plain about both halves. A
+ * legitimate user who mistypes their password ten times is then told
+ * "incorrect" for fifteen minutes while their correct password is refused, with
+ * nothing explaining why. And anyone who knows an email address can keep that
+ * account locked by failing on purpose. Neither is nice; both are bounded, and
+ * neither loses data. The alternative — a clear message — trades a permanent
+ * enumeration oracle for a temporary inconvenience, which is the wrong way
+ * round for a product whose entire claim is that the server knows nothing.
+ */
+const LOCKOUT_THRESHOLD = 10;
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 
 /**
  * POST /api/auth/login
@@ -71,12 +98,41 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const { db, pepper } = context;
 
+  // Before any work. The decision depends only on the caller's own address, so
+  // it reveals nothing about whether any account exists — which is why it can
+  // sit outside the constant-time block without becoming an oracle of its own.
+  //
+  // Login reads the bucket itself rather than calling the shared helper,
+  // because it wants the number as well as the verdict: how much of the
+  // caller's allowance is already gone is what drives the delay below.
+  const address = callerAddress(request, context.rateLimitTestMode);
+  const decision = address === null ? null : await consume(context.kv, pepper, 'login', address);
+
+  if (decision && !decision.allowed) return tooManyRequests(decision.retryAfter);
+
+  /**
+   * Progressive delay (RL-03).
+   *
+   * Measured against the caller and never against the account. A budget that
+   * grew with an account's failure count would make a much-attacked address
+   * answer more slowly than an address with no account at all — which is
+   * precisely the oracle the padding exists to close.
+   *
+   * Counted from the caller's own bucket, so it costs no extra storage. On this
+   * endpoint a burst is what a guessing loop looks like; a person signing in
+   * makes one request.
+   */
+  const attempts = decision === null ? 0 : LIMITS.login.capacity - decision.remaining;
+  const budget = AUTH_RESPONSE_BUDGET_MS + failureDelayMs(attempts);
+
   const { value: outcome } = await constantTime(async (): Promise<LoginOutcome> => {
     const index = await emailIndex(pepper, input.email);
 
     const rows = await db
       .select({
         id: users.id,
+        failedAttempts: users.failedAttempts,
+        lockedUntil: users.lockedUntil,
         authVerifier: users.authVerifier,
         accountKeyWrapped: users.accountKeyWrapped,
         publicKey: users.publicKey,
@@ -106,20 +162,28 @@ export async function POST(request: NextRequest): Promise<Response> {
       base64UrlToBytes(row.authVerifier),
     );
 
-    if (!matches) {
-      // Recorded, not yet enforced. Lockout needs the magic-link unlock path to
-      // exist first, or a wrong password three times would strand a real user
-      // with no way back in. Enforcement lands with the rest of the rate
-      // limiting in Phase 5 (RL-06).
+    const locked = row.lockedUntil !== null && row.lockedUntil.getTime() > Date.now();
+
+    if (!matches || locked) {
+      const attempts = row.failedAttempts + 1;
+
       await db
         .update(users)
-        .set({ failedAttempts: sql`${users.failedAttempts} + 1` })
+        .set({
+          failedAttempts: sql`${users.failedAttempts} + 1`,
+          ...(attempts >= LOCKOUT_THRESHOLD && !locked
+            ? { lockedUntil: new Date(Date.now() + LOCKOUT_WINDOW_MS) }
+            : {}),
+        })
         .where(eq(users.id, row.id));
 
       return { ok: false, userId: row.id };
     }
 
-    await db.update(users).set({ failedAttempts: 0 }).where(eq(users.id, row.id));
+    await db
+      .update(users)
+      .set({ failedAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, row.id));
 
     return {
       ok: true,
@@ -130,7 +194,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         privateKeyWrapped: row.privateKeyWrapped,
       },
     };
-  });
+  }, budget);
 
   const ipHash = await hashIp(pepper, request.headers.get('cf-connecting-ip') ?? 'unknown');
   const uaHash = await hashUserAgent(pepper, request.headers.get('user-agent') ?? 'unknown');

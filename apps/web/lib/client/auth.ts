@@ -17,6 +17,41 @@ import type { KdfParams } from '@core/shared';
 import * as offline from './offline-db';
 
 /**
+ * Key derivation, made cheap for the test suite.
+ *
+ * Calibration alone runs Argon2id repeatedly until one pass costs 500ms, and
+ * then the real derivation runs on top of that — twice per test, once at signup
+ * and once at unlock, each allocating 64 MiB. With several browsers doing it at
+ * once the machine has nothing left, and tests fail on assertions that had
+ * plenty of time and no CPU to use it in.
+ *
+ * So under `NEXT_PUBLIC_TEST_KDF` the calibration is skipped and fixed, weak
+ * parameters are used instead. **This makes the derivation trivially cheap to
+ * attack.** It exists in `.env.local`, which is git-ignored, and in the CI
+ * workflows. It is never set in a production build, and `production-kdf.spec.ts`
+ * asserts that a real build calibrates properly rather than taking this path.
+ *
+ * What it does not weaken is the thing worth testing: the algorithm, the
+ * envelope, the wrapping, and every property the suite actually asserts are
+ * identical. Only the cost parameter changes, and the cost parameter is what
+ * `kdf.test.ts` covers directly.
+ */
+const TEST_KDF = process.env.NEXT_PUBLIC_TEST_KDF === '1';
+
+const TEST_KDF_PARAMS: KdfParams = {
+  algorithm: 'argon2id',
+  memoryKiB: 8192,
+  iterations: 1,
+  parallelism: 1,
+};
+
+async function chooseKdfParams(): Promise<KdfParams> {
+  if (TEST_KDF) return TEST_KDF_PARAMS;
+  const { params } = await calibrateKdf();
+  return params;
+}
+
+/**
  * The client half of authentication.
  *
  * Everything that touches the master password happens here, in the browser. The
@@ -61,7 +96,7 @@ export async function signup(
   onProgress?: (step: string) => void,
 ): Promise<SignupResult> {
   onProgress?.('calibrating key derivation');
-  const { params } = await calibrateKdf();
+  const params = await chooseKdfParams();
 
   onProgress?.('deriving keys');
   const salt = generateKdfSalt();
@@ -266,7 +301,7 @@ export async function recover(
   }
 
   onProgress?.('calibrating key derivation');
-  const { params } = await calibrateKdf();
+  const params = await chooseKdfParams();
 
   onProgress?.('deriving new keys');
   const salt = generateKdfSalt();

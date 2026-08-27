@@ -161,12 +161,36 @@ export const useItems = create<ItemsState>((set, get) => ({
     try {
       const result = await pull(keys, get().cursor);
 
+      /**
+       * A pull never overwrites something newer that is already here.
+       *
+       * The pull that runs on mount can still be in flight when somebody edits
+       * an item — and on a slow connection, or a machine running four browsers
+       * at once, "still in flight" is seconds rather than milliseconds. It
+       * returns the item as it was when the request left, which is older than
+       * the edit that has since been made and queued.
+       *
+       * Letting the response win reverts that edit on screen while the outbox
+       * still holds it, so the change comes back on the next refresh. Nothing
+       * is lost, but the vault appears to undo something a person just typed,
+       * which is worse than it sounds on a product about not losing things.
+       *
+       * Compared on `updatedAt`, which is a browser clock against a server one.
+       * A skewed clock resolves in favour of the local copy, which is the safe
+       * direction: the outbox pushes it and the next pull agrees.
+       */
       const merged = new Map(get().items.map((item) => [item.id, item]));
-      for (const item of result.items) merged.set(item.id, item);
+      for (const item of result.items) {
+        const local = merged.get(item.id);
+        if (!local || item.updatedAt >= local.updatedAt) merged.set(item.id, item);
+      }
       for (const row of result.raw) raw.set(row.id, row);
 
       const mergedFolders = new Map(get().folders.map((folder) => [folder.id, folder]));
-      for (const folder of result.folders) mergedFolders.set(folder.id, folder);
+      for (const folder of result.folders) {
+        const local = mergedFolders.get(folder.id);
+        if (!local || folder.updatedAt >= local.updatedAt) mergedFolders.set(folder.id, folder);
+      }
       for (const row of result.rawFolders) rawFolders.set(row.id, row);
 
       set({

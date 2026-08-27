@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { bytesToBase64Url } from '@core/crypto';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { emailIndex, parsePepper } from '../lib/server/secrets';
-import { loginWith, register } from './helpers/account';
+import { emailIndex, parsePepper } from '../../lib/server/secrets';
+import { loginWith, register } from '../helpers/account';
 
 /**
  * Refresh-token reuse detection.
@@ -21,7 +21,24 @@ import { loginWith, register } from './helpers/account';
  * the database directly. The code under test is exactly the code that ships.
  */
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+// apps/web/e2e/api → the repository root is four levels up. Worth counting
+// carefully: getting it wrong reads a .dev.vars that is not there and fails
+// with an ENOENT that looks nothing like the cause.
+/**
+ * These run one at a time.
+ *
+ * This is the only spec that reaches past the API and edits the database
+ * directly, and it does it by shelling out to `wrangler d1 execute` against the
+ * local SQLite replica. Several of those at once contend for the same file and
+ * one of them loses, which surfaces as a command that exited non-zero rather
+ * than as anything to do with sessions.
+ *
+ * `default` rather than `serial`: the tests are independent, so a failure in
+ * one should not skip the rest — they simply must not overlap.
+ */
+test.describe.configure({ mode: 'default' });
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 /**
  * Run SQL against the local replica and return wrangler's output.

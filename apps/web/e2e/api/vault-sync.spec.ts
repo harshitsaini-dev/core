@@ -1,8 +1,8 @@
 import { encryptJson } from '@core/crypto';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { loginWith, register } from './helpers/account';
-import type { BuiltAccount } from './helpers/account';
+import { loginWith, register } from '../helpers/account';
+import type { BuiltAccount } from '../helpers/account';
 
 /**
  * /api/vault/sync

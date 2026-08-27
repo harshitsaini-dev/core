@@ -17,6 +17,13 @@ export interface RequestContext {
   readonly db: Database;
   readonly kv: KVNamespace;
   readonly pepper: Bytes;
+  /**
+   * Whether the rate limiter should take its caller identity from a header.
+   *
+   * Set in `.dev.vars` and in the CI workflows, and nowhere else. See the note
+   * on `callerAddress` for why it has to exist at all.
+   */
+  readonly rateLimitTestMode: boolean;
 }
 
 /**
@@ -33,5 +40,6 @@ export function getRequestContext(): RequestContext {
     db: createDatabase(env.DB),
     kv: env.RATE_LIMIT,
     pepper: parsePepper(env.AUTH_PEPPER),
+    rateLimitTestMode: env.RATE_LIMIT_TEST_MODE === '1',
   };
 }

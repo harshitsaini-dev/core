@@ -55,6 +55,25 @@ pnpm cf kv namespace create RATE_LIMIT
 
 Add the returned id to `wrangler.toml`.
 
+### The limiter needs to know who is calling
+
+Buckets are keyed by the caller's address, taken from `cf-connecting-ip` — which
+Cloudflare sets and a client cannot forge. Deployed on Workers behind Cloudflare,
+which is what this project is built for, that header is always present and there
+is nothing to configure.
+
+If you run Core anywhere else, note what happens instead. The fallback is the
+first entry of `x-forwarded-for`, consulted **only** when `cf-connecting-ip` is
+absent. And if neither header is there — an origin exposed directly to the
+internet, with no proxy in front — **rate limiting does nothing**, and the server
+logs a warning saying so on every request it could not attribute.
+
+That is deliberate rather than an oversight. The alternative, counting every
+unattributable request against one shared bucket, means any single visitor can
+exhaust the limit for everybody, which is a denial of service dressed up as a
+defence. So: put the instance behind something that sets one of those two
+headers. Argon2id and the account lockout still apply either way.
+
 ## 4. Generate your auth pepper
 
 This is a random server-side value that makes an offline attack against stolen

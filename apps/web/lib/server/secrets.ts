@@ -35,6 +35,8 @@ const INFO = {
   sessionToken: 'core.server.session-token.v1',
   /** Encrypts email addresses at rest. See the note on emailEncrypt. */
   emailAtRest: 'core.server.email-at-rest.v1',
+  /** Names rate-limit buckets without storing the address they belong to. */
+  rateLimit: 'core.server.rate-limit.v1',
 } as const;
 
 export type ServerKeyPurpose = keyof typeof INFO;

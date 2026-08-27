@@ -9,7 +9,7 @@ import {
 import type { KdfParams } from '@core/shared';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { FAST_KDF, buildAccount, loginWith, register, uniqueEmail } from './helpers/account';
+import { FAST_KDF, buildAccount, loginWith, register, uniqueEmail } from '../helpers/account';
 
 /**
  * /api/auth/login and the session endpoints.

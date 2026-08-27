@@ -533,3 +533,59 @@ this is a gesture. The vault it protects does not survive a reload either.
 A revealed password in an open form is closed when the switch goes on. A field
 being typed into cannot be blurred and still be typed into, so the reveal is
 what gives way.
+
+---
+
+## ADR-021 — A locked account answers like a wrong password, and the limiter is approximate
+
+**Date:** 2026-08-27 · **Status:** Accepted · **Resolves** the open question from
+2026-08-26 about enforcing account lockout
+
+**Context.** `login` had been counting `failed_attempts` since Phase 2 and
+nothing read the counter. The note in the code said enforcement had to wait for
+a magic-link path, or a user who mistyped three times would be stranded with no
+way back in. That was the right worry and the wrong conclusion.
+
+**Decision — the lockout heals itself.** Ten consecutive failures lock an account
+for fifteen minutes, and the window expires on its own. Nobody is ever locked
+out permanently and no second channel is needed to get back in, which is what
+the original objection was actually about.
+
+**Decision — a locked account is indistinguishable from a wrong password.** Same
+status, same body, same padded time. Saying "this account is locked" would
+confirm the account exists, and every other decision on this path — the decoy
+salts, the constant-time padding, the single generic failure — exists to prevent
+exactly that. One helpful message would undo all of them.
+
+Two costs, both real. Somebody whose account has been attacked is told
+"incorrect" for fifteen minutes while their correct password is refused, with
+nothing on screen explaining why. And anyone who knows an email address can hold
+an account locked by failing on purpose. Both are bounded, neither loses data,
+and the alternative trades a permanent enumeration oracle for a temporary
+inconvenience — the wrong way round for a product whose whole claim is that the
+server knows nothing.
+
+**Decision — the progressive delay is keyed on the caller, never the account.**
+A padding budget that grew with an account's failure count would make a
+much-attacked address answer more slowly than an address with no account at all.
+That is the oracle the padding was built to close, rebuilt out of the
+countermeasure. The delay is driven by the caller's own token bucket instead,
+which costs no extra storage and reveals nothing the caller does not already
+know.
+
+**Decision — the limiter is a throttle, not a counter.** Buckets live in Workers
+KV, which is eventually consistent: two requests arriving in different locations
+can both spend the last token. An exact ceiling would need a strongly consistent
+store per key, which on this stack means a Durable Object per account. That is a
+lot of machinery to make an approximate bound exact, when the exact bound is not
+what stops the attack — Argon2id is, and it charges the attacker before a
+request is ever sent.
+
+**Consequences.** The limiter needs to know who is calling. Behind Cloudflare it
+always does. Elsewhere it falls back to `x-forwarded-for`, and where neither
+header exists it does nothing and logs that it is doing nothing — rather than
+counting the whole world against one bucket, which any single visitor could
+exhaust for everybody. That requirement is now in self-hosting.md.
+
+RL-05, Turnstile, is still unbuilt and is now described that way in security.md,
+which had been claiming it.

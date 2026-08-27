@@ -5,6 +5,7 @@ interface __BaseEnv_Env {
   DB: D1Database;
   AUTH_PEPPER: string;
   NEXT_PUBLIC_APP_URL: string;
+  RATE_LIMIT_TEST_MODE?: string;
 }
 declare namespace Cloudflare {
   interface Env extends __BaseEnv_Env {}
