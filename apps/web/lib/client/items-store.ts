@@ -90,18 +90,67 @@ const EMPTY = {
   undecryptable: [] as readonly string[],
 };
 
+/**
+ * Combine what is on screen with what the server sent, keeping the newer of
+ * each.
+ *
+ * The pull that runs on mount can still be in flight when somebody changes
+ * something — and on a slow connection, or a machine running four browsers at
+ * once, "still in flight" is seconds rather than milliseconds. It returns each
+ * item as it was when the request left, which is older than a change made
+ * since.
+ *
+ * Letting the response win reverts that change on screen while the outbox still
+ * holds it, so it returns on the next refresh. Nothing is lost, but the vault
+ * appears to undo something a person just typed, which is worse than it sounds
+ * on a product about not losing things.
+ *
+ * This only works if every local change looks newer, which is why `replace`
+ * stamps `updatedAt`. Deleting was the case that showed it: `deletedAt` moved,
+ * `updatedAt` did not, and the next pull brought the item back.
+ *
+ * Compared on a browser clock against a server one. A skew resolves in favour
+ * of the local copy, which is the safe direction: it has been queued, so the
+ * next pull agrees.
+ */
+export function mergeNewest<T extends { id: string; updatedAt: number }>(
+  local: readonly T[],
+  incoming: readonly T[],
+): T[] {
+  const merged = new Map(local.map((entry) => [entry.id, entry]));
+
+  for (const entry of incoming) {
+    const mine = merged.get(entry.id);
+    if (!mine || entry.updatedAt >= mine.updatedAt) merged.set(entry.id, entry);
+  }
+
+  return [...merged.values()];
+}
+
 /** The wire form of each item, kept so the cache can be written without re-encrypting. */
 const raw = new Map<string, SyncedItem>();
 
 /** The same, for folders. */
 const rawFolders = new Map<string, SyncedFolder>();
 
+/**
+ * Apply a change to one item, and stamp it as changed.
+ *
+ * The stamp is the point. `load` keeps whichever copy of an item is newer, so a
+ * local edit that leaves `updatedAt` alone loses to the very next pull and
+ * disappears from the screen — while sitting safely in the outbox, which makes
+ * it look like the app silently undid what somebody just did.
+ *
+ * Deleting was the case that showed it: `deletedAt` moved, `updatedAt` did not,
+ * and a refresh brought the item back.
+ */
 function replace(
   items: readonly DecryptedItem[],
   id: string,
   update: (item: DecryptedItem) => DecryptedItem,
 ): DecryptedItem[] {
-  return items.map((item) => (item.id === id ? update(item) : item));
+  const now = Date.now();
+  return items.map((item) => (item.id === id ? { ...update(item), updatedAt: now } : item));
 }
 
 export const useItems = create<ItemsState>((set, get) => ({
@@ -161,41 +210,15 @@ export const useItems = create<ItemsState>((set, get) => ({
     try {
       const result = await pull(keys, get().cursor);
 
-      /**
-       * A pull never overwrites something newer that is already here.
-       *
-       * The pull that runs on mount can still be in flight when somebody edits
-       * an item — and on a slow connection, or a machine running four browsers
-       * at once, "still in flight" is seconds rather than milliseconds. It
-       * returns the item as it was when the request left, which is older than
-       * the edit that has since been made and queued.
-       *
-       * Letting the response win reverts that edit on screen while the outbox
-       * still holds it, so the change comes back on the next refresh. Nothing
-       * is lost, but the vault appears to undo something a person just typed,
-       * which is worse than it sounds on a product about not losing things.
-       *
-       * Compared on `updatedAt`, which is a browser clock against a server one.
-       * A skewed clock resolves in favour of the local copy, which is the safe
-       * direction: the outbox pushes it and the next pull agrees.
-       */
-      const merged = new Map(get().items.map((item) => [item.id, item]));
-      for (const item of result.items) {
-        const local = merged.get(item.id);
-        if (!local || item.updatedAt >= local.updatedAt) merged.set(item.id, item);
-      }
+      const merged = mergeNewest(get().items, result.items);
       for (const row of result.raw) raw.set(row.id, row);
 
-      const mergedFolders = new Map(get().folders.map((folder) => [folder.id, folder]));
-      for (const folder of result.folders) {
-        const local = mergedFolders.get(folder.id);
-        if (!local || folder.updatedAt >= local.updatedAt) mergedFolders.set(folder.id, folder);
-      }
+      const mergedFolders = mergeNewest(get().folders, result.folders);
       for (const row of result.rawFolders) rawFolders.set(row.id, row);
 
       set({
-        items: [...merged.values()],
-        folders: [...mergedFolders.values()],
+        items: merged,
+        folders: mergedFolders,
         cursor: result.cursor,
         undecryptable: result.undecryptable,
         loading: false,
@@ -301,7 +324,9 @@ export const useItems = create<ItemsState>((set, get) => ({
       folders: get().folders.map((folder) =>
         folder.id === id ? { ...folder, deletedAt } : folder,
       ),
-      items: get().items.map((item) => (item.folderId === id ? { ...item, folderId: null } : item)),
+      items: get().items.map((item) =>
+        item.folderId === id ? { ...item, folderId: null, updatedAt: deletedAt } : item,
+      ),
     });
 
     await commit(set, get, { op: 'folder-delete', id });
@@ -321,7 +346,9 @@ export const useItems = create<ItemsState>((set, get) => ({
     const set_ = new Set(ids);
 
     set({
-      items: get().items.map((item) => (set_.has(item.id) ? { ...item, deletedAt } : item)),
+      items: get().items.map((item) =>
+        set_.has(item.id) ? { ...item, deletedAt, updatedAt: deletedAt } : item,
+      ),
     });
 
     await commitMany(
@@ -335,7 +362,9 @@ export const useItems = create<ItemsState>((set, get) => ({
     const set_ = new Set(ids);
 
     set({
-      items: get().items.map((item) => (set_.has(item.id) ? { ...item, deletedAt: null } : item)),
+      items: get().items.map((item) =>
+        set_.has(item.id) ? { ...item, deletedAt: null, updatedAt: Date.now() } : item,
+      ),
     });
 
     await commitMany(
@@ -353,7 +382,9 @@ export const useItems = create<ItemsState>((set, get) => ({
     const affected = get().items.filter((item) => wanted.has(item.id));
 
     set({
-      items: get().items.map((item) => (wanted.has(item.id) ? { ...item, folderId } : item)),
+      items: get().items.map((item) =>
+        wanted.has(item.id) ? { ...item, folderId, updatedAt: Date.now() } : item,
+      ),
     });
 
     await commitMany(

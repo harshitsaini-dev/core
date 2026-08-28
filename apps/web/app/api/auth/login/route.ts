@@ -16,6 +16,35 @@ import { issueSession, sessionCookie } from '@/lib/server/session';
 import { AUTH_RESPONSE_BUDGET_MS, constantTime } from '@/lib/server/timing';
 
 /**
+ * Run a counter update without letting it decide the request.
+ *
+ * Both of these are bookkeeping: one records a failure, the other clears the
+ * record after a success. Neither should be able to change the answer, and
+ * letting them throw does exactly that — twice over.
+ *
+ * On the success path it turns an authenticated login into a 500, which is
+ * absurd: the person proved who they are and the server refuses them because a
+ * housekeeping write lost a lock.
+ *
+ * On the failure path it is worse than absurd. That update only runs when a row
+ * was found, so an exception there answers 500 for an account that exists and
+ * 401 for one that does not — rebuilding, out of the lockout machinery, the
+ * exact enumeration oracle every other decision on this path was arranged to
+ * close.
+ *
+ * Found when a local D1 replica shared by four test workers lost a write. Real
+ * D1 serialises writes and this is far less likely there, which is the reason
+ * to handle it rather than to rely on it.
+ */
+async function bookkeeping(work: Promise<unknown>): Promise<void> {
+  try {
+    await work;
+  } catch {
+    console.warn('login counter update failed; the login itself is unaffected');
+  }
+}
+
+/**
  * Account lockout (RL-06).
  *
  * Ten consecutive failures lock the account for fifteen minutes, and the window
@@ -167,23 +196,24 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!matches || locked) {
       const attempts = row.failedAttempts + 1;
 
-      await db
-        .update(users)
-        .set({
-          failedAttempts: sql`${users.failedAttempts} + 1`,
-          ...(attempts >= LOCKOUT_THRESHOLD && !locked
-            ? { lockedUntil: new Date(Date.now() + LOCKOUT_WINDOW_MS) }
-            : {}),
-        })
-        .where(eq(users.id, row.id));
+      await bookkeeping(
+        db
+          .update(users)
+          .set({
+            failedAttempts: sql`${users.failedAttempts} + 1`,
+            ...(attempts >= LOCKOUT_THRESHOLD && !locked
+              ? { lockedUntil: new Date(Date.now() + LOCKOUT_WINDOW_MS) }
+              : {}),
+          })
+          .where(eq(users.id, row.id)),
+      );
 
       return { ok: false, userId: row.id };
     }
 
-    await db
-      .update(users)
-      .set({ failedAttempts: 0, lockedUntil: null })
-      .where(eq(users.id, row.id));
+    await bookkeeping(
+      db.update(users).set({ failedAttempts: 0, lockedUntil: null }).where(eq(users.id, row.id)),
+    );
 
     return {
       ok: true,
