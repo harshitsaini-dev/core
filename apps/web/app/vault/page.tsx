@@ -41,6 +41,7 @@ import {
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { CheckupPanel } from './checkup';
+import { LockSettingsPanel } from './lock-settings';
 import { CommandPalette } from './command-palette';
 import type { Command } from './command-palette';
 import { ItemForm } from './item-form';
@@ -63,6 +64,7 @@ type View =
   | { kind: 'backup' }
   | { kind: 'password' }
   | { kind: 'checkup' }
+  | { kind: 'lock-settings' }
   | { kind: 'import' };
 
 /**
@@ -180,6 +182,11 @@ export default function VaultPage() {
       { id: 'folders', label: 'manage folders', run: () => setView({ kind: 'folders' }) },
       { id: 'trash', label: 'open trash', run: () => setView({ kind: 'trash' }) },
       { id: 'checkup', label: 'security checkup', run: () => setView({ kind: 'checkup' }) },
+      {
+        id: 'lock-settings',
+        label: 'auto-lock settings',
+        run: () => setView({ kind: 'lock-settings' }),
+      },
       {
         id: 'clear-clipboard',
         label: 'clear the clipboard now',
@@ -514,6 +521,14 @@ export default function VaultPage() {
             <Button
               type="button"
               variant="ghost"
+              onClick={() => setView({ kind: 'lock-settings' })}
+              data-testid="open-lock-settings"
+            >
+              auto-lock
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               onClick={() => setView({ kind: 'backup' })}
               data-testid="open-backup"
             >
@@ -579,6 +594,10 @@ export default function VaultPage() {
 
       {view.kind === 'checkup' ? (
         <CheckupPanel items={live} onOpen={openItem} onBack={() => setView({ kind: 'list' })} />
+      ) : null}
+
+      {view.kind === 'lock-settings' ? (
+        <LockSettingsPanel onBack={() => setView({ kind: 'list' })} />
       ) : null}
 
       {view.kind === 'backup' ? <BackupPanel onBack={() => setView({ kind: 'list' })} /> : null}

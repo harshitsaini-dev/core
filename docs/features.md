@@ -162,14 +162,14 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-01 | Security dashboard: weak, reused, old passwords        | P5    | DONE   |
 | SEC-02 | HaveIBeenPwned k-anonymity breach check                | P5    | TODO   |
 | SEC-03 | Clipboard auto-clear after 30 / 60 seconds             | P3    | DONE   |
-| SEC-04 | Session timeout slider (1 / 5 / 15 min / never)        | P3    | TODO   |
+| SEC-04 | Session timeout slider (1 / 5 / 15 min / never)        | P3    | DONE   |
 | SEC-05 | Panic button — instant lock and cache wipe             | P3    | DONE   |
 | SEC-06 | Audit log of unlocks, devices, IPs, timestamps         | P5    | TODO   |
 | SEC-07 | Emergency Kit PDF with recovery key                    | P2    | DONE   |
 | SEC-08 | Master-password change with Account Key re-wrap        | P5    | DONE   |
 | SEC-09 | Suspicious-activity email alerts                       | P5    | TODO   |
 | SEC-10 | One-time self-destructing share links                  | P6    | TODO   |
-| SEC-11 | Auto-lock on tab blur (optional)                       | P3    | TODO   |
+| SEC-11 | Auto-lock on tab blur (optional)                       | P3    | DONE   |
 | SEC-12 | Local security self-check page (CSP, HTTPS, SW status) | P5    | WIP    |
 
 ## RL — Rate Limiting & Abuse Prevention

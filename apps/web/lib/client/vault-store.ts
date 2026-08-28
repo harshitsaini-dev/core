@@ -3,6 +3,7 @@
 import type { AccountKeys } from '@core/crypto';
 import { create } from 'zustand';
 import { logout } from './auth';
+import { useLockSettings } from './lock-settings';
 import * as offline from './offline-db';
 
 /**
@@ -27,23 +28,17 @@ import * as offline from './offline-db';
  *      through login.
  */
 
-/** How long without interaction before the vault locks itself. */
-export const DEFAULT_AUTO_LOCK_MS = 5 * 60 * 1000;
-
 export type LockState = 'locked' | 'unlocked';
 
 interface VaultState {
   readonly state: LockState;
   /** Present only while unlocked. Never serialised, never persisted. */
   readonly keys: AccountKeys | null;
-  /** Milliseconds of inactivity before an automatic lock. */
-  readonly autoLockMs: number;
   /** Set when the vault locked itself rather than being locked by the user. */
   readonly lockedAutomatically: boolean;
 
   unlock: (keys: AccountKeys) => void;
   lock: (automatic?: boolean) => void;
-  setAutoLockMs: (ms: number) => void;
   /** Lock, then end the session. Used by the panic button and by sign-out. */
   panic: () => Promise<void>;
 }
@@ -51,14 +46,11 @@ interface VaultState {
 export const useVault = create<VaultState>((set, get) => ({
   state: 'locked',
   keys: null,
-  autoLockMs: DEFAULT_AUTO_LOCK_MS,
   lockedAutomatically: false,
 
   unlock: (keys) => set({ state: 'unlocked', keys, lockedAutomatically: false }),
 
   lock: (automatic = false) => set({ state: 'locked', keys: null, lockedAutomatically: automatic }),
-
-  setAutoLockMs: (ms) => set({ autoLockMs: ms }),
 
   panic: async () => {
     // Lock first. If anything after this hangs, the keys are already gone —
@@ -108,17 +100,51 @@ export function startAutoLock(): () => void {
     if (timer) clearTimeout(timer);
     if (useVault.getState().state !== 'unlocked') return;
 
+    const { autoLockMs } = useLockSettings.getState();
+
+    // `never`. No timer is set at all, rather than one set to a very large
+    // number: an interval that merely looks infinite is a promise about the
+    // engine's clock, and this one does not need to make it.
+    if (!Number.isFinite(autoLockMs)) return;
+
     timer = setTimeout(() => {
       useVault.getState().lock(true);
-    }, useVault.getState().autoLockMs);
+    }, autoLockMs);
   };
 
-  const events = ['pointerdown', 'keydown', 'visibilitychange'] as const;
+  /**
+   * The tab going away.
+   *
+   * Two different behaviours share this event. With lock-on-blur off it is
+   * treated as activity and restarts the countdown, which is what it was doing
+   * before. With it on, hiding the tab locks immediately — that is the whole
+   * setting, and it is the one people want on a shared or borrowed machine
+   * where the risk is somebody else's hands, not the passage of time.
+   *
+   * Only `hidden` locks. `visibilitychange` also fires on the way back, and
+   * locking then would lock the vault at the moment its owner returned to it.
+   */
+  const onVisibility = (): void => {
+    const { lockOnBlur } = useLockSettings.getState();
+
+    if (lockOnBlur && document.visibilityState === 'hidden') {
+      if (useVault.getState().state === 'unlocked') useVault.getState().lock(true);
+      return;
+    }
+
+    reset();
+  };
+
+  const events = ['pointerdown', 'keydown'] as const;
   for (const event of events) {
     window.addEventListener(event, reset, { passive: true });
   }
+  document.addEventListener('visibilitychange', onVisibility);
 
-  const unsubscribe = useVault.subscribe(reset);
+  // Subscribed to both stores: changing the timeout has to take effect on the
+  // vault that is open now, not on the next one.
+  const unsubscribeVault = useVault.subscribe(reset);
+  const unsubscribeSettings = useLockSettings.subscribe(reset);
   reset();
 
   return () => {
@@ -126,6 +152,8 @@ export function startAutoLock(): () => void {
     for (const event of events) {
       window.removeEventListener(event, reset);
     }
-    unsubscribe();
+    document.removeEventListener('visibilitychange', onVisibility);
+    unsubscribeVault();
+    unsubscribeSettings();
   };
 }
