@@ -40,6 +40,7 @@ import {
 } from '@/lib/client/items-store';
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
+import { CheckupPanel } from './checkup';
 import { CommandPalette } from './command-palette';
 import type { Command } from './command-palette';
 import { ItemForm } from './item-form';
@@ -61,6 +62,7 @@ type View =
   | { kind: 'folders' }
   | { kind: 'backup' }
   | { kind: 'password' }
+  | { kind: 'checkup' }
   | { kind: 'import' };
 
 /**
@@ -177,6 +179,7 @@ export default function VaultPage() {
       { id: 'new', label: 'new item', hint: 'n', run: () => setView({ kind: 'new' }) },
       { id: 'folders', label: 'manage folders', run: () => setView({ kind: 'folders' }) },
       { id: 'trash', label: 'open trash', run: () => setView({ kind: 'trash' }) },
+      { id: 'checkup', label: 'security checkup', run: () => setView({ kind: 'checkup' }) },
       {
         id: 'clear-clipboard',
         label: 'clear the clipboard now',
@@ -503,6 +506,14 @@ export default function VaultPage() {
             <Button
               type="button"
               variant="ghost"
+              onClick={() => setView({ kind: 'checkup' })}
+              data-testid="open-checkup"
+            >
+              checkup
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               onClick={() => setView({ kind: 'backup' })}
               data-testid="open-backup"
             >
@@ -564,6 +575,10 @@ export default function VaultPage() {
           onClose={() => setPaletteOpen(false)}
           onOpenItem={openItem}
         />
+      ) : null}
+
+      {view.kind === 'checkup' ? (
+        <CheckupPanel items={live} onOpen={openItem} onBack={() => setView({ kind: 'list' })} />
       ) : null}
 
       {view.kind === 'backup' ? <BackupPanel onBack={() => setView({ kind: 'list' })} /> : null}
