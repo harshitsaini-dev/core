@@ -707,3 +707,47 @@ business knowing it any more than it knows the password. It is stamped only when
 the value actually changes, so opening an item and saving it does not make an
 old password look new — otherwise the field records when somebody last looked at
 the item, which is a different thing wearing the same label.
+
+---
+
+## ADR-025 — A backup carries its own key material, and a restore renumbers
+
+**Date:** 2026-08-28 · **Status:** Accepted
+
+**Context.** A vault nobody can get their data out of is a vault nobody should
+put data into. IO-01 and IO-07 are the way out and the way back.
+
+**Decision — the file carries the salt, the KDF parameters and the wrapped
+Account Key.** A backup that needs the running service to read is not a backup
+of anything: the day it is needed is the day the account, or the service, is
+gone. Those three values are already public in the sense that matters —
+`prelogin` serves them to anyone who asks, and the offline cache keeps them on
+the device.
+
+The cost is real and is said at the point of download rather than in a footnote:
+a backup file can be attacked offline, at the attacker's pace, with no rate
+limit. It is worth roughly what the master password is worth. That is inherent
+to every backup of an encrypted vault, and the defence is the one already in
+place — Argon2id, tuned so each guess costs time and memory.
+
+**Decision — restoring re-encrypts under the current account's key.** That is
+what makes it disaster recovery rather than a copy-paste: the account it goes
+into does not have to be the account it came from.
+
+**Decision — a restore renumbers anything this account does not already have.**
+Ids are globally unique keys, not per-account ones. A backup carries the ids of
+the account that made it, so restoring into a different account while the
+original rows still exist means every insert collides with a row somebody else
+owns — and the server correctly refuses and says nothing.
+
+The first version did exactly that: reported "restored 1 item" and wrote none.
+Silence on the one day the feature matters. An id is now kept only when this
+account already has it, which is the same-account case and the one where
+updating in place is what somebody wants; everything else gets a fresh id and
+every reference between the rows is rewritten to match.
+
+**Consequences.** A restore never deletes. It adds what is missing and updates
+what it can match, and anything the file does not mention is left alone —
+"restore the two items I lost" must not mean "replace everything with a file
+from March". Trash is restored as trash, since somebody who deleted something
+and then had to restore a backup did not ask for it back.

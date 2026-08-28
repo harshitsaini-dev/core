@@ -110,3 +110,4 @@ export type VaultItemType = 'login' | 'note' | 'card' | 'identity' | 'ssh';
 export * from './vault.js';
 export * from './env.js';
 export * from './diff.js';
+export * from './backup.js';

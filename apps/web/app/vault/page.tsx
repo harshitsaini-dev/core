@@ -1,22 +1,27 @@
 'use client';
 
 import {
+  BACKUP_FORMAT,
   FOLDER_COLORS,
+  backupContents,
+  backupFilename,
   collectTags,
   describePasswordAge,
   itemSubtitle,
   orderFolders,
   passwordAgeDays,
+  readBackup,
 } from '@core/shared';
 import type { DecryptedFolder, DecryptedItem } from '@core/shared';
 import type { Layout } from '@/lib/client/view-store';
-import { Button, Checkbox, Input, Panel, Select } from '@core/ui';
+import { Button, Checkbox, Input, Panel, Select, Warning } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchItemHistory } from '@/lib/client/vault-api';
 import type { ItemVersion } from '@/lib/client/vault-api';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
+import { BackupPasswordWrong, buildBackup, restoreBackup } from '@/lib/client/backup';
 import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { toast } from '@/lib/client/toast-store';
@@ -48,7 +53,8 @@ type View =
   | { kind: 'new' }
   | { kind: 'edit'; id: string }
   | { kind: 'trash' }
-  | { kind: 'folders' };
+  | { kind: 'folders' }
+  | { kind: 'backup' };
 
 /**
  * Which items the filters admit.
@@ -487,6 +493,14 @@ export default function VaultPage() {
                 trash ({trashed.length})
               </Button>
             ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setView({ kind: 'backup' })}
+              data-testid="open-backup"
+            >
+              backup
+            </Button>
             <Button type="button" variant="danger" onClick={() => void panic()} data-testid="panic">
               panic
             </Button>
@@ -528,6 +542,8 @@ export default function VaultPage() {
           onOpenItem={openItem}
         />
       ) : null}
+
+      {view.kind === 'backup' ? <BackupPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'folders' ? (
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
@@ -1391,6 +1407,201 @@ function ItemRow({
     </li>
   );
 }
+
+/**
+ * Taking a backup, and putting one back.
+ *
+ * The warning is not decoration. A backup file is offline-attackable: whoever
+ * takes it can guess master passwords against it at their own pace, with no
+ * rate limit and no server involved. That is inherent to any backup worth
+ * having — one that needs the running service to read is not a backup of
+ * anything — and the honest thing is to say so at the moment somebody
+ * downloads the file, not in a document they will never open.
+ */
+function BackupPanel({ onBack }: { onBack: () => void }) {
+  const keys = useVault((vault) => vault.keys);
+  const load = useItems((store) => store.load);
+  const items = useItems((store) => store.items);
+  const folders = useItems((store) => store.folders);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState<{ text: string; password: string } | null>(null);
+
+  async function download(): Promise<void> {
+    setBusy(true);
+    setError('');
+    try {
+      const backup = await buildBackup();
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
+      );
+
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = backupFilename(backup.createdAt);
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      toast('Backup downloaded. It is worth what your master password is worth.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not build a backup.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restore(text: string, password: string): Promise<void> {
+    if (!keys) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      const parsed = readBackup(text);
+      if ('error' in parsed) {
+        setError(parsed.error);
+        return;
+      }
+
+      // Which ids this account already has, so a same-account restore updates
+      // in place and a cross-account one is renumbered.
+      const known = new Set<string>([
+        ...items.map((entry) => entry.id),
+        ...folders.map((entry) => entry.id),
+      ]);
+
+      const result = await restoreBackup(parsed.backup, password, keys, known);
+      await load();
+
+      toast(
+        result.unreadable > 0
+          ? `Restored ${result.items} item(s); ${result.unreadable} could not be opened.`
+          : `Restored ${result.items} item(s) and ${result.vars} variable(s).`,
+        result.unreadable > 0 ? { tone: 'warning' } : {},
+      );
+      setPending(null);
+      onBack();
+    } catch (cause) {
+      setError(
+        cause instanceof BackupPasswordWrong
+          ? cause.message
+          : 'Could not restore that backup. Nothing has been changed.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel className="mt-6">
+      <h2 className="text-accent typewriter mb-6 font-mono text-sm tracking-widest uppercase">
+        backup
+      </h2>
+
+      <Warning title="a backup is worth your master password">
+        The file holds everything, still encrypted, plus what is needed to derive the key. Anyone
+        who takes it can try passwords against it offline, at their own pace. Keep it where you
+        would keep the Emergency Kit.
+      </Warning>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => void download()}
+          data-testid="backup-download"
+        >
+          {busy ? '... working' : 'download a backup'}
+        </Button>
+
+        <label className={BUTTON_LIKE}>
+          restore from a file
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            data-testid="backup-file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void file.text().then((text) => setPending({ text, password: '' }));
+              event.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+
+      {pending ? (
+        <div className="border-line mt-6 border-t pt-6">
+          <p className="text-muted mb-3 font-mono text-xs" data-testid="backup-summary">
+            <span aria-hidden="true">&gt; </span>
+            {describeFile(pending.text)}
+          </p>
+          <p className="text-muted mb-3 font-mono text-xs">
+            <span aria-hidden="true">&gt; </span>
+            Nothing is removed. What the file does not mention is left alone.
+          </p>
+
+          <Input
+            type="password"
+            value={pending.password}
+            onChange={(event) => setPending({ ...pending, password: event.target.value })}
+            placeholder="the master password the backup was made under"
+            aria-label="backup master password"
+            autoComplete="off"
+            data-testid="backup-password"
+          />
+
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Button
+              type="button"
+              disabled={busy || pending.password === ''}
+              onClick={() => void restore(pending.text, pending.password)}
+              data-testid="backup-restore"
+            >
+              {busy ? '... restoring' : 'restore'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setPending(null)}>
+              cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="text-danger mt-4 font-mono text-xs" data-testid="backup-error">
+          <span aria-hidden="true">! </span>
+          {error}
+        </p>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onBack}
+        className="mt-6"
+        data-testid="backup-back"
+      >
+        back
+      </Button>
+    </Panel>
+  );
+}
+
+/** What a chosen file turns out to be, before anything is done with it. */
+function describeFile(text: string): string {
+  const parsed = readBackup(text);
+  if ('error' in parsed) return parsed.error;
+
+  const counts = backupContents(parsed.backup);
+  const taken = new Date(parsed.backup.createdAt).toLocaleString();
+
+  return `A ${BACKUP_FORMAT} backup from ${taken}: ${counts.items} item(s), ${counts.folders} folder(s), ${counts.projects} project(s), ${counts.vars} variable(s).`;
+}
+
+/** A file input cannot be a Button, so the label borrows its look. */
+const BUTTON_LIKE =
+  'border-line text-muted hover:border-fg hover:text-fg inline-flex min-h-11 cursor-pointer items-center justify-center border px-4 py-2 font-mono text-sm tracking-tight';
 
 /**
  * The project this credential belongs with.
