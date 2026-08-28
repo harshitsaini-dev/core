@@ -193,8 +193,8 @@ P5 Hardening+Deploy · P6 Post-v1
 | ----- | --------------------------------------------------------- | ----- | ------ |
 | IO-01 | Encrypted full-vault export (Core native format)          | P5    | DONE   |
 | IO-02 | Plaintext CSV / JSON export with a hard confirmation gate | P5    | TODO   |
-| IO-03 | Import wizard with column mapping                         | P5    | TODO   |
-| IO-04 | Bitwarden import                                          | P5    | TODO   |
+| IO-03 | Import wizard with column mapping                         | P5    | DONE   |
+| IO-04 | Bitwarden import                                          | P5    | DONE   |
 | IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | TODO   |
 | IO-06 | Scheduled encrypted backup reminder                       | P6    | TODO   |
 | IO-07 | Restore-from-backup flow                                  | P5    | DONE   |

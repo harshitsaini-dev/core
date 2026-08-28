@@ -5,6 +5,10 @@ import {
   FOLDER_COLORS,
   backupContents,
   backupFilename,
+  detectColumns,
+  mappingIsUsable,
+  parseCsv,
+  rowsToItems,
   collectTags,
   describePasswordAge,
   itemSubtitle,
@@ -12,7 +16,7 @@ import {
   passwordAgeDays,
   readBackup,
 } from '@core/shared';
-import type { DecryptedFolder, DecryptedItem } from '@core/shared';
+import type { ColumnMapping, DecryptedFolder, DecryptedItem, ImportField } from '@core/shared';
 import type { Layout } from '@/lib/client/view-store';
 import { Button, Checkbox, Input, Panel, Select, Warning } from '@core/ui';
 import { useRouter } from 'next/navigation';
@@ -56,7 +60,8 @@ type View =
   | { kind: 'trash' }
   | { kind: 'folders' }
   | { kind: 'backup' }
-  | { kind: 'password' };
+  | { kind: 'password' }
+  | { kind: 'import' };
 
 /**
  * Which items the filters admit.
@@ -511,6 +516,14 @@ export default function VaultPage() {
             >
               password
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setView({ kind: 'import' })}
+              data-testid="open-csv-import"
+            >
+              import
+            </Button>
             <Button type="button" variant="danger" onClick={() => void panic()} data-testid="panic">
               panic
             </Button>
@@ -556,6 +569,8 @@ export default function VaultPage() {
       {view.kind === 'backup' ? <BackupPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'password' ? <PasswordPanel onBack={() => setView({ kind: 'list' })} /> : null}
+
+      {view.kind === 'import' ? <ImportPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'folders' ? (
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
@@ -1417,6 +1432,196 @@ function ItemRow({
         under whichever row was last touched.
       */}
     </li>
+  );
+}
+
+/**
+ * Importing a CSV from another password manager.
+ *
+ * The mapping is shown and can be changed before anything is stored, because
+ * the guess is a guess. Getting `username` and `email` the wrong way round is
+ * the kind of mistake that is invisible afterwards and annoying for years, and
+ * the moment to catch it is while the file is still on screen.
+ *
+ * Everything here happens in the tab. The file is a plaintext export of
+ * somebody's entire vault, and the one thing it must never do is take a trip
+ * through a server — including this one.
+ */
+const IMPORT_FIELDS: { field: ImportField; label: string }[] = [
+  { field: 'title', label: 'title' },
+  { field: 'username', label: 'username' },
+  { field: 'password', label: 'password' },
+  { field: 'url', label: 'url' },
+  { field: 'notes', label: 'notes' },
+  { field: 'totp', label: 'one-time code' },
+];
+
+function ImportPanel({ onBack }: { onBack: () => void }) {
+  const save = useItems((store) => store.save);
+
+  const [rows, setRows] = useState<readonly (readonly string[])[] | null>(null);
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const header = rows?.[0] ?? [];
+  const body = useMemo(() => (rows ? rows.slice(1) : []), [rows]);
+  const preview = useMemo(() => rowsToItems(body, mapping), [body, mapping]);
+
+  async function run(): Promise<void> {
+    setBusy(true);
+    setError('');
+    try {
+      for (const entry of preview.items) {
+        await save({
+          type: 'login',
+          fields: {
+            title: entry.title,
+            ...(entry.username ? { username: entry.username } : {}),
+            ...(entry.password ? { password: entry.password } : {}),
+            ...(entry.url ? { url: entry.url } : {}),
+            ...(entry.notes ? { notes: entry.notes } : {}),
+            ...(entry.totp ? { totpSecret: entry.totp } : {}),
+            // Stamped now rather than left unknown: these passwords were set
+            // somewhere else, and the file does not say when.
+            passwordChangedAt: Date.now(),
+          },
+        });
+      }
+
+      toast(
+        preview.skipped > 0
+          ? `Imported ${preview.items.length}; skipped ${preview.skipped} empty row(s).`
+          : `Imported ${preview.items.length} item(s).`,
+      );
+      onBack();
+    } catch {
+      setError('Something went wrong partway through. What was imported is already saved.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel className="mt-6">
+      <h2 className="text-accent typewriter mb-6 font-mono text-sm tracking-widest uppercase">
+        import
+      </h2>
+
+      <Warning title="an export is a plaintext copy of your vault">
+        Whatever you exported from is now sitting unencrypted on your disk. Delete it once this is
+        done — that file needs no password at all.
+      </Warning>
+
+      <div className="mt-6">
+        <label className={BUTTON_LIKE}>
+          choose a .csv
+          <input
+            type="file"
+            accept="text/csv,.csv"
+            className="sr-only"
+            data-testid="import-file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+
+              void file.text().then((text) => {
+                const parsed = parseCsv(text);
+                setRows(parsed);
+                setMapping(detectColumns(parsed[0] ?? []));
+              });
+              event.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+
+      {rows !== null ? (
+        rows.length < 2 ? (
+          <p className="text-warning mt-4 font-mono text-xs" data-testid="import-empty">
+            <span aria-hidden="true">! </span>
+            That file has a header and no rows.
+          </p>
+        ) : (
+          <>
+            <p className="text-muted mt-6 font-mono text-xs" data-testid="import-summary">
+              <span aria-hidden="true">&gt; </span>
+              {body.length} row(s). Check the columns below before importing.
+            </p>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2" data-testid="import-mapping">
+              {IMPORT_FIELDS.map(({ field, label }) => (
+                <label key={field} className="block">
+                  <span className="text-muted mb-1 block font-mono text-xs tracking-widest uppercase">
+                    {label}
+                  </span>
+                  <Select
+                    value={mapping[field] === undefined ? '' : String(mapping[field])}
+                    onChange={(next) =>
+                      setMapping((current) => {
+                        const updated = { ...current };
+                        if (next === '') delete updated[field];
+                        else updated[field] = Number(next);
+                        return updated;
+                      })
+                    }
+                    aria-label={`column for ${label}`}
+                    data-testid={`import-map-${field}`}
+                    options={[
+                      { value: '', label: 'not imported' },
+                      ...header.map((name, index) => ({
+                        value: String(index),
+                        label: name || `column ${index + 1}`,
+                      })),
+                    ]}
+                  />
+                </label>
+              ))}
+            </div>
+
+            {preview.items[0] ? (
+              <p className="text-muted secret mt-4 font-mono text-xs" data-testid="import-preview">
+                <span aria-hidden="true">&gt; </span>
+                First row reads as: {preview.items[0].title}
+                {preview.items[0].username ? ` · ${preview.items[0].username}` : ''}
+                {preview.items[0].password ? ' · password set' : ' · no password'}
+              </p>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button
+                type="button"
+                disabled={busy || !mappingIsUsable(mapping) || preview.items.length === 0}
+                onClick={() => void run()}
+                data-testid="import-run"
+              >
+                {busy ? '... importing' : `import ${preview.items.length} item(s)`}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setRows(null)}>
+                choose another file
+              </Button>
+            </div>
+          </>
+        )
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="text-danger mt-4 font-mono text-xs" data-testid="import-error">
+          <span aria-hidden="true">! </span>
+          {error}
+        </p>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onBack}
+        className="mt-6"
+        data-testid="import-back"
+      >
+        back
+      </Button>
+    </Panel>
   );
 }
 
