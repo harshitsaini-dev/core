@@ -21,6 +21,7 @@ import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchItemHistory } from '@/lib/client/vault-api';
 import type { ItemVersion } from '@/lib/client/vault-api';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
+import { PasswordChangeRejected, changeMasterPassword } from '@/lib/client/auth';
 import { BackupPasswordWrong, buildBackup, restoreBackup } from '@/lib/client/backup';
 import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
@@ -54,7 +55,8 @@ type View =
   | { kind: 'edit'; id: string }
   | { kind: 'trash' }
   | { kind: 'folders' }
-  | { kind: 'backup' };
+  | { kind: 'backup' }
+  | { kind: 'password' };
 
 /**
  * Which items the filters admit.
@@ -501,6 +503,14 @@ export default function VaultPage() {
             >
               backup
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setView({ kind: 'password' })}
+              data-testid="open-password"
+            >
+              password
+            </Button>
             <Button type="button" variant="danger" onClick={() => void panic()} data-testid="panic">
               panic
             </Button>
@@ -544,6 +554,8 @@ export default function VaultPage() {
       ) : null}
 
       {view.kind === 'backup' ? <BackupPanel onBack={() => setView({ kind: 'list' })} /> : null}
+
+      {view.kind === 'password' ? <PasswordPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'folders' ? (
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />
@@ -1405,6 +1417,138 @@ function ItemRow({
         under whichever row was last touched.
       */}
     </li>
+  );
+}
+
+/**
+ * Changing the master password.
+ *
+ * From the outside this is the smallest operation in the product: the vault is
+ * encrypted under the Account Key, which does not change, and only the
+ * thirty-two-byte wrapper around it is replaced. Ten thousand items cost the
+ * same as none.
+ *
+ * The current password is asked for even though the vault is open. A session
+ * proves a browser was left unlocked; it does not prove the person at the
+ * keyboard knows the password, and this is exactly what somebody who found an
+ * unlocked laptop would reach for.
+ */
+function PasswordPanel({ onBack }: { onBack: () => void }) {
+  const router = useRouter();
+  const lock = useVault((vault) => vault.lock);
+
+  const [email, setEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
+
+  const mismatch = confirm !== '' && next !== confirm;
+  const ready = email !== '' && currentPassword !== '' && next !== '' && next === confirm;
+
+  async function submit(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!ready || busy) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      await changeMasterPassword(email, currentPassword, next, setProgress);
+
+      // Every session was revoked, including this one, so the only honest thing
+      // to do is send them back to unlock with the new password.
+      lock(false);
+      router.push('/login');
+    } catch (cause) {
+      setError(
+        cause instanceof PasswordChangeRejected
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : 'Could not change the password.',
+      );
+    } finally {
+      setBusy(false);
+      setProgress('');
+    }
+  }
+
+  return (
+    <Panel className="mt-6">
+      <h2 className="text-accent typewriter mb-6 font-mono text-sm tracking-widest uppercase">
+        change master password
+      </h2>
+
+      <Warning title="everything else stays where it is">
+        Your items are not re-encrypted and nothing is re-uploaded — only the key that opens them is
+        re-wrapped. Every other session is signed out, including on your other devices.
+      </Warning>
+
+      <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-4" noValidate>
+        <Input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="your email"
+          aria-label="email"
+          autoComplete="username"
+          data-testid="password-email"
+        />
+        <Input
+          type="password"
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+          placeholder="current master password"
+          aria-label="current master password"
+          autoComplete="current-password"
+          data-testid="password-current"
+        />
+        <Input
+          type="password"
+          value={next}
+          onChange={(event) => setNext(event.target.value)}
+          placeholder="new master password"
+          aria-label="new master password"
+          autoComplete="new-password"
+          data-testid="password-new"
+        />
+        <Input
+          type="password"
+          value={confirm}
+          onChange={(event) => setConfirm(event.target.value)}
+          placeholder="confirm new master password"
+          aria-label="confirm new master password"
+          autoComplete="new-password"
+          invalid={mismatch}
+          data-testid="password-confirm"
+        />
+
+        {mismatch ? (
+          <p className="text-danger font-mono text-xs" data-testid="password-mismatch">
+            <span aria-hidden="true">! </span>
+            Those two do not match.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-3">
+          <Button type="submit" disabled={!ready || busy} data-testid="password-save">
+            {busy ? `... ${progress || 'working'}` : 'change it'}
+          </Button>
+          <Button type="button" variant="ghost" onClick={onBack} data-testid="password-back">
+            cancel
+          </Button>
+        </div>
+      </form>
+
+      {error ? (
+        <p role="alert" className="text-danger mt-4 font-mono text-xs" data-testid="password-error">
+          <span aria-hidden="true">! </span>
+          {error}
+        </p>
+      ) : null}
+    </Panel>
   );
 }
 

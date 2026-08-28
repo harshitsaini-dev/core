@@ -8,6 +8,7 @@ import {
   deriveRecoveryVerifier,
   generateKdfSalt,
   recoverAccountKeys,
+  rewrapAccountKey,
   unwrapAccountKeys,
   wipe,
   wrapRecoveryKey,
@@ -323,4 +324,112 @@ export async function recover(
   if (!response.ok) throw new RecoveryFailed();
 
   return keys;
+}
+
+/** The current password was wrong, which is the only failure worth naming. */
+export class PasswordChangeRejected extends Error {
+  constructor() {
+    super('That is not your current master password.');
+    this.name = 'PasswordChangeRejected';
+  }
+}
+
+/**
+ * Change the master password.
+ *
+ * The operation the Account Key indirection exists for. The vault is encrypted
+ * under the Account Key, which does not change; only the thirty-two-byte
+ * wrapper around it is replaced. A vault of ten thousand items costs the same to
+ * re-key as an empty one, and none of it is re-uploaded.
+ *
+ * The current password is required as well as an unlocked tab. A session proves
+ * a browser was left open; it does not prove the person at the keyboard knows
+ * the password, and changing it is precisely what somebody who found an
+ * unlocked laptop would do — it would lock the owner out for good.
+ *
+ * The keys returned are the same keys. Nothing the vault holds needs touching,
+ * which is the point.
+ */
+export async function changeMasterPassword(
+  email: string,
+  currentPassword: string,
+  newPassword: string,
+  onProgress?: (step: string) => void,
+): Promise<void> {
+  onProgress?.('checking your current password');
+
+  // Prelogin gives the parameters the current password was derived under. They
+  // are not assumed to match today's defaults: an old account may have been
+  // created on a slower phone.
+  const pre = await fetch('/api/auth/prelogin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email }),
+  });
+  if (!pre.ok) throw new Error('Could not reach the server.');
+
+  const { kdfSalt, kdfParams } = (await pre.json()) as { kdfSalt: string; kdfParams: KdfParams };
+
+  const older = await deriveKeys(currentPassword, base64UrlToBytes(kdfSalt), kdfParams);
+
+  onProgress?.('deriving new keys');
+  const params = await chooseKdfParams();
+  const salt = generateKdfSalt();
+  const fresh = await deriveKeys(newPassword, salt, params);
+
+  onProgress?.('re-wrapping your account key');
+
+  // Read back from the server rather than from anything cached: the wrapper is
+  // the one thing that must be the current one, and a stale copy would produce
+  // a wrapper nobody can open.
+  const session = await fetch('/api/auth/session', { credentials: 'same-origin' });
+  if (!session.ok) throw new Error('Your session has expired. Unlock again and retry.');
+
+  const material = await offline.readUnlockMaterial();
+  if (!material) {
+    throw new Error('This device has not stored what a password change needs. Sign in again.');
+  }
+
+  let accountKeyWrapped: string;
+  try {
+    accountKeyWrapped = await rewrapAccountKey(
+      older.masterKey,
+      fresh.masterKey,
+      material.accountKeyWrapped,
+    );
+  } catch {
+    // The old master key did not open the wrapper, so the current password was
+    // wrong. Caught here rather than at the server, which never sees a password.
+    throw new PasswordChangeRejected();
+  }
+
+  onProgress?.('saving');
+  const response = await fetch('/api/auth/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      currentAuthKey: bytesToBase64Url(older.authKey),
+      authKey: bytesToBase64Url(fresh.authKey),
+      kdfSalt: bytesToBase64Url(salt),
+      kdfParams: params,
+      accountKeyWrapped,
+    }),
+  });
+
+  if (!response.ok) throw new PasswordChangeRejected();
+
+  // The cached unlock material describes the old password. Left behind, an
+  // offline unlock would keep accepting it — which would mean the password had
+  // not really changed on this device.
+  await offline.writeUnlockMaterial({
+    email,
+    kdfSalt: bytesToBase64Url(salt),
+    kdfParams: params,
+    accountKeyWrapped,
+  });
+
+  wipe(older.authKey);
+  wipe(fresh.authKey);
 }
