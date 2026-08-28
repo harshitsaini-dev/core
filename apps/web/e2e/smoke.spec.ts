@@ -20,6 +20,41 @@ test.describe('landing page', () => {
     await expect(page.getByText('zero-knowledge password, secret and .env manager')).toBeVisible();
   });
 
+  test('offers a way into the app', async ({ page }) => {
+    /*
+     * This is the test that was missing. The landing page rendered its status
+     * readout for months with no link on it at all — you could not sign up or
+     * unlock from the front page of a password manager — and everything here
+     * passed the whole time, because it only ever checked the heading.
+     */
+    await page.goto('/');
+
+    await expect(page.getByTestId('go-signup')).toBeVisible();
+    await expect(page.getByTestId('go-login')).toBeVisible();
+  });
+
+  test('the way in goes where it says', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('go-signup').click();
+    await expect(page).toHaveURL(/\/signup$/);
+
+    await page.goto('/');
+    await page.getByTestId('go-login').click();
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test('claims nothing the app does not do', async ({ page }) => {
+    // An earlier version printed `t=3` while the app calibrated to twelve or
+    // more, and said the vault was "in development" long after it was not. This
+    // is the most-read page in the product; a number nobody checks is still a
+    // claim.
+    await page.goto('/');
+
+    const text = await page.locator('main').innerText();
+    expect(text).not.toContain('in development');
+    expect(text).not.toMatch(/t=\d/);
+  });
+
   test('states the security posture on screen', async ({ page }) => {
     await page.goto('/');
 
