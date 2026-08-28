@@ -321,3 +321,51 @@ test.describe('the vault lock reaches here too', () => {
     await expect(page.getByTestId('project-chip')).toHaveCount(0);
   });
 });
+
+test.describe('files', () => {
+  test.slow();
+
+  test('downloads the environment as a .env file', async ({ page }) => {
+    // Built in the tab from a blob. A download endpoint would mean sending
+    // decrypted variables back to the one party this product keeps them from.
+    await openEnv(page, 'env-download');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'API_URL', 'https://example.com');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('download-dotenv').click(),
+    ]);
+
+    expect(download.suggestedFilename()).toBe('development.env');
+
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+
+    expect(Buffer.concat(chunks).toString('utf8')).toContain('API_URL=https://example.com');
+  });
+
+  test('accepts a .env dropped onto the import panel', async ({ page }) => {
+    // How a `.env` actually arrives: it is already on disk, and the
+    // alternative is opening it in an editor to copy out of.
+    await openEnv(page, 'env-drop');
+    await makeProject(page, 'Checkout');
+
+    await page.getByTestId('open-import').click();
+
+    await page.getByTestId('import-drop').evaluate((element) => {
+      const file = new File(['DROPPED=yes\nSECOND=two\n'], '.env', { type: 'text/plain' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+
+      element.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: transfer }));
+      element.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }));
+    });
+
+    await expect(page.getByTestId('import-text')).toHaveValue(/DROPPED=yes/);
+
+    await page.getByTestId('import-apply').click();
+    await expect(page.getByTestId('var-row')).toHaveCount(2);
+  });
+});

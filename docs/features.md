@@ -58,9 +58,9 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-03 | Isolated recovery-code storage per item                      | P3    | DONE   |
 | VLT-04 | Built-in TOTP generator with live countdown ring             | P3    | DONE   |
 | VLT-05 | Secure notes, stored as written and never rendered as markup | P4    | DONE   |
-| VLT-06 | Credit-card items (number, CVV, expiry, PIN)                 | P4    | TODO   |
-| VLT-07 | Identity profiles (name, address, phone)                     | P4    | TODO   |
-| VLT-08 | SSH key / certificate item type                              | P4    | TODO   |
+| VLT-06 | Credit-card items (number, CVV, expiry, PIN)                 | P4    | DONE   |
+| VLT-07 | Identity profiles (name, address, phone)                     | P4    | DONE   |
+| VLT-08 | SSH key / certificate item type                              | P4    | DONE   |
 | VLT-09 | Encrypted attachments up to 10 MB (R2)                       | P6    | TODO   |
 | VLT-10 | Inline editing directly in the list                          | P3    | TODO   |
 | VLT-11 | Item version history with per-version restore                | P4    | TODO   |

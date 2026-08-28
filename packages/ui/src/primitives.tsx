@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  Ref,
+} from 'react';
 
 /**
  * Terminal-theme primitives.
@@ -129,9 +135,16 @@ export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
+export interface PanelProps extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+}
+
+export function Panel({ children, className, ...props }: PanelProps) {
   return (
-    <div className={cx('border-line bg-surface border p-6 shadow-glow-soft sm:p-8', className)}>
+    <div
+      {...props}
+      className={cx('border-line bg-surface border p-6 shadow-glow-soft sm:p-8', className)}
+    >
       {children}
     </div>
   );

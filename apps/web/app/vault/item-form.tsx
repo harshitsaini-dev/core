@@ -39,7 +39,7 @@ export function ItemForm({
     <div className="space-y-6">
       {existing ? null : (
         <div className="flex flex-wrap gap-2" role="group" aria-label="item type">
-          {(['login', 'note'] as const).map((option) => (
+          {(['login', 'note', 'card', 'identity', 'ssh'] as const).map((option) => (
             <Button
               key={option}
               type="button"
@@ -56,6 +56,12 @@ export function ItemForm({
 
       {type === 'note' ? (
         <NoteForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
+      ) : type === 'card' ? (
+        <CardForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
+      ) : type === 'identity' ? (
+        <IdentityForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
+      ) : type === 'ssh' ? (
+        <SshForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
       ) : (
         <LoginForm {...(existing ? { existing } : {})} onDone={onDone} onCancel={onCancel} />
       )}
@@ -472,6 +478,357 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The shape every simple form here has.
+ *
+ * A title, a set of fields, the organisation controls and the two buttons. The
+ * login form is not built on this because it has a generator, a reveal, an
+ * otpauth parser and recovery codes, and bending a shared abstraction around
+ * all of that would make both harder to read than either is apart.
+ */
+function SimpleForm({
+  existing,
+  onDone,
+  onCancel,
+  type,
+  children,
+  toData,
+}: FormProps & {
+  type: 'card' | 'identity' | 'ssh';
+  children: React.ReactNode;
+  toData: (title: string, tags: string[]) => VaultItemData;
+}) {
+  const titleId = useId();
+
+  const initial = existing?.data.type === type ? existing.data.fields : undefined;
+
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
+  const [tags, setTags] = useState((initial?.tags ?? []).join(', '));
+  const [busy, setBusy] = useState(false);
+
+  const save = useItems((state) => state.save);
+
+  async function onSubmit(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (title.trim() === '' || busy) return;
+
+    setBusy(true);
+    try {
+      const id = await save(toData(title.trim(), parseTags(tags)), existing?.id, folderId);
+      onDone(id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void onSubmit(event)} className="space-y-6" noValidate>
+      <Field label="title" htmlFor={titleId}>
+        <Input
+          id={titleId}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          autoComplete="off"
+          data-testid="item-title"
+          required
+        />
+      </Field>
+
+      {children}
+
+      <Organisation
+        folderId={folderId}
+        tags={tags}
+        onFolderChange={setFolderId}
+        onTagsChange={setTags}
+      />
+
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" disabled={busy || title.trim() === ''} data-testid="item-save">
+          {busy ? '... saving' : 'save'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel} data-testid="item-cancel">
+          cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * A payment card.
+ *
+ * Every field here is masked in the list and shown only on the item, for the
+ * obvious reason: a card number, an expiry and a CVV together are the card. The
+ * list shows the last four digits, which is how people tell cards apart and is
+ * the part that is printed on a receipt anyway.
+ */
+function CardForm({ existing, onDone, onCancel }: FormProps) {
+  const cardholderId = useId();
+  const numberId = useId();
+  const expiryId = useId();
+  const cvvId = useId();
+  const pinId = useId();
+
+  const initial = existing?.data.type === 'card' ? existing.data.fields : undefined;
+
+  const [cardholder, setCardholder] = useState(initial?.cardholder ?? '');
+  const [number, setNumber] = useState(initial?.number ?? '');
+  const [expiry, setExpiry] = useState(initial?.expiry ?? '');
+  const [cvv, setCvv] = useState(initial?.cvv ?? '');
+  const [pin, setPin] = useState(initial?.pin ?? '');
+
+  return (
+    <SimpleForm
+      {...(existing ? { existing } : {})}
+      onDone={onDone}
+      onCancel={onCancel}
+      type="card"
+      toData={(title, tags) => ({
+        type: 'card',
+        fields: {
+          title,
+          ...(cardholder.trim() ? { cardholder: cardholder.trim() } : {}),
+          // Spaces stripped: people type them from the card and no payment form
+          // wants them back.
+          ...(number.trim() ? { number: number.replace(/\s+/g, '') } : {}),
+          ...(expiry.trim() ? { expiry: expiry.trim() } : {}),
+          ...(cvv.trim() ? { cvv: cvv.trim() } : {}),
+          ...(pin.trim() ? { pin: pin.trim() } : {}),
+          ...(tags.length > 0 ? { tags } : {}),
+        },
+      })}
+    >
+      <Field label="cardholder" htmlFor={cardholderId}>
+        <Input
+          id={cardholderId}
+          value={cardholder}
+          onChange={(event) => setCardholder(event.target.value)}
+          autoComplete="off"
+          data-testid="card-holder"
+        />
+      </Field>
+
+      <Field label="number" htmlFor={numberId}>
+        <Input
+          id={numberId}
+          value={number}
+          onChange={(event) => setNumber(event.target.value)}
+          autoComplete="off"
+          inputMode="numeric"
+          spellCheck={false}
+          data-testid="card-number"
+        />
+      </Field>
+
+      <div className="grid gap-6 sm:grid-cols-3">
+        <Field label="expiry" htmlFor={expiryId}>
+          <Input
+            id={expiryId}
+            value={expiry}
+            onChange={(event) => setExpiry(event.target.value)}
+            placeholder="MM/YY"
+            autoComplete="off"
+            data-testid="card-expiry"
+          />
+        </Field>
+        <Field label="cvv" htmlFor={cvvId}>
+          <Input
+            id={cvvId}
+            type="password"
+            value={cvv}
+            onChange={(event) => setCvv(event.target.value)}
+            autoComplete="off"
+            inputMode="numeric"
+            data-testid="card-cvv"
+          />
+        </Field>
+        <Field label="pin" htmlFor={pinId}>
+          <Input
+            id={pinId}
+            type="password"
+            value={pin}
+            onChange={(event) => setPin(event.target.value)}
+            autoComplete="off"
+            inputMode="numeric"
+            data-testid="card-pin"
+          />
+        </Field>
+      </div>
+    </SimpleForm>
+  );
+}
+
+/** A person: the details forms ask for over and over. */
+function IdentityForm({ existing, onDone, onCancel }: FormProps) {
+  const fullNameId = useId();
+  const emailId = useId();
+  const phoneId = useId();
+  const addressId = useId();
+
+  const initial = existing?.data.type === 'identity' ? existing.data.fields : undefined;
+
+  const [fullName, setFullName] = useState(initial?.fullName ?? '');
+  const [email, setEmail] = useState(initial?.email ?? '');
+  const [phone, setPhone] = useState(initial?.phone ?? '');
+  const [address, setAddress] = useState(initial?.address ?? '');
+
+  return (
+    <SimpleForm
+      {...(existing ? { existing } : {})}
+      onDone={onDone}
+      onCancel={onCancel}
+      type="identity"
+      toData={(title, tags) => ({
+        type: 'identity',
+        fields: {
+          title,
+          ...(fullName.trim() ? { fullName: fullName.trim() } : {}),
+          ...(email.trim() ? { email: email.trim() } : {}),
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          ...(address.trim() ? { address: address.trim() } : {}),
+          ...(tags.length > 0 ? { tags } : {}),
+        },
+      })}
+    >
+      <Field label="full name" htmlFor={fullNameId}>
+        <Input
+          id={fullNameId}
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+          autoComplete="off"
+          data-testid="identity-name"
+        />
+      </Field>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Field label="email" htmlFor={emailId}>
+          <Input
+            id={emailId}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="off"
+            inputMode="email"
+            data-testid="identity-email"
+          />
+        </Field>
+        <Field label="phone" htmlFor={phoneId}>
+          <Input
+            id={phoneId}
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            autoComplete="off"
+            inputMode="tel"
+            data-testid="identity-phone"
+          />
+        </Field>
+      </div>
+
+      <Field label="address" htmlFor={addressId}>
+        <Textarea
+          id={addressId}
+          value={address}
+          onChange={(event) => setAddress(event.target.value)}
+          rows={3}
+          data-testid="identity-address"
+        />
+      </Field>
+    </SimpleForm>
+  );
+}
+
+/**
+ * An SSH key.
+ *
+ * The private key is a textarea rather than a masked input, because it is
+ * twenty-odd lines and nobody can check a masked one. It is not shown in the
+ * list, and the row reports only that a key is stored.
+ */
+function SshForm({ existing, onDone, onCancel }: FormProps) {
+  const hostId = useId();
+  const publicKeyId = useId();
+  const privateKeyId = useId();
+  const passphraseId = useId();
+
+  const initial = existing?.data.type === 'ssh' ? existing.data.fields : undefined;
+
+  const [host, setHost] = useState(initial?.host ?? '');
+  const [publicKey, setPublicKey] = useState(initial?.publicKey ?? '');
+  const [privateKey, setPrivateKey] = useState(initial?.privateKey ?? '');
+  const [passphrase, setPassphrase] = useState(initial?.passphrase ?? '');
+
+  return (
+    <SimpleForm
+      {...(existing ? { existing } : {})}
+      onDone={onDone}
+      onCancel={onCancel}
+      type="ssh"
+      toData={(title, tags) => ({
+        type: 'ssh',
+        fields: {
+          title,
+          ...(host.trim() ? { host: host.trim() } : {}),
+          ...(publicKey.trim() ? { publicKey: publicKey.trim() } : {}),
+          // Not trimmed beyond the ends: the line breaks are load-bearing.
+          ...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
+          ...(passphrase ? { passphrase } : {}),
+          ...(tags.length > 0 ? { tags } : {}),
+        },
+      })}
+    >
+      <Field label="host" htmlFor={hostId}>
+        <Input
+          id={hostId}
+          value={host}
+          onChange={(event) => setHost(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="git@github.com"
+          data-testid="ssh-host"
+        />
+      </Field>
+
+      <Field label="public key" htmlFor={publicKeyId}>
+        <Textarea
+          id={publicKeyId}
+          value={publicKey}
+          onChange={(event) => setPublicKey(event.target.value)}
+          rows={3}
+          spellCheck={false}
+          data-testid="ssh-public"
+        />
+      </Field>
+
+      <Field
+        label="private key"
+        htmlFor={privateKeyId}
+        hint="Line breaks are kept exactly. A key with them collapsed will not work."
+      >
+        <Textarea
+          id={privateKeyId}
+          value={privateKey}
+          onChange={(event) => setPrivateKey(event.target.value)}
+          rows={8}
+          spellCheck={false}
+          data-testid="ssh-private"
+        />
+      </Field>
+
+      <Field label="passphrase" htmlFor={passphraseId}>
+        <Input
+          id={passphraseId}
+          type="password"
+          value={passphrase}
+          onChange={(event) => setPassphrase(event.target.value)}
+          autoComplete="off"
+          data-testid="ssh-passphrase"
+        />
+      </Field>
+    </SimpleForm>
   );
 }
 

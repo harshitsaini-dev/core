@@ -317,6 +317,7 @@ function VariableEditor({
   const [value, setValue] = useState('');
   const [revealAll, setRevealAll] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [paste, setPaste] = useState('');
 
   // Reset when the environment changes, or a half-typed variable follows you
@@ -326,6 +327,7 @@ function VariableEditor({
     setValue('');
     setRevealAll(false);
     setImporting(false);
+    setDragging(false);
     setPaste('');
   }, [environment.id]);
 
@@ -375,6 +377,15 @@ function VariableEditor({
         <Button
           type="button"
           variant="ghost"
+          onClick={() => download(`${environment.name}.env`, formatDotenv(asParsed))}
+          disabled={rows.length === 0}
+          data-testid="download-dotenv"
+        >
+          download
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
           onClick={() => setImporting((current) => !current)}
           aria-pressed={importing}
           data-testid="open-import"
@@ -384,10 +395,31 @@ function VariableEditor({
       </div>
 
       {importing ? (
-        <Panel className="mt-4">
+        <Panel
+          className={dragging ? 'border-accent shadow-glow-soft mt-4' : 'mt-4'}
+          // Dropping a file is how a `.env` actually arrives — it is already on
+          // disk, and the alternative is opening it in an editor to copy out of.
+          onDragOver={(event: React.DragEvent) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event: React.DragEvent) => {
+            event.preventDefault();
+            setDragging(false);
+
+            const file = event.dataTransfer.files[0];
+            if (!file) return;
+
+            // Read here rather than uploaded anywhere: the file is a list of
+            // production secrets and it never leaves this tab unencrypted.
+            void file.text().then(setPaste);
+          }}
+          data-testid="import-drop"
+        >
           <p className="text-muted mb-3 font-mono text-xs">
             <span aria-hidden="true">&gt; </span>
-            Paste a .env file. Existing keys are updated; nothing is removed.
+            Paste a .env file, or drop one here. Existing keys are updated; nothing is removed.
           </p>
           <Textarea
             value={paste}
@@ -483,6 +515,24 @@ function VariableEditor({
       )}
     </div>
   );
+}
+
+/**
+ * Hand a file to the browser without involving a server.
+ *
+ * An object URL over a blob made in this tab. The alternative — a download
+ * endpoint — would mean sending decrypted variables back to the one party this
+ * whole product is built to keep them from.
+ */
+function download(name: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  const anchor = document.createElement('a');
+
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+
+  URL.revokeObjectURL(url);
 }
 
 function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolean }) {
