@@ -11,8 +11,8 @@ import {
 } from '@core/shared';
 import type { DecryptedEnvVar, DecryptedEnvironment, DecryptedProject } from '@core/shared';
 import { Button, Input, Panel, Textarea } from '@core/ui';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchHistory } from '@/lib/client/env-api';
 import type { EnvVarVersion } from '@/lib/client/env-api';
@@ -34,7 +34,22 @@ import { startAutoLock, useVault } from '@/lib/client/vault-store';
  * open it is to copy one of them while somebody watches you share your screen.
  */
 
-export default function EnvPage() {
+/**
+ * Wrapped, because `useSearchParams` needs it.
+ *
+ * Next prerenders the shell of a client page, and a hook that reads the query
+ * string cannot run until there is a request. The boundary is what lets the
+ * rest of the page be prerendered instead of the whole route opting out.
+ */
+export default function EnvRoute() {
+  return (
+    <Suspense fallback={null}>
+      <EnvPage />
+    </Suspense>
+  );
+}
+
+function EnvPage() {
   const router = useRouter();
 
   const state = useVault((vault) => vault.state);
@@ -51,7 +66,11 @@ export default function EnvPage() {
   const reset = useEnv((store) => store.reset);
   const createProject = useEnv((store) => store.createProject);
 
-  const [projectId, setProjectId] = useState<string | null>(null);
+  // A vault item can link here. Read once as the starting selection rather than
+  // used directly, so choosing a different project afterwards is not undone on
+  // every render by a URL nobody has changed.
+  const requested = useSearchParams().get('project');
+  const [projectId, setProjectId] = useState<string | null>(requested);
   const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [newProject, setNewProject] = useState('');
 

@@ -7,6 +7,7 @@ import { Button, Field, Input, Select, Textarea } from '@core/ui';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { generatePassword } from '@/lib/client/generator';
 import { usePrivacy } from '@/lib/client/privacy-store';
+import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { activeFolders, useItems } from '@/lib/client/items-store';
 
 /**
@@ -100,19 +101,35 @@ function parseTags(input: string): string[] {
 function Organisation({
   folderId,
   tags,
+  linkedProjectId,
   onFolderChange,
   onTagsChange,
+  onLinkChange,
 }: {
   folderId: string | null;
   tags: string;
+  linkedProjectId: string | null;
   onFolderChange: (value: string | null) => void;
   onTagsChange: (value: string) => void;
+  onLinkChange: (value: string | null) => void;
 }) {
   const folderFieldId = useId();
   const tagsFieldId = useId();
+  const projectFieldId = useId();
 
   const folders = useItems((state) => state.folders);
   const ordered = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
+
+  // The vault does not otherwise need the environment manager's data, so it is
+  // fetched only when a form is open — which is the only place a link can be
+  // made.
+  const projects = useEnv((state) => state.projects);
+  const loadEnv = useEnv((state) => state.load);
+  useEffect(() => {
+    void loadEnv();
+  }, [loadEnv]);
+
+  const live = useMemo(() => activeProjects(projects), [projects]);
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -145,6 +162,25 @@ function Organisation({
           data-testid="item-tags"
         />
       </Field>
+
+      {live.length > 0 ? (
+        <Field
+          label="linked project"
+          htmlFor={projectFieldId}
+          hint="For the credential a project's .env uses."
+        >
+          <Select
+            id={projectFieldId}
+            value={linkedProjectId ?? ''}
+            onChange={(next) => onLinkChange(next || null)}
+            data-testid="item-project"
+            options={[
+              { value: '', label: 'none' },
+              ...live.map((project) => ({ value: project.id, label: project.name })),
+            ]}
+          />
+        </Field>
+      ) : null}
     </div>
   );
 }
@@ -173,6 +209,9 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
   const [body, setBody] = useState(fields?.body ?? '');
   const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
   const [tags, setTags] = useState((fields?.tags ?? []).join(', '));
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(
+    fields?.linkedProjectId ?? null,
+  );
   const [busy, setBusy] = useState(false);
 
   const save = useItems((state) => state.save);
@@ -198,6 +237,7 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
             title: derivedTitle,
             ...(body ? { body } : {}),
             ...(parsedTags.length > 0 ? { tags: parsedTags } : {}),
+            ...(linkedProjectId ? { linkedProjectId } : {}),
           },
         },
         existing?.id,
@@ -237,8 +277,10 @@ function NoteForm({ existing, onDone, onCancel }: FormProps) {
       <Organisation
         folderId={folderId}
         tags={tags}
+        linkedProjectId={linkedProjectId}
         onFolderChange={setFolderId}
         onTagsChange={setTags}
+        onLinkChange={setLinkedProjectId}
       />
 
       <div className="flex flex-wrap gap-3">
@@ -278,6 +320,9 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
   const [custom, setCustom] = useState<CustomField[]>(fields.customFields ?? []);
   const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
   const [tags, setTags] = useState((fields.tags ?? []).join(', '));
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(
+    fields.linkedProjectId ?? null,
+  );
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -351,6 +396,7 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
             ...(totpSecret ? { totpSecret } : {}),
             ...(codes.length > 0 ? { recoveryCodes: codes } : {}),
             ...(parsedTags.length > 0 ? { tags: parsedTags } : {}),
+            ...(linkedProjectId ? { linkedProjectId } : {}),
             ...(cleanedCustom.length > 0 ? { customFields: cleanedCustom } : {}),
           },
         },
@@ -470,8 +516,10 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
       <Organisation
         folderId={folderId}
         tags={tags}
+        linkedProjectId={linkedProjectId}
         onFolderChange={setFolderId}
         onTagsChange={setTags}
+        onLinkChange={setLinkedProjectId}
       />
 
       <CustomFields fields={custom} onChange={setCustom} />
@@ -506,7 +554,7 @@ function SimpleForm({
 }: FormProps & {
   type: 'card' | 'identity' | 'ssh';
   children: React.ReactNode;
-  toData: (title: string, tags: string[]) => VaultItemData;
+  toData: (title: string, tags: string[], linkedProjectId: string | null) => VaultItemData;
 }) {
   const titleId = useId();
 
@@ -515,6 +563,9 @@ function SimpleForm({
   const [title, setTitle] = useState(initial?.title ?? '');
   const [folderId, setFolderId] = useState<string | null>(existing?.folderId ?? null);
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '));
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(
+    initial?.linkedProjectId ?? null,
+  );
   const [busy, setBusy] = useState(false);
 
   const save = useItems((state) => state.save);
@@ -525,7 +576,11 @@ function SimpleForm({
 
     setBusy(true);
     try {
-      const id = await save(toData(title.trim(), parseTags(tags)), existing?.id, folderId);
+      const id = await save(
+        toData(title.trim(), parseTags(tags), linkedProjectId),
+        existing?.id,
+        folderId,
+      );
       onDone(id);
     } finally {
       setBusy(false);
@@ -550,8 +605,10 @@ function SimpleForm({
       <Organisation
         folderId={folderId}
         tags={tags}
+        linkedProjectId={linkedProjectId}
         onFolderChange={setFolderId}
         onTagsChange={setTags}
+        onLinkChange={setLinkedProjectId}
       />
 
       <div className="flex flex-wrap gap-3">
@@ -595,7 +652,7 @@ function CardForm({ existing, onDone, onCancel }: FormProps) {
       onDone={onDone}
       onCancel={onCancel}
       type="card"
-      toData={(title, tags) => ({
+      toData={(title, tags, linkedProjectId) => ({
         type: 'card',
         fields: {
           title,
@@ -607,6 +664,7 @@ function CardForm({ existing, onDone, onCancel }: FormProps) {
           ...(cvv.trim() ? { cvv: cvv.trim() } : {}),
           ...(pin.trim() ? { pin: pin.trim() } : {}),
           ...(tags.length > 0 ? { tags } : {}),
+          ...(linkedProjectId ? { linkedProjectId } : {}),
         },
       })}
     >
@@ -690,7 +748,7 @@ function IdentityForm({ existing, onDone, onCancel }: FormProps) {
       onDone={onDone}
       onCancel={onCancel}
       type="identity"
-      toData={(title, tags) => ({
+      toData={(title, tags, linkedProjectId) => ({
         type: 'identity',
         fields: {
           title,
@@ -699,6 +757,7 @@ function IdentityForm({ existing, onDone, onCancel }: FormProps) {
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(address.trim() ? { address: address.trim() } : {}),
           ...(tags.length > 0 ? { tags } : {}),
+          ...(linkedProjectId ? { linkedProjectId } : {}),
         },
       })}
     >
@@ -774,7 +833,7 @@ function SshForm({ existing, onDone, onCancel }: FormProps) {
       onDone={onDone}
       onCancel={onCancel}
       type="ssh"
-      toData={(title, tags) => ({
+      toData={(title, tags, linkedProjectId) => ({
         type: 'ssh',
         fields: {
           title,
@@ -784,6 +843,7 @@ function SshForm({ existing, onDone, onCancel }: FormProps) {
           ...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
           ...(passphrase ? { passphrase } : {}),
           ...(tags.length > 0 ? { tags } : {}),
+          ...(linkedProjectId ? { linkedProjectId } : {}),
         },
       })}
     >

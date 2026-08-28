@@ -28,6 +28,19 @@ const baseFields = {
   notes: z.string().max(50_000).optional(),
   tags: z.array(z.string().max(60)).max(50).optional(),
   customFields: z.array(customFieldSchema).max(100).optional(),
+  /**
+   * An ENV project this item belongs with.
+   *
+   * The database password in the vault and the `DATABASE_URL` in a project are
+   * the same secret wearing two hats, and the useful thing is getting from one
+   * to the other.
+   *
+   * Stored in here rather than in a join table, and that is the whole point:
+   * a table would tell the operator which vault item goes with which project,
+   * which is a map of a person's infrastructure drawn without reading a single
+   * value. Inside the blob it is one more thing the server cannot see.
+   */
+  linkedProjectId: z.uuid().optional(),
 };
 
 export const loginFieldsSchema = z.object({

@@ -17,6 +17,7 @@ import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchItemHistory } from '@/lib/client/vault-api';
 import type { ItemVersion } from '@/lib/client/vault-api';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
+import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { toast } from '@/lib/client/toast-store';
 import { useView } from '@/lib/client/view-store';
@@ -1347,6 +1348,10 @@ function ItemRow({
         </div>
       ) : null}
 
+      {item.data.fields.linkedProjectId ? (
+        <LinkedProject projectId={item.data.fields.linkedProjectId} />
+      ) : null}
+
       {historyOpen ? <ItemHistory item={item} /> : null}
 
       {fields?.password ? (
@@ -1384,6 +1389,48 @@ function ItemRow({
         under whichever row was last touched.
       */}
     </li>
+  );
+}
+
+/**
+ * The project this credential belongs with.
+ *
+ * The environment data is only loaded when something on screen actually links
+ * to it, so a vault with no links never asks for it — and a vault that does
+ * asks once.
+ *
+ * If the project is not there, the row says the link is broken rather than
+ * disappearing. A link that silently vanishes when a project is deleted looks
+ * like the item was edited by somebody else.
+ */
+function LinkedProject({ projectId }: { projectId: string }) {
+  const router = useRouter();
+
+  const projects = useEnv((store) => store.projects);
+  const loadEnv = useEnv((store) => store.load);
+
+  useEffect(() => {
+    if (projects.length === 0) void loadEnv();
+  }, [projects.length, loadEnv]);
+
+  const project = activeProjects(projects).find((entry) => entry.id === projectId);
+
+  return (
+    <p className="text-accent-dim mt-2 font-mono text-[10px]" data-testid="item-linked-project">
+      <span aria-hidden="true">&gt; </span>
+      {project ? (
+        <button
+          type="button"
+          onClick={() => router.push(`/env?project=${projectId}`)}
+          data-testid="item-linked-open"
+          className="secret hover:text-accent underline underline-offset-4"
+        >
+          {project.name}
+        </button>
+      ) : (
+        <span className="text-muted">linked project not found</span>
+      )}
+    </p>
   );
 }
 
