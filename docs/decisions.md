@@ -589,3 +589,48 @@ exhaust for everybody. That requirement is now in self-hosting.md.
 
 RL-05, Turnstile, is still unbuilt and is now described that way in security.md,
 which had been claiming it.
+
+---
+
+## ADR-022 — The `.env` parser is written here, and variable keys are encrypted
+
+**Date:** 2026-08-28 · **Status:** Accepted
+
+**Context.** The environment manager has to read and write `.env` files. There
+are good libraries for that.
+
+**Decision — no library.** The text being parsed is a file full of production
+secrets, and it is parsed in the one origin that holds the vault keys. A
+dependency there is a supply-chain path straight to them, bought for about a
+hundred lines of string handling. It is written here, and covered by tests for
+what real files contain rather than what a happy path looks like: `export`
+prefixes, both quote styles, escapes, `#` comments including the trailing kind,
+empty values, CRLF, and values that run across lines — a private key pasted into
+a `.env` is one value across twenty lines, and losing it at the first newline is
+the most annoying possible bug.
+
+It is deliberately forgiving. Anything it cannot read is returned rather than
+dropped, because a file that half-parses is more useful than a refusal — but
+only if it says which half.
+
+**Decision — the key is encrypted too, not just the value.**
+`STRIPE_SECRET_KEY` in the clear tells an operator what a project integrates
+with, and the same list across a few thousand users is a map of who uses what.
+The value is the secret; the key is the metadata, and this product does not leak
+metadata either.
+
+**Decision — an import merges, and never removes.** An import that deleted the
+variables it did not mention would turn "add the two new keys from staging" into
+"lose everything else", and nobody would find out until a deploy failed.
+
+**Consequences.** What the server still sees is the shape: how many projects,
+how many environments each has, how many variables each holds, and when they
+changed. Same as the vault, and in the threat model rather than implied away.
+
+Ownership is the part that differs from the vault and needed the most care. A
+vault item carries the user it belongs to; an environment belongs to a project
+and a variable to an environment. Every read walks down from the projects a
+session owns and every write is checked against the same walk, because getting
+it wrong here would not leak a name — it would hand somebody else's production
+secrets to whoever asked for them by id. Four of the eleven API tests are that
+attack.

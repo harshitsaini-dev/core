@@ -103,12 +103,12 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID     | Feature                                              | Phase | Status |
 | ------ | ---------------------------------------------------- | ----- | ------ |
-| ENV-01 | Project-scoped secret organisation                   | P4    | TODO   |
-| ENV-02 | Per-project environments (dev / staging / prod)      | P4    | TODO   |
-| ENV-03 | Terminal-style editor with syntax highlighting       | P4    | TODO   |
-| ENV-04 | One-click `.env` download                            | P4    | TODO   |
-| ENV-05 | Copy whole environment to clipboard as `.env`        | P4    | TODO   |
-| ENV-06 | Export as shell `export KEY="value"` lines           | P4    | TODO   |
+| ENV-01 | Project-scoped secret organisation                   | P4    | DONE   |
+| ENV-02 | Per-project environments (dev / staging / prod)      | P4    | DONE   |
+| ENV-03 | Terminal-style editor with syntax highlighting       | P4    | DONE   |
+| ENV-04 | One-click `.env` download                            | P4    | DONE   |
+| ENV-05 | Copy whole environment to clipboard as `.env`        | P4    | DONE   |
+| ENV-06 | Export as shell `export KEY="value"` lines           | P4    | DONE   |
 | ENV-07 | Export as Docker `--env` / `docker-compose` fragment | P6    | TODO   |
 | ENV-08 | Mask / unmask all values with one button             | P4    | TODO   |
 | ENV-09 | Drag-and-drop `.env` import with parsing             | P4    | TODO   |
@@ -116,7 +116,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ENV-11 | Version history per variable                         | P4    | TODO   |
 | ENV-12 | Diff viewer between versions (red/green)             | P4    | TODO   |
 | ENV-13 | Copy a single variable value                         | P4    | TODO   |
-| ENV-14 | Duplicate an environment (dev to staging)            | P4    | TODO   |
+| ENV-14 | Duplicate an environment (dev to staging)            | P4    | DONE   |
 | ENV-15 | Per-variable notes / description                     | P4    | TODO   |
 | ENV-16 | Warn on empty or placeholder values                  | P6    | TODO   |
 

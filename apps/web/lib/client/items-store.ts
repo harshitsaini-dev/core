@@ -535,6 +535,9 @@ async function commitMany(set: Setter, get: Getter, operations: Operation[]): Pr
  * the reverse mistake matters more: telling somebody their change is synced
  * when it is sitting in a queue is worse than a stale "offline".
  */
+/** How often a queued change is retried once the browser is back. */
+const RETRY_INTERVAL_MS = 3000;
+
 export function watchConnectivity(): () => void {
   if (typeof window === 'undefined') return () => undefined;
 
@@ -548,11 +551,34 @@ export function watchConnectivity(): () => void {
     useItems.getState().setOnline(true);
   };
 
+  /**
+   * A retry that does not depend on being told.
+   *
+   * The outbox used to drain on exactly two triggers: a new write, and the
+   * browser firing `online`. Both can be missed. If a flush is already in
+   * flight when `online` arrives, the guard turns the second one away — and
+   * when the first finally fails, nothing is left to try again. The app then
+   * sits showing "offline" with a change in the queue until somebody happens to
+   * edit something else.
+   *
+   * That is not a hypothetical either: it is what left a reconnected vault
+   * stuck offline for the full thirty seconds a test was willing to wait.
+   *
+   * So: a slow poll, only while there is something queued and the browser
+   * believes it has a network. It costs nothing when the queue is empty, which
+   * is almost always.
+   */
+  const retry = setInterval(() => {
+    const state = useItems.getState();
+    if (state.pending > 0 && !state.syncing && navigator.onLine) void state.flush();
+  }, RETRY_INTERVAL_MS);
+
   window.addEventListener('online', update);
   window.addEventListener('offline', update);
   update();
 
   return () => {
+    clearInterval(retry);
     window.removeEventListener('online', update);
     window.removeEventListener('offline', update);
   };

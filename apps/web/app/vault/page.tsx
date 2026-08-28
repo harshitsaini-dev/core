@@ -453,6 +453,19 @@ export default function VaultPage() {
             >
               folders
             </Button>
+            {/*
+              router.push, not a link to a URL. The keys live in memory and a
+              full page load drops them, which would land on a locked env
+              screen a moment after leaving an unlocked vault.
+            */}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => router.push('/env')}
+              data-testid="open-env"
+            >
+              env
+            </Button>
             {trashed.length > 0 ? (
               <Button
                 type="button"
