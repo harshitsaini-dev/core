@@ -31,7 +31,20 @@ export async function openVault(
 
   // `page.request` shares the browser context's cookies, so what happens here
   // and what happens in the page are the same session.
-  const created = await page.request.post('/api/auth/signup', { data: account.payload });
+  //
+  // Retried once on a connection-level error, and only on one. `next dev`
+  // serves every worker from a single event loop and occasionally resets a
+  // connection under four of them, which fails the test before it has done
+  // anything — a red result about the development server, in a spec about a
+  // dropdown. A response that arrives and is wrong is never retried: that is
+  // the product, and it should fail.
+  let created;
+  try {
+    created = await page.request.post('/api/auth/signup', { data: account.payload });
+  } catch {
+    created = await page.request.post('/api/auth/signup', { data: account.payload });
+  }
+
   expect(created.status(), 'could not create the test account').toBe(200);
 
   await unlockVault(page, account.payload.email, password);

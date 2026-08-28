@@ -112,20 +112,16 @@ test.describe('prelogin timing', () => {
   test('answers in the same time whether or not the account exists', async ({ request }) => {
     const SAMPLES = 40;
 
-    const measure = async (email: string): Promise<number[]> => {
-      const timings: number[] = [];
-      for (let i = 0; i < SAMPLES; i += 1) {
-        const started = Date.now();
-        await prelogin(request, email);
-        timings.push(Date.now() - started);
-      }
-      return timings;
+    const once = async (email: string): Promise<number> => {
+      const started = Date.now();
+      await prelogin(request, email);
+      return Date.now() - started;
     };
 
     // Warm up first: the first request through a cold route compiles it, and
     // that one-off cost would otherwise land entirely on whichever address is
     // measured first and look like a leak.
-    await measure(KNOWN);
+    for (let i = 0; i < SAMPLES; i += 1) await once(KNOWN);
 
     // Three groups, not two. The second known group is a control: it is the
     // same address measured twice, so whatever difference appears between those
@@ -136,9 +132,23 @@ test.describe('prelogin timing', () => {
     // it, with the *sign* of the difference flipping between attempts of the
     // same run (unknown 44 ms slower, then known 20 ms slower). A leak has a
     // direction; noise does not.
-    const controlA = await measure(KNOWN);
-    const unknown = await measure(UNKNOWN);
-    const controlB = await measure(KNOWN);
+    //
+    // Interleaved rather than run as three blocks. Blocks assume the noise
+    // holds still for the length of a block, and on a dev server shared with
+    // three other test workers it does not: one slow patch landing inside the
+    // middle block is attributed entirely to the unknown address and reads as
+    // an 82 ms leak past a 12 ms control spread. That is what this test
+    // reported on a loaded run. Interleaving puts any such patch into all three
+    // groups at once, which is the only thing that makes the control a control.
+    const controlA: number[] = [];
+    const unknown: number[] = [];
+    const controlB: number[] = [];
+
+    for (let i = 0; i < SAMPLES; i += 1) {
+      controlA.push(await once(KNOWN));
+      unknown.push(await once(UNKNOWN));
+      controlB.push(await once(KNOWN));
+    }
 
     const median = (values: number[]): number => {
       const sorted = [...values].sort((a, b) => a - b);

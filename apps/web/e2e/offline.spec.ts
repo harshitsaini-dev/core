@@ -309,11 +309,28 @@ test.describe('service worker freshness', () => {
 
   const POISON = '/* a stale bundle */';
 
+  /**
+   * Ask the worker for a URL, with the browser's own HTTP cache taken out.
+   *
+   * `no-store`, because without it this test lied in one direction and was
+   * flaky in the other. Chromium answers a repeat request from its disk cache
+   * before the worker's `fetch` ever reaches the network, so `setOffline(true)`
+   * did not reliably make that fetch throw — the offline half passed alone and
+   * failed under a full parallel run, having been handed the real bundle by a
+   * cache neither the test nor the worker was talking about.
+   */
+  async function fetchThroughWorker(page: Page, url: string): Promise<string> {
+    return page.evaluate(
+      async (target) => (await fetch(target, { cache: 'no-store' })).text(),
+      url,
+    );
+  }
+
   test('serves the current script even when a stale one is cached', async ({ page }) => {
     const url = await loadedScript(page);
     await poison(page, url, POISON);
 
-    const served = await page.evaluate(async (target) => (await fetch(target)).text(), url);
+    const served = await fetchThroughWorker(page, url);
 
     // Cache-first would hand back the poison. Network-first goes and looks.
     expect(served).not.toBe(POISON);
@@ -327,7 +344,7 @@ test.describe('service worker freshness', () => {
     await poison(page, url, POISON);
 
     await context.setOffline(true);
-    const served = await page.evaluate(async (target) => (await fetch(target)).text(), url);
+    const served = await fetchThroughWorker(page, url);
     await context.setOffline(false);
 
     expect(served).toBe(POISON);
