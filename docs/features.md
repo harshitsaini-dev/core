@@ -62,7 +62,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-07 | Identity profiles (name, address, phone)                     | P4    | DONE   |
 | VLT-08 | SSH key / certificate item type                              | P4    | DONE   |
 | VLT-09 | Encrypted attachments up to 10 MB (R2)                       | P6    | TODO   |
-| VLT-10 | Inline editing directly in the list                          | P3    | TODO   |
+| VLT-10 | Inline rename directly in the list (desktop)                 | P3    | DONE   |
 | VLT-11 | Item version history with per-version restore                | P4    | DONE   |
 | VLT-12 | Trash with 30-day retention and restore                      | P3    | DONE   |
 | VLT-13 | Bulk select: delete, move, tag                               | P3    | DONE   |

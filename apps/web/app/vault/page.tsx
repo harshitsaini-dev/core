@@ -1252,6 +1252,8 @@ function ItemRow({
   const restore = useItems((store) => store.restore);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const save = useItems((store) => store.save);
 
   const selected = useView((store) => store.selected.has(item.id));
   const toggleSelected = useView((store) => store.toggle);
@@ -1342,10 +1344,31 @@ function ItemRow({
             />
           ) : null}
           <div className="min-w-0">
-            <p className="text-fg secret truncate font-mono text-sm" data-testid="item-row-title">
-              {item.favorite ? <span aria-label="favourite">★ </span> : null}
-              {item.data.fields.title}
-            </p>
+            {renaming ? (
+              <InlineRename
+                value={item.data.fields.title}
+                onCancel={() => setRenaming(false)}
+                onCommit={(title) => {
+                  setRenaming(false);
+                  if (title === item.data.fields.title) return;
+                  void save({ ...item.data, fields: { ...item.data.fields, title } }, item.id);
+                }}
+              />
+            ) : (
+              <p
+                className="text-fg secret truncate font-mono text-sm"
+                data-testid="item-row-title"
+                // Double-click, the convention every list of rows already uses.
+                // Not a seventh button on a row that has six, and not a single
+                // click, which is how somebody reaching for a row ends up in an
+                // editor they did not ask for.
+                onDoubleClick={() => setRenaming(true)}
+                title="double-click to rename"
+              >
+                {item.favorite ? <span aria-label="favourite">★ </span> : null}
+                {item.data.fields.title}
+              </p>
+            )}
             {item.data.type !== 'login' ? (
               <p className="text-accent-dim font-mono text-[10px] tracking-widest uppercase">
                 {item.data.type}
@@ -2159,6 +2182,79 @@ function ItemHistory({ item }: { item: DecryptedItem }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * Renaming an item without leaving the list.
+ *
+ * A desktop accelerator: the trigger is a double-click, which a touch screen
+ * does not produce. That is not an oversight left to be fixed later. On a phone
+ * an inline field sits under a keyboard covering half the list, and the edit
+ * button is already one tap away with the title as its first field — so the
+ * accelerator is worth having where it helps and not worth faking where it does
+ * not.
+ *
+ * The title, and only the title. An inline field for the password would put a
+ * live secret into a text input in a scrollable list — and blur-all cannot
+ * cover a field somebody is typing into, so the one control that exists for
+ * "someone is looking at my screen" would have a hole in it exactly where the
+ * password is. Renaming is also the edit people actually do in passing; the
+ * rest is worth the full form.
+ */
+function InlineRename({
+  value,
+  onCommit,
+  onCancel,
+}: {
+  readonly value: string;
+  readonly onCommit: (title: string) => void;
+  readonly onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    input.current?.select();
+  }, []);
+
+  function commit(): void {
+    const title = draft.trim();
+    // An empty title leaves an unfindable row behind, so it is treated as a
+    // cancel rather than saved. Nobody means it.
+    if (title === '') {
+      onCancel();
+      return;
+    }
+    onCommit(title);
+  }
+
+  return (
+    <input
+      ref={input}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commit();
+        }
+        if (event.key === 'Escape') {
+          // `preventDefault` only. The first version also stopped propagation,
+          // with a comment claiming that otherwise this Escape would close the
+          // screen behind the field — it would not. The vault's handler ignores
+          // Escape raised from anything being typed into, and ignores anything
+          // already handled, so it was guarded twice before this ran at all.
+          // Removing the call changed no test, which is how it was found.
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+      aria-label="rename item"
+      data-testid="rename-input"
+      className="border-accent bg-bg text-fg w-full border px-2 py-1 font-mono text-sm outline-none"
+    />
   );
 }
 
