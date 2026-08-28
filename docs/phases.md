@@ -178,10 +178,16 @@ VLT-14, VLT-15, ORG-09, GEN-05, GEN-06
 
 **Exit criteria**
 
-- [ ] A real project's `.env` imports, exports and byte-matches the original
-- [ ] Comments and quoted values survive the import/export round trip
-- [ ] Diff viewer correctly shows added, removed and changed variables
-- [ ] Rolling back a variable restores the exact previous value
+- [x] A real project's `.env` imports, exports and byte-matches the original —
+      asserted in `env.test.ts` over every value the parser can read, and end to
+      end in `env.spec.ts`
+- [x] Comments and quoted values survive the import/export round trip — a
+      comment becomes the note beside the variable and is written back out as a
+      comment
+- [x] Diff viewer correctly shows added, removed and changed variables —
+      `diff.test.ts`, including that no line of either side is ever dropped
+- [x] Rolling back a variable restores the exact previous value — and the
+      restore is itself undoable, since the value it replaced is recorded too
 - [ ] The author has moved every real project `.env` into Core
 
 ---

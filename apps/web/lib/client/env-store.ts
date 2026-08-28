@@ -76,7 +76,7 @@ interface EnvState {
   deleteVar: (id: string) => Promise<void>;
   importVars: (
     environmentId: string,
-    incoming: readonly { key: string; value: string }[],
+    incoming: readonly { key: string; value: string; note?: string }[],
   ) => Promise<number>;
 }
 
@@ -318,14 +318,19 @@ export const useEnv = create<EnvState>((set, get) => ({
 
     for (const entry of incoming) {
       const match = byKey.get(entry.key);
-      if (match && match.value === entry.value) continue;
+      const note = entry.note ?? match?.note ?? null;
+
+      // Nothing to write when both halves already match. Checking the note as
+      // well means a file re-imported after its comments were edited updates
+      // them, rather than looking like a no-op.
+      if (match && match.value === entry.value && match.note === note) continue;
 
       written.push({
         id: match?.id ?? newEnvId(),
         environmentId,
         key: entry.key,
         value: entry.value,
-        note: match?.note ?? null,
+        note,
         sortOrder: match?.sortOrder ?? existing.length + written.length,
         createdAt: match?.createdAt ?? now,
         updatedAt: now,

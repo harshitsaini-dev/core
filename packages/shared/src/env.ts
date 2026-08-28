@@ -98,6 +98,19 @@ export function isValidEnvKey(key: string): boolean {
 export interface ParsedVar {
   readonly key: string;
   readonly value: string;
+  /**
+   * The comment written above this variable, if there was one.
+   *
+   * A `#` line in a `.env` almost always documents the variable beneath it,
+   * and that is the same thing a per-variable note is. Carrying it across
+   * means a file survives an import and an export with the part that
+   * explains what any of it is for — otherwise the first thing a round trip
+   * throws away, and the last thing anybody notices.
+   *
+   * A comment separated from the variable by a blank line is a section
+   * heading rather than a description, and is attached to nothing.
+   */
+  readonly note?: string;
 }
 
 export interface ParseResult {
@@ -132,6 +145,7 @@ export function parseDotenv(input: string): ParseResult {
   const text = input.replace(/\r\n?/g, '\n');
 
   let index = 0;
+  let comment: string[] = [];
 
   while (index < text.length) {
     const lineEnd = text.indexOf('\n', index);
@@ -139,7 +153,16 @@ export function parseDotenv(input: string): ParseResult {
     const line = text.slice(index, stop);
     const trimmed = line.trim();
 
-    if (trimmed === '' || trimmed.startsWith('#')) {
+    if (trimmed === '') {
+      // A blank line ends a description. What came before it was about the
+      // section, not about whatever happens to come next.
+      comment = [];
+      index = stop + 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('#')) {
+      comment.push(trimmed.replace(/^#+\s?/, ''));
       index = stop + 1;
       continue;
     }
@@ -149,6 +172,7 @@ export function parseDotenv(input: string): ParseResult {
 
     if (equals <= 0) {
       skipped.push(trimmed);
+      comment = [];
       index = stop + 1;
       continue;
     }
@@ -156,9 +180,13 @@ export function parseDotenv(input: string): ParseResult {
     const key = withoutExport.slice(0, equals).trim();
     if (!isValidEnvKey(key)) {
       skipped.push(trimmed);
+      comment = [];
       index = stop + 1;
       continue;
     }
+
+    const note = comment.join(' ').trim();
+    comment = [];
 
     const rest = withoutExport.slice(equals + 1);
     const quote = rest.startsWith('"') ? '"' : rest.startsWith("'") ? "'" : null;
@@ -167,7 +195,7 @@ export function parseDotenv(input: string): ParseResult {
       // Unquoted: a `#` starts a comment, and the value stops at it.
       const hash = rest.indexOf(' #');
       const raw = hash === -1 ? rest : rest.slice(0, hash);
-      vars.push({ key, value: raw.trim() });
+      vars.push({ key, value: raw.trim(), ...(note ? { note } : {}) });
       index = stop + 1;
       continue;
     }
@@ -179,7 +207,7 @@ export function parseDotenv(input: string): ParseResult {
     const valueStart = index + line.indexOf(rest) + 1;
     const { value, end } = readQuoted(text, valueStart, quote);
 
-    vars.push({ key, value });
+    vars.push({ key, value, ...(note ? { note } : {}) });
     const nextBreak = text.indexOf('\n', end);
     index = nextBreak === -1 ? text.length : nextBreak + 1;
   }
@@ -241,9 +269,18 @@ function quote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
 }
 
-/** Write a `.env` file. */
+/** Write a `.env` file, notes included as the comments they came from. */
 export function formatDotenv(vars: readonly ParsedVar[]): string {
-  return vars.map((entry) => `${entry.key}=${quote(entry.value)}`).join('\n') + '\n';
+  return (
+    vars
+      .map((entry) => {
+        const line = `${entry.key}=${quote(entry.value)}`;
+        // A newline inside a note would break the file into lines that are
+        // not comments, so it is flattened rather than escaped.
+        return entry.note ? `# ${entry.note.replace(/\s*\n\s*/g, ' ')}\n${line}` : line;
+      })
+      .join('\n') + '\n'
+  );
 }
 
 /** Write the same thing as shell `export` lines, for pasting into a terminal. */

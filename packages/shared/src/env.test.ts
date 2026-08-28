@@ -240,3 +240,59 @@ describe('isValidEnvKey', () => {
     }
   });
 });
+
+describe('comments', () => {
+  it('attaches a comment to the variable beneath it', () => {
+    // A `#` line in a `.env` almost always documents what follows, and that is
+    // the same thing a per-variable note is.
+    const result = parseDotenv('# Used by the billing job only.\nTOKEN=abc');
+    expect(result.vars[0]?.note).toBe('Used by the billing job only.');
+  });
+
+  it('joins consecutive comment lines', () => {
+    const result = parseDotenv('# First line.\n# Second line.\nTOKEN=abc');
+    expect(result.vars[0]?.note).toBe('First line. Second line.');
+  });
+
+  it('treats a comment separated by a blank line as a heading', () => {
+    // "# Payments" above a gap is about the section, not about whatever happens
+    // to come next.
+    const result = parseDotenv('# Payments\n\nTOKEN=abc');
+    expect(result.vars[0]?.note).toBeUndefined();
+  });
+
+  it('does not carry a comment past the variable it described', () => {
+    const result = parseDotenv('# About A.\nA=1\nB=2');
+    expect(result.vars[0]?.note).toBe('About A.');
+    expect(result.vars[1]?.note).toBeUndefined();
+  });
+
+  it('strips the hashes and the space people put after them', () => {
+    expect(parseDotenv('###   Loud.\nA=1').vars[0]?.note).toBe('Loud.');
+  });
+
+  it('writes a note back out as a comment', () => {
+    expect(formatDotenv([{ key: 'A', value: '1', note: 'Why.' }])).toBe('# Why.\nA=1\n');
+  });
+
+  it('survives a full round trip, which is the point', () => {
+    // The exit criterion this was written for: comments and quoted values both
+    // come back. Losing the comments means losing the only explanation of what
+    // any of it is for.
+    const original = '# The database.\nDB_URL="postgres://host/db"\n\n# Unrelated heading\nB=2\n';
+    const first = parseDotenv(original);
+    const second = parseDotenv(formatDotenv(first.vars));
+
+    expect(second.vars).toEqual(first.vars);
+    expect(second.vars[0]?.note).toBe('The database.');
+    expect(second.vars[0]?.value).toBe('postgres://host/db');
+  });
+
+  it('flattens a multi-line note so the file stays readable', () => {
+    // A newline inside a note would break the file into lines that are not
+    // comments and would then fail to parse back.
+    const written = formatDotenv([{ key: 'A', value: '1', note: 'One.\nTwo.' }]);
+    expect(written).toBe('# One. Two.\nA=1\n');
+    expect(parseDotenv(written).vars[0]?.note).toBe('One. Two.');
+  });
+});

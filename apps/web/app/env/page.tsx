@@ -356,7 +356,13 @@ function VariableEditor({
   }, [environment.id]);
 
   const keyIsValid = key === '' || isValidEnvKey(key);
-  const asParsed = rows.map((row) => ({ key: row.key, value: row.value }));
+  // Notes travel with the variables, so an export carries the comments an
+  // import brought in — and the explanations somebody added since.
+  const asParsed = rows.map((row) => ({
+    key: row.key,
+    value: row.value,
+    ...(row.note ? { note: row.note } : {}),
+  }));
 
   async function copyAll(text: string, label: string): Promise<void> {
     const ok = await copySecret(text);
@@ -742,6 +748,7 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
 function History({ row }: { row: DecryptedEnvVar }) {
   const keys = useVault((vault) => vault.keys);
   const recent = useEnv((store) => store.recentVersions[row.id]);
+  const saveVar = useEnv((store) => store.saveVar);
 
   const [versions, setVersions] = useState<EnvVarVersion[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -831,11 +838,34 @@ function History({ row }: { row: DecryptedEnvVar }) {
 
           return (
             <li key={version.id} data-testid="history-entry">
-              <p className="text-muted font-mono text-[10px]">
-                <span aria-hidden="true">&gt; </span>
-                {new Date(version.createdAt).toLocaleString()} ·{' '}
-                <span data-testid="history-change-count">{countChanges(lines)}</span> line(s)
-                changed
+              <p className="text-muted flex flex-wrap items-center gap-2 font-mono text-[10px]">
+                <span>
+                  <span aria-hidden="true">&gt; </span>
+                  {new Date(version.createdAt).toLocaleString()} ·{' '}
+                  <span data-testid="history-change-count">{countChanges(lines)}</span> line(s)
+                  changed
+                </span>
+                {/*
+                  Restoring is an ordinary save of the old value, so the value
+                  it replaces is itself recorded. Going back is undoable in turn
+                  — which matters, because restoring the wrong version is
+                  exactly the mistake somebody makes while trying to fix one.
+                */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void saveVar(row.environmentId, {
+                      id: row.id,
+                      key: row.key,
+                      value: version.value,
+                    });
+                    toast(`${row.key} restored to an earlier value.`, { tone: 'warning' });
+                  }}
+                  data-testid="history-restore"
+                  className="text-accent-dim hover:text-accent tracking-widest uppercase underline underline-offset-4"
+                >
+                  restore
+                </button>
               </p>
 
               {revealed ? (

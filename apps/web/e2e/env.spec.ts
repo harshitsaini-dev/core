@@ -564,3 +564,104 @@ test.describe('variable notes', () => {
     for (const body of bodies) expect(body).not.toContain('reveals-what-this-is-for');
   });
 });
+
+test.describe('comments in a .env', () => {
+  test.slow();
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('an imported comment becomes the note beside the variable', async ({ page }) => {
+    await openEnv(page, 'env-comment-import');
+    await makeProject(page, 'Checkout');
+
+    await page.getByTestId('open-import').click();
+    await page.getByTestId('import-text').fill('# Only the billing job reads this.\nTOKEN=abc\n');
+    await page.getByTestId('import-apply').click();
+
+    await expect(page.getByTestId('var-row-note-view')).toContainText('billing job');
+  });
+
+  test('exports the note back out as a comment', async ({ page }) => {
+    await openEnv(page, 'env-comment-export');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'abc');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('Why this exists.');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('copy-dotenv').click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+
+    expect(copied).toContain('# Why this exists.');
+    expect(copied).toContain('TOKEN=abc');
+  });
+
+  test('a comment survives the whole round trip', async ({ page }) => {
+    // The Phase 4 exit criterion. Losing the comments means losing the only
+    // explanation of what any of it is for, and nobody notices until later.
+    await openEnv(page, 'env-comment-roundtrip');
+    await makeProject(page, 'Checkout');
+
+    const original = '# The database.\nDB_URL="postgres://host/db"\n';
+
+    await page.getByTestId('open-import').click();
+    await page.getByTestId('import-text').fill(original);
+    await page.getByTestId('import-apply').click();
+    await expect(page.getByTestId('var-row')).toHaveCount(1);
+
+    await page.getByTestId('copy-dotenv').click();
+    const exported = await page.evaluate(() => navigator.clipboard.readText());
+
+    expect(exported).toContain('# The database.');
+    expect(exported).toContain('DB_URL=');
+
+    // And re-importing what was exported changes nothing.
+    await page.getByTestId('open-import').click();
+    await page.getByTestId('import-text').fill(exported);
+    await page.getByTestId('import-apply').click();
+
+    await expect(page.getByTestId('var-row')).toHaveCount(1);
+    await expect(page.getByTestId('toast').last()).toContainText('0 variable(s) imported');
+  });
+});
+
+test.describe('restoring a variable', () => {
+  test.slow();
+
+  test('puts back the exact previous value', async ({ page }) => {
+    await openEnv(page, 'env-restore');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'the-original-value');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('the-replacement');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    await page.getByTestId('history-restore').first().click();
+
+    await page.getByTestId('var-row-reveal').click();
+    await expect(page.getByTestId('var-row-value')).toContainText('the-original-value');
+  });
+
+  test('a restore is itself undoable', async ({ page }) => {
+    // Restoring the wrong version is exactly the mistake somebody makes while
+    // trying to fix one.
+    await openEnv(page, 'env-restore-undo');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'one');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('two');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    await page.getByTestId('history-restore').first().click();
+
+    // The value that was replaced by the restore is now in the history too.
+    await expect(page.getByTestId('history-entry')).toHaveCount(2);
+  });
+});
