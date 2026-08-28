@@ -1,7 +1,7 @@
-import { folders, vaultItems } from '@core/db';
+import { folders, itemVersions, vaultItems } from '@core/db';
 import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import type { SyncedFolder, SyncedItem } from '@core/shared';
-import { and, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
@@ -77,6 +77,19 @@ const restoreSchema = z.object({
   id: z.uuid(),
 });
 
+/**
+ * The contents an edit replaced.
+ *
+ * Sent by the client alongside the change, because the server cannot read
+ * either version and so cannot tell whether anything actually differs.
+ */
+const versionSchema = z.object({
+  op: z.literal('version'),
+  id: z.uuid(),
+  itemId: z.uuid(),
+  dataEnc: envelope,
+});
+
 const pushSchema = z.object({
   operations: z
     .array(
@@ -84,6 +97,7 @@ const pushSchema = z.object({
         upsertSchema,
         deleteSchema,
         restoreSchema,
+        versionSchema,
         folderUpsertSchema,
         folderDeleteSchema,
       ]),
@@ -126,6 +140,36 @@ function folderToWire(row: typeof folders.$inferSelect): SyncedFolder {
     updatedAt: row.updatedAt.getTime(),
     deletedAt: row.deletedAt?.getTime() ?? null,
   };
+}
+
+/**
+ * How many previous versions of an item to keep.
+ *
+ * The same reasoning as the environment manager: every one of these is a
+ * password that was live at some point, and the one somebody rotated because
+ * it leaked is exactly the one they do not want kept forever.
+ */
+const MAX_ITEM_VERSIONS = 10;
+
+async function pruneItemVersions(
+  db: ReturnType<typeof getRequestContext>['db'],
+  itemId: string,
+): Promise<void> {
+  const rows = await db
+    .select({ id: itemVersions.id })
+    .from(itemVersions)
+    .where(eq(itemVersions.itemId, itemId))
+    .orderBy(asc(itemVersions.createdAt));
+
+  const excess = rows.slice(0, Math.max(0, rows.length - MAX_ITEM_VERSIONS));
+  if (excess.length === 0) return;
+
+  await db.delete(itemVersions).where(
+    inArray(
+      itemVersions.id,
+      excess.map((row) => row.id),
+    ),
+  );
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -235,7 +279,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     ...new Set(
       operations
         .filter((operation) => !operation.op.startsWith('folder-'))
-        .map((operation) => operation.id),
+        // A version names the item it belongs to, not itself: its own id is
+        // the new row's, which nobody owns yet.
+        .map((operation) => (operation.op === 'version' ? operation.itemId : operation.id)),
     ),
   ];
   const folderIds = [
@@ -306,6 +352,23 @@ export async function POST(request: NextRequest): Promise<Response> {
         .update(vaultItems)
         .set({ folderId: null, updatedAt: now })
         .where(and(eq(vaultItems.folderId, operation.id), eq(vaultItems.userId, userId)));
+      continue;
+    }
+
+    if (operation.op === 'version') {
+      if (!owned.has(operation.itemId)) continue;
+
+      await db
+        .insert(itemVersions)
+        .values({
+          id: operation.id,
+          itemId: operation.itemId,
+          dataEnc: unsafeAsEncrypted(operation.dataEnc),
+          createdAt: now,
+        })
+        .onConflictDoNothing();
+
+      await pruneItemVersions(db, operation.itemId);
       continue;
     }
 

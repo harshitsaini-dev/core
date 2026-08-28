@@ -183,6 +183,12 @@ export async function decryptCached(
 export function operationToSynced(operation: Operation, existing?: SyncedItem): SyncedItem | null {
   if (isFolderOperation(operation)) return null;
 
+  // A version is a new row of its own, not a change to the item. Falling
+  // through would look up the *version's* id in the item cache — which happens
+  // to miss today, and would quietly clear an item's `deletedAt` on the day two
+  // ids ever collided.
+  if (operation.op === 'version') return null;
+
   if (operation.op !== 'upsert') {
     if (!existing) return null;
     return {
@@ -258,7 +264,8 @@ export type Operation =
       lastUsedAt: number | null;
     }
   | { op: 'delete'; id: string }
-  | { op: 'restore'; id: string };
+  | { op: 'restore'; id: string }
+  | { op: 'version'; id: string; itemId: string; dataEnc: string };
 
 /** Encrypt an item into the operation that will store it. */
 export async function toUpsert(
@@ -335,6 +342,62 @@ export async function toFolderUpsert(
     color: folder.color ?? null,
     sortOrder: folder.sortOrder ?? 0,
   };
+}
+
+export interface ItemVersion {
+  readonly id: string;
+  readonly data: VaultItemData;
+  readonly createdAt: number;
+}
+
+/** The contents an edit is about to replace, ready to store. */
+export async function toItemVersion(
+  keys: AccountKeys,
+  previous: { id: string; data: VaultItemData },
+): Promise<Operation> {
+  return {
+    op: 'version',
+    id: crypto.randomUUID(),
+    itemId: previous.id,
+    dataEnc: await encryptJson(keys.dataKey, previous.data),
+  };
+}
+
+/**
+ * The previous versions of one item.
+ *
+ * Asked for when somebody opens the history, not carried by every sync: a vault
+ * of three hundred items would otherwise ship three thousand blobs nobody asked
+ * to see.
+ */
+export async function fetchItemHistory(keys: AccountKeys, itemId: string): Promise<ItemVersion[]> {
+  const response = await fetch(`/api/vault/history?itemId=${encodeURIComponent(itemId)}`, {
+    credentials: 'same-origin',
+  });
+  if (!response.ok) throw new Error('Could not load the history.');
+
+  const body = (await response.json()) as {
+    versions: { id: string; dataEnc: string; createdAt: number }[];
+  };
+
+  const decrypted = await Promise.all(
+    body.versions.map(async (row) => {
+      try {
+        const parsed = vaultItemDataSchema.safeParse(
+          await decryptJson<unknown>(keys.dataKey, row.dataEnc),
+        );
+        if (!parsed.success) return null;
+        return { id: row.id, data: parsed.data, createdAt: row.createdAt };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  // A version that will not open is dropped rather than shown as a broken row.
+  // Unlike a current item, there is nothing to lose by omitting it: the value
+  // it held is gone either way, and a placeholder in a history list is noise.
+  return decrypted.filter((entry): entry is ItemVersion => entry !== null);
 }
 
 /** A fresh item id. Generated client-side so an item exists before it syncs. */

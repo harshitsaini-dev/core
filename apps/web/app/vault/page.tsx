@@ -14,6 +14,8 @@ import { Button, Checkbox, Input, Panel, Select } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
+import { fetchItemHistory } from '@/lib/client/vault-api';
+import type { ItemVersion } from '@/lib/client/vault-api';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { toast } from '@/lib/client/toast-store';
@@ -1143,6 +1145,8 @@ function ItemRow({
   const remove = useItems((store) => store.remove);
   const restore = useItems((store) => store.restore);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const selected = useView((store) => store.selected.has(item.id));
   const toggleSelected = useView((store) => store.toggle);
 
@@ -1296,6 +1300,15 @@ function ItemRow({
           <Button
             type="button"
             variant="ghost"
+            onClick={() => setHistoryOpen((current) => !current)}
+            aria-pressed={historyOpen}
+            data-testid="item-history"
+          >
+            history
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => {
               void remove(item.id);
               toast('Moved to trash.', {
@@ -1334,6 +1347,8 @@ function ItemRow({
         </div>
       ) : null}
 
+      {historyOpen ? <ItemHistory item={item} /> : null}
+
       {fields?.password ? (
         <p className="text-muted mt-2 font-mono text-[10px]" data-testid="item-password-age">
           <span aria-hidden="true">&gt; </span>
@@ -1369,6 +1384,112 @@ function ItemRow({
         under whichever row was last touched.
       */}
     </li>
+  );
+}
+
+/**
+ * What an item used to be.
+ *
+ * Titles and the same subtitle line the list shows — never a stored value. A
+ * history panel that printed old passwords would be a list of every password
+ * somebody has ever used, sitting open on the screen, which is a worse thing to
+ * leave lying around than the current one.
+ *
+ * Restoring is an ordinary save, so the version it replaces is recorded in turn
+ * and going back is undoable.
+ */
+function ItemHistory({ item }: { item: DecryptedItem }) {
+  const keys = useVault((vault) => vault.keys);
+  const recent = useItems((store) => store.recentVersions[item.id]);
+  const save = useItems((store) => store.save);
+
+  const [versions, setVersions] = useState<ItemVersion[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!keys) return;
+
+    let cancelled = false;
+    void fetchItemHistory(keys, item.id)
+      .then((result) => {
+        if (!cancelled) setVersions(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // `updatedAt` so a save re-asks, and a redraw for any other reason does not.
+  }, [keys, item.id, item.updatedAt]);
+
+  // What the server returned plus what this session wrote, since a read
+  // straight after a write does not reliably include it.
+  const merged = [...(recent ?? []), ...(versions ?? [])].filter(
+    (entry, index, all) =>
+      all.findIndex((other) => JSON.stringify(other.data) === JSON.stringify(entry.data)) === index,
+  );
+
+  if (failed) {
+    return (
+      <p className="text-warning mt-3 font-mono text-xs" data-testid="item-history-error">
+        <span aria-hidden="true">! </span>
+        Could not load the history.
+      </p>
+    );
+  }
+
+  if (versions === null && merged.length === 0) {
+    return (
+      <p className="text-muted mt-3 font-mono text-xs">
+        <span aria-hidden="true">&gt; </span>
+        loading...
+      </p>
+    );
+  }
+
+  if (merged.length === 0) {
+    return (
+      <p className="text-muted mt-3 font-mono text-xs" data-testid="item-history-empty">
+        <span aria-hidden="true">&gt; </span>
+        no earlier versions
+      </p>
+    );
+  }
+
+  return (
+    <ol className="border-line mt-3 space-y-2 border-l pl-3" data-testid="item-history-list">
+      {merged.map((version) => (
+        <li
+          key={version.id}
+          className="flex flex-wrap items-center gap-2"
+          data-testid="item-version"
+        >
+          <span className="text-muted font-mono text-[10px]">
+            <span aria-hidden="true">&gt; </span>
+            {new Date(version.createdAt).toLocaleString()}
+          </span>
+          <span className="text-fg secret truncate font-mono text-[11px]">
+            {version.data.fields.title}
+          </span>
+          <span className="text-muted secret truncate font-mono text-[10px]">
+            {itemSubtitle(version.data)}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              void save(version.data, item.id);
+              toast('Restored an earlier version.', { tone: 'warning' });
+            }}
+            data-testid="item-version-restore"
+            className="text-accent-dim hover:text-accent ml-auto font-mono text-[10px] tracking-widest uppercase underline underline-offset-4"
+          >
+            restore
+          </button>
+        </li>
+      ))}
+    </ol>
   );
 }
 

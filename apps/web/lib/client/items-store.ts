@@ -19,9 +19,10 @@ import {
   pull,
   push,
   toFolderUpsert,
+  toItemVersion,
   toUpsert,
 } from './vault-api';
-import type { Operation } from './vault-api';
+import type { ItemVersion, Operation } from './vault-api';
 import { useVault } from './vault-store';
 
 /**
@@ -51,6 +52,15 @@ interface ItemsState {
   readonly error: string | null;
   readonly pending: number;
   readonly undecryptable: readonly string[];
+  /**
+   * Versions written in this session, by item id.
+   *
+   * The environment manager learned this the hard way: a read straight after a
+   * write does not reliably include the row, and a history panel that then says
+   * "no earlier versions" states something false with complete confidence. The
+   * client already knows what it replaced.
+   */
+  readonly recentVersions: Readonly<Record<string, ItemVersion[]>>;
 
   load: () => Promise<void>;
   save: (data: VaultItemData, id?: string, folderId?: string | null) => Promise<string>;
@@ -88,6 +98,7 @@ const EMPTY = {
   error: null,
   pending: 0,
   undecryptable: [] as readonly string[],
+  recentVersions: {} as Readonly<Record<string, ItemVersion[]>>,
 };
 
 /**
@@ -266,6 +277,23 @@ export const useItems = create<ItemsState>((set, get) => ({
     set({
       items: existing ? replace(get().items, itemId, () => updated) : [...get().items, updated],
     });
+
+    // The contents an edit replaced, kept so it can be looked at and put back.
+    // Recorded only when something actually differs: saving an item without
+    // touching it should not fill the history with copies of itself.
+    if (existing && JSON.stringify(existing.data) !== JSON.stringify(data)) {
+      set({
+        recentVersions: {
+          ...get().recentVersions,
+          [itemId]: [
+            { id: newItemId(), data: existing.data, createdAt: now },
+            ...(get().recentVersions[itemId] ?? []),
+          ],
+        },
+      });
+
+      await commit(set, get, await toItemVersion(keys, existing));
+    }
 
     await commit(
       set,

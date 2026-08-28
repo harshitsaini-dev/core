@@ -225,3 +225,80 @@ test.describe('folders', () => {
     expect(response.status()).toBe(400);
   });
 });
+
+test.describe('item history', () => {
+  test('never returns another account’s versions', async ({ request, playwright }) => {
+    // The same rule as everywhere else on this API: an id in a query proves
+    // nothing about who it belongs to.
+    const mine = await signedIn(request, 'history-mine');
+    const itemId = crypto.randomUUID();
+
+    await createItem(request, mine, itemId, 'Original', null);
+
+    const dataEnc = await encryptJson(mine.keys.dataKey, {
+      type: 'login',
+      fields: { title: 'Original' },
+    });
+
+    await request.post('/api/vault/sync', {
+      data: { operations: [{ op: 'version', id: crypto.randomUUID(), itemId, dataEnc }] },
+    });
+
+    const owner = (await (await request.get(`/api/vault/history?itemId=${itemId}`)).json()) as {
+      versions: unknown[];
+    };
+    expect(owner.versions).toHaveLength(1);
+
+    const other = await playwright.request.newContext({ baseURL: 'http://localhost:3000' });
+    await signedIn(other, 'history-theirs');
+
+    const stranger = (await (await other.get(`/api/vault/history?itemId=${itemId}`)).json()) as {
+      versions: unknown[];
+    };
+    // Empty rather than rejected: a 404 would confirm the id is real.
+    expect(stranger.versions).toEqual([]);
+
+    await other.dispose();
+  });
+
+  test('ignores a version aimed at somebody else’s item', async ({ request, playwright }) => {
+    const mine = await signedIn(request, 'history-victim');
+    const itemId = crypto.randomUUID();
+    await createItem(request, mine, itemId, 'Original', null);
+
+    const attackerContext = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+    });
+    const attacker = await signedIn(attackerContext, 'history-attacker');
+
+    await attackerContext.post('/api/vault/sync', {
+      data: {
+        operations: [
+          {
+            op: 'version',
+            id: crypto.randomUUID(),
+            itemId,
+            dataEnc: await encryptJson(attacker.keys.dataKey, {
+              type: 'login',
+              fields: { title: 'Smuggled' },
+            }),
+          },
+        ],
+      },
+    });
+    await attackerContext.dispose();
+
+    const body = (await (await request.get(`/api/vault/history?itemId=${itemId}`)).json()) as {
+      versions: unknown[];
+    };
+    expect(body.versions).toEqual([]);
+  });
+
+  test('needs a session', async ({ playwright }) => {
+    const anonymous = await playwright.request.newContext({ baseURL: 'http://localhost:3000' });
+    const response = await anonymous.get(`/api/vault/history?itemId=${crypto.randomUUID()}`);
+
+    expect(response.status()).toBe(401);
+    await anonymous.dispose();
+  });
+});

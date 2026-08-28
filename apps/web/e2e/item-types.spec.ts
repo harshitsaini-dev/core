@@ -282,3 +282,77 @@ test.describe('password age', () => {
     expect(text).not.toContain('too old');
   });
 });
+
+test.describe('item history', () => {
+  test.slow();
+
+  async function makeAndEdit(page: Page): Promise<void> {
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('Before');
+    await page.getByTestId('item-password').fill('first-password');
+    await page.getByTestId('item-save').click();
+    await expect(page.getByTestId('item-row-title')).toContainText('Before');
+
+    await page.getByTestId('edit-item').click();
+    await page.getByTestId('item-title').fill('After');
+    await page.getByTestId('item-save').click();
+    await expect(page.getByTestId('item-row-title')).toContainText('After');
+  }
+
+  test('records what an edit replaced', async ({ page }) => {
+    await openVault(page, 'item-history');
+    await makeAndEdit(page);
+
+    await page.getByTestId('item-history').click();
+    await expect(page.getByTestId('item-version')).toHaveCount(1);
+    await expect(page.getByTestId('item-version')).toContainText('Before');
+  });
+
+  test('never shows a stored password', async ({ page }) => {
+    // A history panel printing old passwords would be a list of every password
+    // somebody has ever used, sitting open on the screen.
+    await openVault(page, 'item-history-secret');
+    await makeAndEdit(page);
+
+    await page.getByTestId('item-history').click();
+    await expect(page.getByTestId('item-history-list')).toBeVisible();
+    await expect(page.getByTestId('item-history-list')).not.toContainText('first-password');
+  });
+
+  test('says so when there is nothing yet', async ({ page }) => {
+    await openVault(page, 'item-history-empty');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('Untouched');
+    await page.getByTestId('item-save').click();
+
+    await page.getByTestId('item-history').click();
+    await expect(page.getByTestId('item-history-empty')).toBeVisible();
+  });
+
+  test('does not record a save that changed nothing', async ({ page }) => {
+    await openVault(page, 'item-history-noop');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('Same');
+    await page.getByTestId('item-save').click();
+
+    await page.getByTestId('edit-item').click();
+    await page.getByTestId('item-save').click();
+
+    await page.getByTestId('item-history').click();
+    await expect(page.getByTestId('item-history-empty')).toBeVisible();
+  });
+
+  test('restores an earlier version, and the restore is undoable', async ({ page }) => {
+    await openVault(page, 'item-history-restore');
+    await makeAndEdit(page);
+
+    await page.getByTestId('item-history').click();
+    await page.getByTestId('item-version-restore').first().click();
+
+    await expect(page.getByTestId('item-row-title')).toContainText('Before');
+    // The version the restore replaced is recorded in turn.
+    await expect(page.getByTestId('item-version')).toHaveCount(2);
+  });
+});
