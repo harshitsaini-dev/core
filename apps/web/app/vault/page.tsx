@@ -1,6 +1,13 @@
 'use client';
 
-import { FOLDER_COLORS, collectTags, itemSubtitle, orderFolders } from '@core/shared';
+import {
+  FOLDER_COLORS,
+  collectTags,
+  describePasswordAge,
+  itemSubtitle,
+  orderFolders,
+  passwordAgeDays,
+} from '@core/shared';
 import type { DecryptedFolder, DecryptedItem } from '@core/shared';
 import type { Layout } from '@/lib/client/view-store';
 import { Button, Checkbox, Input, Panel, Select } from '@core/ui';
@@ -1325,6 +1332,13 @@ function ItemRow({
         <div className="mt-3" data-testid="item-totp-row">
           <TotpCode secret={fields.totpSecret} />
         </div>
+      ) : null}
+
+      {fields?.password ? (
+        <p className="text-muted mt-2 font-mono text-[10px]" data-testid="item-password-age">
+          <span aria-hidden="true">&gt; </span>
+          {describePasswordAge(passwordAgeDays(fields)) ?? 'age unknown'}
+        </p>
       ) : null}
 
       {fields?.recoveryCodes?.length ? (

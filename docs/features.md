@@ -82,7 +82,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ORG-06 | Multi-level combined filtering                 | P3    | DONE   |
 | ORG-07 | Sort by A-Z, Z-A, modified, created, most-used | P3    | DONE   |
 | ORG-08 | Pinned / favourite items at the top            | P3    | DONE   |
-| ORG-09 | Password age indicator per item                | P4    | TODO   |
+| ORG-09 | Password age indicator per item                | P4    | DONE   |
 | ORG-10 | Grid vs list view toggle                       | P3    | DONE   |
 | ORG-11 | Recently used section                          | P3    | DONE   |
 | ORG-12 | Saved filter views                             | P6    | TODO   |
@@ -112,12 +112,12 @@ P5 Hardening+Deploy · P6 Post-v1
 | ENV-07 | Export as Docker `--env` / `docker-compose` fragment | P6    | TODO   |
 | ENV-08 | Mask / unmask all values with one button             | P4    | DONE   |
 | ENV-09 | Drag-and-drop `.env` import with parsing             | P4    | DONE   |
-| ENV-10 | Paste-to-import from clipboard                       | P4    | TODO   |
-| ENV-11 | Version history per variable                         | P4    | TODO   |
-| ENV-12 | Diff viewer between versions (red/green)             | P4    | TODO   |
-| ENV-13 | Copy a single variable value                         | P4    | TODO   |
+| ENV-10 | Paste-to-import from clipboard                       | P4    | DONE   |
+| ENV-11 | Version history per variable                         | P4    | DONE   |
+| ENV-12 | Diff viewer between versions (red/green)             | P4    | DONE   |
+| ENV-13 | Copy a single variable value                         | P4    | DONE   |
 | ENV-14 | Duplicate an environment (dev to staging)            | P4    | DONE   |
-| ENV-15 | Per-variable notes / description                     | P4    | TODO   |
+| ENV-15 | Per-variable notes / description                     | P4    | DONE   |
 | ENV-16 | Warn on empty or placeholder values                  | P6    | TODO   |
 
 ## PWA — Progressive Web App & Mobile UX

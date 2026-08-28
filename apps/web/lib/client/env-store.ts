@@ -252,7 +252,9 @@ export const useEnv = create<EnvState>((set, get) => ({
       environmentId,
       key: entry.key,
       value: entry.value,
-      note: entry.note ?? existing?.note ?? null,
+      // `undefined` means "leave it alone"; `null` means "clear it". Collapsing
+      // the two would make every save that did not mention a note erase one.
+      note: entry.note === undefined ? (existing?.note ?? null) : entry.note,
       sortOrder:
         existing?.sortOrder ?? get().vars.filter((v) => v.environmentId === environmentId).length,
       createdAt: existing?.createdAt ?? now,

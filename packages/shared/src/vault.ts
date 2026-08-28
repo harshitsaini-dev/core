@@ -39,6 +39,14 @@ export const loginFieldsSchema = z.object({
   totpSecret: z.string().max(512).optional(),
   /** Stored apart from the password: they are what survives losing it. */
   recoveryCodes: z.array(z.string().max(200)).max(50).optional(),
+  /**
+   * When the password was last changed.
+   *
+   * Inside the encrypted blob, not a column. When somebody last changed a
+   * password is a fact about them, and the server has no business knowing it
+   * any more than it knows the password.
+   */
+  passwordChangedAt: z.number().int().nonnegative().optional(),
 });
 
 export const noteFieldsSchema = z.object({
@@ -156,6 +164,39 @@ export function itemSubtitle(data: VaultItemData): string {
     case 'ssh':
       return data.fields.host ?? '';
   }
+}
+
+/**
+ * How old a password is, in days.
+ *
+ * Reported and not judged, which is a deliberate choice. Scheduled rotation is
+ * advice that has been withdrawn by the people who used to give it — NIST
+ * dropped arbitrary expiry from 800-63B because it makes people pick worse
+ * passwords and change them predictably. A strong unique password does not get
+ * weaker by sitting still.
+ *
+ * What age is genuinely useful for is the opposite direction: finding the
+ * fifteen-year-old password you set before you had a manager, or checking
+ * whether you rotated a credential after a breach notice. So this shows a
+ * number and leaves the decision alone. There is no "expired" state, and adding
+ * one would be adding a nag the evidence does not support.
+ */
+export function passwordAgeDays(fields: LoginFields, now = Date.now()): number | null {
+  const changed = fields.passwordChangedAt;
+  if (changed === undefined || changed > now) return null;
+  return Math.floor((now - changed) / 86_400_000);
+}
+
+/** The same, phrased for a list row. */
+export function describePasswordAge(days: number | null): string | null {
+  if (days === null) return null;
+  if (days < 1) return 'set today';
+  if (days === 1) return 'set yesterday';
+  if (days < 30) return `set ${days} days ago`;
+  if (days < 365) return `set ${Math.floor(days / 30)} month(s) ago`;
+
+  const years = Math.floor(days / 365);
+  return `set ${years} year(s) ago`;
 }
 
 /**

@@ -488,3 +488,79 @@ test.describe('variable history', () => {
     await expect(page.getByTestId('history-entry').first()).toContainText('two');
   });
 });
+
+test.describe('variable notes', () => {
+  test.slow();
+
+  test('stores a note beside a variable', async ({ page }) => {
+    // Three months later "why is this here" is a real question about a variable
+    // nobody remembers adding.
+    await openEnv(page, 'env-note');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'LEGACY_TOKEN', 'x');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('Only the old billing job reads this.');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await expect(page.getByTestId('var-row-note-view')).toContainText('old billing job');
+  });
+
+  test('a save that does not mention the note keeps it', async ({ page }) => {
+    // Otherwise every value edit silently erases the explanation beside it.
+    await openEnv(page, 'env-note-kept');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'one');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('Keep me.');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('two');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await expect(page.getByTestId('var-row-note-view')).toContainText('Keep me.');
+  });
+
+  test('clearing the note removes it', async ({ page }) => {
+    await openEnv(page, 'env-note-cleared');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'one');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('Temporary.');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-note-view')).toBeVisible();
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await expect(page.getByTestId('var-row-note-view')).toHaveCount(0);
+  });
+
+  test('the note never reaches the server in the clear', async ({ page }) => {
+    const bodies: string[] = [];
+    page.on('request', (request) => {
+      const body = request.postData();
+      if (body) bodies.push(body);
+    });
+
+    await openEnv(page, 'env-note-zk');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'one');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-note').fill('reveals-what-this-is-for');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) expect(body).not.toContain('reveals-what-this-is-for');
+  });
+});

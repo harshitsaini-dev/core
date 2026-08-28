@@ -673,3 +673,37 @@ in the origin holding the vault keys. Thirteen tests, including the property
 that makes a diff trustworthy — every line of both sides appears somewhere in
 the output, because a diff that quietly drops a line of a private key is worse
 than none.
+
+---
+
+## ADR-024 — Password age is reported, not judged
+
+**Date:** 2026-08-28 · **Status:** Accepted
+
+**Context.** ORG-09 asks for a password age indicator. The obvious reading is a
+traffic light that turns amber at ninety days and red at a year.
+
+**Decision.** Show the age. Say nothing about whether it is too old.
+
+Scheduled rotation is advice its own authors withdrew: NIST removed arbitrary
+expiry from 800-63B because it makes people pick worse passwords and change them
+in predictable ways — `Summer2024!` becomes `Autumn2024!`. A strong unique
+password stored in a manager does not get weaker by sitting still. A product
+that nags about it is training exactly the habit it exists to remove.
+
+What age is genuinely useful for is the other direction: finding the
+fifteen-year-old password you set before you had a manager, or checking whether
+you rotated a credential after a breach notice. Both are answered by a number.
+
+**Consequences.** There is no "expired" state and no colour change, and a test
+asserts the row never says "expired", "too old" or "change it" at any age. If
+breach checking arrives later (SEC-09, Have I Been Pwned with k-anonymity), that
+is the thing worth flagging — a password known to be compromised — and it is a
+different signal from an old one.
+
+The timestamp lives inside the encrypted blob rather than in a column. When
+somebody last changed a password is a fact about them, and the server has no
+business knowing it any more than it knows the password. It is stamped only when
+the value actually changes, so opening an item and saving it does not make an
+old password look new — otherwise the field records when somebody last looked at
+the item, which is a different thing wearing the same label.

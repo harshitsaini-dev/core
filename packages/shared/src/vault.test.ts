@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { collectTags, itemSubtitle, orderFolders } from './vault';
+import {
+  collectTags,
+  describePasswordAge,
+  itemSubtitle,
+  orderFolders,
+  passwordAgeDays,
+} from './vault';
 import type { DecryptedFolder, DecryptedItem, VaultItemData } from './vault';
 
 function folder(
@@ -129,5 +135,49 @@ describe('itemSubtitle', () => {
     expect(
       itemSubtitle({ type: 'login', fields: { title: 'x', password: 'hunter2' } }),
     ).not.toContain('hunter2');
+  });
+});
+
+describe('passwordAgeDays', () => {
+  const NOW = 1_700_000_000_000;
+  const day = 86_400_000;
+
+  it('reports nothing for a password that was never stamped', () => {
+    // Every item stored before this existed. "Unknown" is the truth; zero would
+    // be a lie that reads as "changed today".
+    expect(passwordAgeDays({ title: 'x' }, NOW)).toBeNull();
+  });
+
+  it('counts whole days', () => {
+    expect(passwordAgeDays({ title: 'x', passwordChangedAt: NOW - day * 3 }, NOW)).toBe(3);
+    expect(passwordAgeDays({ title: 'x', passwordChangedAt: NOW - day * 0.9 }, NOW)).toBe(0);
+  });
+
+  it('reports nothing for a stamp in the future', () => {
+    // A clock that was wrong when the item was saved. "In -4 days" helps nobody.
+    expect(passwordAgeDays({ title: 'x', passwordChangedAt: NOW + day }, NOW)).toBeNull();
+  });
+});
+
+describe('describePasswordAge', () => {
+  it('says nothing when the age is unknown', () => {
+    expect(describePasswordAge(null)).toBeNull();
+  });
+
+  it('reads naturally at each scale', () => {
+    expect(describePasswordAge(0)).toBe('set today');
+    expect(describePasswordAge(1)).toBe('set yesterday');
+    expect(describePasswordAge(5)).toBe('set 5 days ago');
+    expect(describePasswordAge(60)).toBe('set 2 month(s) ago');
+    expect(describePasswordAge(800)).toBe('set 2 year(s) ago');
+  });
+
+  it('never tells anybody their password has expired', () => {
+    // Scheduled rotation is advice its own authors withdrew. This reports a
+    // number; it does not nag.
+    for (const days of [0, 10, 100, 1000, 10_000]) {
+      const text = describePasswordAge(days) ?? '';
+      expect(text.toLowerCase(), `${days} days`).not.toMatch(/expired|change it|too old|weak/);
+    }
   });
 });

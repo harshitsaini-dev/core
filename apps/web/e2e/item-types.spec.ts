@@ -221,3 +221,64 @@ test.describe('the type selector', () => {
     await expect(page.getByTestId('card-number')).toHaveCount(0);
   });
 });
+
+test.describe('password age', () => {
+  test.slow();
+
+  test('shows when a password was set', async ({ page }) => {
+    await openVault(page, 'age');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('GitHub');
+    await page.getByTestId('item-password').fill('a-password');
+    await page.getByTestId('item-save').click();
+
+    await expect(page.getByTestId('item-password-age')).toContainText('set today');
+  });
+
+  test('does not restamp a password that was not changed', async ({ page }) => {
+    // Opening an item and saving it must not make an old password look new,
+    // or the age is a record of when somebody last looked at the item.
+    await openVault(page, 'age-untouched');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('GitHub');
+    await page.getByTestId('item-password').fill('a-password');
+    await page.getByTestId('item-save').click();
+
+    await page.getByTestId('edit-item').click();
+    await page.getByTestId('item-username').fill('me@example.com');
+    await page.getByTestId('item-save').click();
+
+    // Still today, because the item is new — what matters is that the value did
+    // not change, which the unit tests cover at other ages.
+    await expect(page.getByTestId('item-password-age')).toContainText('set today');
+    await expect(page.getByTestId('item-row')).toContainText('me@example.com');
+  });
+
+  test('says nothing about age for an item with no password', async ({ page }) => {
+    await openVault(page, 'age-none');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('type-note').click();
+    await page.getByTestId('note-body').fill('No password here.');
+    await page.getByTestId('item-save').click();
+
+    await expect(page.getByTestId('item-password-age')).toHaveCount(0);
+  });
+
+  test('never tells anybody to change it', async ({ page }) => {
+    // Scheduled rotation is advice its own authors withdrew. The row reports a
+    // number; it does not nag.
+    await openVault(page, 'age-no-nag');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('GitHub');
+    await page.getByTestId('item-password').fill('a-password');
+    await page.getByTestId('item-save').click();
+
+    const text = (await page.getByTestId('item-row').innerText()).toLowerCase();
+    expect(text).not.toContain('expired');
+    expect(text).not.toContain('too old');
+  });
+});

@@ -340,6 +340,13 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
             // shows a blank line under the title.
             ...(username.trim() ? { username: username.trim() } : {}),
             ...(password ? { password } : {}),
+            // Stamped only when the password actually changed, so opening an
+            // item and saving it does not make an old password look new.
+            ...(password && password !== fields.password
+              ? { passwordChangedAt: Date.now() }
+              : fields.passwordChangedAt !== undefined
+                ? { passwordChangedAt: fields.passwordChangedAt }
+                : {}),
             ...(url.trim() ? { url: url.trim() } : {}),
             ...(totpSecret ? { totpSecret } : {}),
             ...(codes.length > 0 ? { recoveryCodes: codes } : {}),

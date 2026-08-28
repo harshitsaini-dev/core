@@ -565,6 +565,7 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(row.value);
+  const [note, setNote] = useState(row.note ?? '');
   const [shown, setShown] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -592,6 +593,20 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
             className="min-w-0 flex-1"
           />
           {/*
+            A note, not a second value. Three months later "why is this here"
+            is a real question about a variable nobody remembers adding, and the
+            answer belongs beside it rather than in a wiki nobody opens.
+          */}
+          <Input
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="note (optional)"
+            aria-label={`note for ${row.key}`}
+            autoComplete="off"
+            data-testid="var-row-note"
+            className="min-w-0 flex-1"
+          />
+          {/*
             The row stays in edit mode until the change has been saved, the same
             way the vault's item form does. Closing on click looks faster and
             leaves nothing on screen that says whether it worked — and it lets a
@@ -602,12 +617,15 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
             disabled={busy}
             onClick={() => {
               setBusy(true);
-              void saveVar(row.environmentId, { id: row.id, key: row.key, value: draft }).finally(
-                () => {
-                  setBusy(false);
-                  setEditing(false);
-                },
-              );
+              void saveVar(row.environmentId, {
+                id: row.id,
+                key: row.key,
+                value: draft,
+                note: note.trim() === '' ? null : note.trim(),
+              }).finally(() => {
+                setBusy(false);
+                setEditing(false);
+              });
             }}
             data-testid="var-row-save"
           >
@@ -664,6 +682,7 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
             variant="ghost"
             onClick={() => {
               setDraft(row.value);
+              setNote(row.note ?? '');
               setEditing(true);
             }}
             data-testid="var-row-edit-open"
@@ -692,6 +711,16 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
           </Button>
         </>
       )}
+
+      {row.note && !editing ? (
+        <p
+          className="text-muted secret w-full font-mono text-[11px]"
+          data-testid="var-row-note-view"
+        >
+          <span aria-hidden="true">&gt; </span>
+          {row.note}
+        </p>
+      ) : null}
 
       {historyOpen ? <History row={row} /> : null}
     </li>
