@@ -1,4 +1,4 @@
-import { auditLog, users } from '@core/db';
+import { users } from '@core/db';
 import {
   base64UrlToBytes,
   bytesToBase64Url,
@@ -10,8 +10,9 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
 import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rate-limit';
+import { record } from '@/lib/server/audit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
-import { emailIndex, hashIp, hashUserAgent } from '@/lib/server/secrets';
+import { emailIndex } from '@/lib/server/secrets';
 import { issueSession, sessionCookie } from '@/lib/server/session';
 import { AUTH_RESPONSE_BUDGET_MS, constantTime } from '@/lib/server/timing';
 
@@ -226,19 +227,14 @@ export async function POST(request: NextRequest): Promise<Response> {
     };
   }, budget);
 
-  const ipHash = await hashIp(pepper, request.headers.get('cf-connecting-ip') ?? 'unknown');
-  const uaHash = await hashUserAgent(pepper, request.headers.get('user-agent') ?? 'unknown');
-  const geoCountry = request.headers.get('cf-ipcountry');
-
   if (outcome.userId) {
-    await db.insert(auditLog).values({
-      id: crypto.randomUUID(),
-      userId: outcome.userId,
-      event: outcome.ok ? 'login' : 'login_failed',
-      ipHash,
-      uaHash,
-      geoCountry,
-    });
+    // Through `record`, which cannot throw. As a bare insert this ran only when
+    // a user row had been found, so a failed write answered 500 for an address
+    // that exists and 401 for one that does not — the enumeration oracle the
+    // whole of this path is arranged to close, rebuilt out of a log line four
+    // lines below the comment explaining why the counter above had to be
+    // guarded against exactly this.
+    await record(db, pepper, request, outcome.userId, outcome.ok ? 'login' : 'login_failed');
   }
 
   if (!outcome.ok || !outcome.userId || !outcome.keys) {

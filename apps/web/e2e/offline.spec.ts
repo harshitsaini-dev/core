@@ -270,7 +270,7 @@ test.describe('service worker freshness', () => {
   /** A script URL this page actually loaded, and which the worker handles. */
   async function loadedScript(page: Page): Promise<string> {
     await page.goto('/');
-    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, {
       timeout: 30_000,
     });
 
@@ -279,7 +279,7 @@ test.describe('service worker freshness', () => {
     // created. The second visit is the one this is about anyway: the refresh
     // that used to show the old page.
     await page.reload();
-    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, {
       timeout: 30_000,
     });
 

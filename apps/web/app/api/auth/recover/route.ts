@@ -1,4 +1,4 @@
-import { auditLog, users } from '@core/db';
+import { users } from '@core/db';
 import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import {
   base64UrlToBytes,
@@ -9,10 +9,11 @@ import {
 import { eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
-import { emailIndex, hashIp, hashUserAgent } from '@/lib/server/secrets';
+import { emailIndex } from '@/lib/server/secrets';
 import { issueSession, revokeAllSessions, sessionCookie } from '@/lib/server/session';
 import { constantTime } from '@/lib/server/timing';
 
@@ -151,14 +152,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     return authFailure();
   }
 
-  await db.insert(auditLog).values({
-    id: crypto.randomUUID(),
-    userId: recoveredUserId,
-    event: 'password_changed',
-    ipHash: await hashIp(pepper, request.headers.get('cf-connecting-ip') ?? 'unknown'),
-    uaHash: await hashUserAgent(pepper, request.headers.get('user-agent') ?? 'unknown'),
-    geoCountry: request.headers.get('cf-ipcountry'),
-  });
+  // Through `record`, which cannot throw. As a bare insert this ran after the
+  // recovery had already committed and every session had already been revoked,
+  // so a failed log line reported a completed recovery as a failure.
+  await record(db, pepper, request, recoveredUserId, 'password_changed');
 
   // Issued after the mass revocation above, so this caller is the only one left
   // holding a session.

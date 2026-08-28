@@ -1,13 +1,14 @@
-import { auditLog, users } from '@core/db';
+import { users } from '@core/db';
 import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import { base64UrlToBytes, deriveAuthVerifier, bytesToBase64Url } from '@core/crypto';
 import { eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
-import { emailEncrypt, emailIndex, hashIp, hashUserAgent } from '@/lib/server/secrets';
+import { emailEncrypt, emailIndex } from '@/lib/server/secrets';
 import { constantTime } from '@/lib/server/timing';
 
 /**
@@ -159,14 +160,10 @@ export async function POST(request: NextRequest): Promise<Response> {
       recoveryVerifier: bytesToBase64Url(recoveryVerifier),
     });
 
-    await db.insert(auditLog).values({
-      id: crypto.randomUUID(),
-      userId: id,
-      event: 'signup',
-      ipHash: await hashIp(pepper, request.headers.get('cf-connecting-ip') ?? 'unknown'),
-      uaHash: await hashUserAgent(pepper, request.headers.get('user-agent') ?? 'unknown'),
-      geoCountry: request.headers.get('cf-ipcountry'),
-    });
+    // Through `record`, which cannot throw. The account row is already written
+    // at this point, so a failed log line would have reported a created account
+    // as a failed signup — and the retry would then collide on the address.
+    await record(db, pepper, request, id, 'signup');
 
     return { created: true };
   });

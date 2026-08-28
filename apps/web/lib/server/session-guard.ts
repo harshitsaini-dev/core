@@ -1,7 +1,6 @@
-import { auditLog } from '@core/db';
 import type { NextRequest } from 'next/server';
+import { record } from './audit';
 import type { RequestContext } from './context';
-import { hashIp, hashUserAgent } from './secrets';
 import { SESSION_COOKIE, resolveSession, revokeAllSessions } from './session';
 import type { ResolvedSession } from './session';
 
@@ -28,14 +27,11 @@ export async function requireSession(
     // leaving an attacker holding a live session is not.
     await revokeAllSessions(context.db, lookup.userId);
 
-    await context.db.insert(auditLog).values({
-      id: crypto.randomUUID(),
-      userId: lookup.userId,
-      event: 'session_reuse_detected',
-      ipHash: await hashIp(context.pepper, request.headers.get('cf-connecting-ip') ?? 'unknown'),
-      uaHash: await hashUserAgent(context.pepper, request.headers.get('user-agent') ?? 'unknown'),
-      geoCountry: request.headers.get('cf-ipcountry'),
-    });
+    // Through `record`, which cannot throw. The revocation above has already
+    // happened by this point, so a failed log line would turn a correctly
+    // handled token reuse into a 500 — and the caller would learn nothing about
+    // whether their session survived.
+    await record(context.db, context.pepper, request, lookup.userId, 'session_reuse_detected');
 
     return null;
   }

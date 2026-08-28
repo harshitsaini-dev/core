@@ -1,4 +1,4 @@
-import { auditLog, users } from '@core/db';
+import { users } from '@core/db';
 import {
   base64UrlToBytes,
   bytesToBase64Url,
@@ -9,10 +9,10 @@ import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import { eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
-import { hashIp, hashUserAgent } from '@/lib/server/secrets';
 import { issueSession, revokeAllSessions, sessionCookie } from '@/lib/server/session';
 import { requireSession } from '@/lib/server/session-guard';
 import { constantTime } from '@/lib/server/timing';
@@ -136,18 +136,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     return true;
   });
 
-  const ipHash = await hashIp(pepper, request.headers.get('cf-connecting-ip') ?? 'unknown');
-  const uaHash = await hashUserAgent(pepper, request.headers.get('user-agent') ?? 'unknown');
-
-  await db.insert(auditLog).values({
-    id: crypto.randomUUID(),
-    userId,
-    event: changed ? 'password_changed' : 'login_failed',
-    ipHash,
-    uaHash,
-    geoCountry: request.headers.get('cf-ipcountry'),
-    createdAt: new Date(),
-  });
+  // Through `record`, which cannot throw. As a bare insert this ran after the
+  // change had already committed, so a failed log line reported a password
+  // change as a failure when it had succeeded.
+  await record(db, pepper, request, userId, changed ? 'password_changed' : 'login_failed');
 
   if (!changed) return authFailure();
 
