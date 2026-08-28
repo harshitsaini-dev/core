@@ -164,7 +164,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-03 | Clipboard auto-clear after 30 / 60 seconds             | P3    | DONE   |
 | SEC-04 | Session timeout slider (1 / 5 / 15 min / never)        | P3    | DONE   |
 | SEC-05 | Panic button — instant lock and cache wipe             | P3    | DONE   |
-| SEC-06 | Audit log of unlocks, devices, IPs, timestamps         | P5    | TODO   |
+| SEC-06 | Account activity log: sign-ins, failures, lockouts     | P5    | DONE   |
 | SEC-07 | Emergency Kit PDF with recovery key                    | P2    | DONE   |
 | SEC-08 | Master-password change with Account Key re-wrap        | P5    | DONE   |
 | SEC-09 | Suspicious-activity email alerts                       | P5    | TODO   |

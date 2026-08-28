@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { serverError } from '@/lib/server/responses';
 import { requireSession } from '@/lib/server/session-guard';
@@ -39,6 +40,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     } else {
       await revokeSession(context.db, current.session.id);
     }
+
+    // Recorded after the revocation, so the entry describes something that
+    // actually happened, and through `record`, so it cannot turn a completed
+    // sign-out into an error.
+    await record(context.db, context.pepper, request, current.session.userId, 'logout');
   }
 
   return new Response(JSON.stringify({ status: 'ok' }), { status: 200, headers: cleared });

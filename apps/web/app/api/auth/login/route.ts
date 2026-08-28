@@ -99,6 +99,8 @@ const MAX_BODY_BYTES = 2 * 1024;
 interface LoginOutcome {
   readonly ok: boolean;
   readonly userId?: string;
+  /** This attempt is the one that crossed the threshold. */
+  readonly lockedNow?: boolean;
   readonly keys?: {
     accountKeyWrapped: string;
     publicKey: string;
@@ -196,20 +198,22 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     if (!matches || locked) {
       const attempts = row.failedAttempts + 1;
+      const lockedNow = attempts >= LOCKOUT_THRESHOLD && !locked;
 
       await bookkeeping(
         db
           .update(users)
           .set({
             failedAttempts: sql`${users.failedAttempts} + 1`,
-            ...(attempts >= LOCKOUT_THRESHOLD && !locked
-              ? { lockedUntil: new Date(Date.now() + LOCKOUT_WINDOW_MS) }
-              : {}),
+            ...(lockedNow ? { lockedUntil: new Date(Date.now() + LOCKOUT_WINDOW_MS) } : {}),
           })
           .where(eq(users.id, row.id)),
       );
 
-      return { ok: false, userId: row.id };
+      // Reported back rather than logged here. Everything inside this block is
+      // under the constant-time budget, and a write that only happens on the
+      // tenth failure would be a write whose cost is visible.
+      return { ok: false, userId: row.id, lockedNow };
     }
 
     await bookkeeping(
@@ -235,6 +239,15 @@ export async function POST(request: NextRequest): Promise<Response> {
     // lines below the comment explaining why the counter above had to be
     // guarded against exactly this.
     await record(db, pepper, request, outcome.userId, outcome.ok ? 'login' : 'login_failed');
+
+    // A second entry, so the moment an account locks is visible in the activity
+    // list rather than only inferrable from ten failures in a row. Outside the
+    // timed block for the reason given there; it only ever runs for an account
+    // that exists and has already failed nine times, so it adds no signal about
+    // whether an address is real.
+    if (outcome.lockedNow) {
+      await record(db, pepper, request, outcome.userId, 'account_locked');
+    }
   }
 
   if (!outcome.ok || !outcome.userId || !outcome.keys) {

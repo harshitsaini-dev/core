@@ -40,6 +40,7 @@ import {
 } from '@/lib/client/items-store';
 import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
+import { ActivityPanel } from './activity';
 import { CheckupPanel } from './checkup';
 import { GeneratorPanel } from './generator';
 import { LockSettingsPanel } from './lock-settings';
@@ -69,6 +70,7 @@ type View =
   | { kind: 'lock-settings' }
   | { kind: 'pin' }
   | { kind: 'generator' }
+  | { kind: 'activity' }
   | { kind: 'import' };
 
 /**
@@ -192,6 +194,7 @@ export default function VaultPage() {
         run: () => setView({ kind: 'lock-settings' }),
       },
       { id: 'pin', label: 'quick unlock pin', run: () => setView({ kind: 'pin' }) },
+      { id: 'activity', label: 'account activity', run: () => setView({ kind: 'activity' }) },
       { id: 'generator', label: 'generate a password', run: () => setView({ kind: 'generator' }) },
       {
         id: 'clear-clipboard',
@@ -551,6 +554,14 @@ export default function VaultPage() {
             <Button
               type="button"
               variant="ghost"
+              onClick={() => setView({ kind: 'activity' })}
+              data-testid="open-activity"
+            >
+              activity
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               onClick={() => setView({ kind: 'backup' })}
               data-testid="open-backup"
             >
@@ -623,6 +634,8 @@ export default function VaultPage() {
       ) : null}
 
       {view.kind === 'pin' ? <PinSetupPanel onBack={() => setView({ kind: 'list' })} /> : null}
+
+      {view.kind === 'activity' ? <ActivityPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'generator' ? (
         <GeneratorPanel onBack={() => setView({ kind: 'list' })} />
