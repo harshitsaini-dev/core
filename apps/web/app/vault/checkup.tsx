@@ -8,8 +8,9 @@ import {
   withoutPassword,
 } from '@core/shared';
 import type { DecryptedItem, HealthEntry } from '@core/shared';
-import { Button, Panel } from '@core/ui';
+import { Button, Checkbox, Panel, Warning } from '@core/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { breachCount, useBreachSettings } from '@/lib/client/breach';
 import { estimate } from '@/lib/client/strength';
 
 /**
@@ -108,11 +109,25 @@ function useWeakPasswords(items: readonly DecryptedItem[]): {
 
 function collectFindings(
   weak: readonly HealthEntry[],
+  breached: readonly HealthEntry[],
   reused: readonly { readonly items: readonly HealthEntry[] }[],
   old: readonly HealthEntry[],
   missing: readonly HealthEntry[],
 ): Finding[] {
   const findings: Finding[] = [];
+
+  if (breached.length > 0) {
+    // First, above everything else. A password already published in a corpus is
+    // not weak in theory — it is on a list somebody is working through.
+    findings.push({
+      id: 'breached',
+      title: 'found in a published breach',
+      detail:
+        'These appear in leaked data. Not "could be guessed" — already known, and already in the lists attackers try first. Change them.',
+      tone: 'danger',
+      entries: breached,
+    });
+  }
 
   if (weak.length > 0) {
     findings.push({
@@ -159,6 +174,68 @@ function collectFindings(
   return findings;
 }
 
+/**
+ * Passwords found in a published breach corpus.
+ *
+ * Runs only when it has been switched on, and the switch is the disclosure: it
+ * is the only part of the product that reaches past the vault's own server.
+ *
+ * One request per distinct hash prefix, and a failure is reported rather than
+ * swallowed. A breach check that quietly returned "nothing found" when the
+ * service was unreachable would be the worst possible failure mode — it reads
+ * exactly like good news.
+ */
+function useBreachedPasswords(items: readonly DecryptedItem[], enabled: boolean) {
+  const candidates = useMemo(() => withPassword(items), [items]);
+
+  const [breached, setBreached] = useState<readonly HealthEntry[]>([]);
+  const [checked, setChecked] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  const run = useRef(0);
+
+  useEffect(() => {
+    const ticket = ++run.current;
+    setBreached([]);
+    setChecked(0);
+    setFailed(false);
+
+    if (!enabled) return undefined;
+
+    void (async () => {
+      const found: HealthEntry[] = [];
+
+      for (const [index, item] of candidates.entries()) {
+        if (item.data.type !== 'login') continue;
+
+        const { title, password } = item.data.fields;
+        if (!password) continue;
+
+        try {
+          const count = await breachCount(password);
+          if (ticket !== run.current) return;
+          if (count > 0) found.push({ id: item.id, title });
+        } catch {
+          if (ticket !== run.current) return;
+          setFailed(true);
+          return;
+        }
+
+        setChecked(index + 1);
+      }
+
+      if (ticket !== run.current) return;
+      setBreached(found);
+    })();
+
+    return () => {
+      run.current++;
+    };
+  }, [candidates, enabled]);
+
+  return { breached, checked, total: candidates.length, failed };
+}
+
 export function CheckupPanel({
   items,
   onOpen,
@@ -170,12 +247,27 @@ export function CheckupPanel({
 }) {
   const { weak, scanned, total } = useWeakPasswords(items);
 
+  const breachEnabled = useBreachSettings((settings) => settings.enabled);
+  const setBreachEnabled = useBreachSettings((settings) => settings.setEnabled);
+  const hydrateBreach = useBreachSettings((settings) => settings.hydrate);
+
+  useEffect(() => {
+    hydrateBreach();
+  }, [hydrateBreach]);
+
+  const {
+    breached,
+    checked,
+    total: breachTotal,
+    failed: breachFailed,
+  } = useBreachedPasswords(items, breachEnabled);
+
   const reused = useMemo(() => reusedPasswords(items), [items]);
   const old = useMemo(() => oldPasswords(items), [items]);
   const missing = useMemo(() => withoutPassword(items), [items]);
 
   const scanning = total > 0 && scanned < total;
-  const findings = collectFindings(weak, reused, old, missing);
+  const findings = collectFindings(weak, breached, reused, old, missing);
 
   return (
     <Panel className="mt-6" data-testid="checkup">
@@ -187,6 +279,45 @@ export function CheckupPanel({
         Run here, on decrypted items. The server could not do any of this.
       </p>
 
+      <div className="border-line mb-6 border p-4" data-testid="breach-opt-in">
+        <Checkbox
+          name="breach-check"
+          checked={breachEnabled}
+          onChange={(event) => setBreachEnabled(event.target.checked)}
+          label="also check against published breach data"
+          data-testid="breach-toggle"
+        />
+        {/*
+          The switch is the disclosure, so what it turns on is spelled out
+          under it rather than in a help page. This is the only part of the
+          product that reaches past the vault's own server, and somebody
+          agreeing to that should be able to see exactly what leaves.
+        */}
+        <p className="text-muted mt-3 font-mono text-xs leading-relaxed">
+          <span aria-hidden="true">&gt; </span>
+          Sends the first five characters of each password&apos;s SHA-1 to Have I Been Pwned,
+          through this server. The password is never sent and cannot be worked out from those five
+          characters — they name a bucket of roughly a million. It is still the one thing here that
+          reaches past your own vault, so it is off until you ask.
+        </p>
+      </div>
+
+      {breachEnabled && breachFailed ? (
+        <div className="mb-6" data-testid="breach-failed">
+          <Warning title="the breach service did not answer">
+            No result rather than a clean bill. A check that reported &quot;nothing found&quot; when
+            it could not reach the service would read exactly like good news.
+          </Warning>
+        </div>
+      ) : null}
+
+      {breachEnabled && !breachFailed && checked < breachTotal ? (
+        <p className="text-muted mb-6 font-mono text-xs" data-testid="breach-progress">
+          <span aria-hidden="true">&gt; </span>
+          checking breach data, {checked} of {breachTotal}…
+        </p>
+      ) : null}
+
       {scanning ? (
         <p className="text-muted font-mono text-xs" data-testid="checkup-progress">
           <span aria-hidden="true">&gt; </span>
@@ -195,7 +326,8 @@ export function CheckupPanel({
       ) : findings.length === 0 ? (
         <p className="text-accent font-mono text-sm" data-testid="checkup-clear">
           <span aria-hidden="true">&gt; </span>
-          Nothing reused, nothing weak, nothing older than {OLD_PASSWORD_DAYS} days.
+          Nothing reused, nothing weak, nothing older than {OLD_PASSWORD_DAYS} days
+          {breachEnabled && !breachFailed ? ', nothing in a published breach' : ''}.
         </p>
       ) : (
         <ul className="space-y-6" data-testid="checkup-findings">

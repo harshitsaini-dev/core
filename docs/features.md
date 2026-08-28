@@ -160,7 +160,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ID     | Feature                                                | Phase | Status |
 | ------ | ------------------------------------------------------ | ----- | ------ |
 | SEC-01 | Security dashboard: weak, reused, old passwords        | P5    | DONE   |
-| SEC-02 | HaveIBeenPwned k-anonymity breach check                | P5    | TODO   |
+| SEC-02 | HaveIBeenPwned k-anonymity breach check (opt-in)       | P5    | DONE   |
 | SEC-03 | Clipboard auto-clear after 30 / 60 seconds             | P3    | DONE   |
 | SEC-04 | Session timeout slider (1 / 5 / 15 min / never)        | P3    | DONE   |
 | SEC-05 | Panic button — instant lock and cache wipe             | P3    | DONE   |
