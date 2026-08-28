@@ -42,7 +42,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-06 | Short-lived session token in HttpOnly/Secure/SameSite cookie | P2    | DONE   |
 | AUTH-07 | Rotating refresh tokens, revocable per device                | P2    | DONE   |
 | AUTH-08 | WebAuthn / passkey unlock (biometric, FaceID, YubiKey)       | P5    | TODO   |
-| AUTH-09 | Device PIN quick-unlock backed by the device key             | P3    | TODO   |
+| AUTH-09 | Device PIN quick-unlock backed by the device key             | P3    | DONE   |
 | AUTH-10 | Magic-link account unlock after lockout (Resend)             | P5    | TODO   |
 | AUTH-11 | New-device / new-country login approval via email OTP        | P5    | TODO   |
 | AUTH-12 | Concurrent session limit with oldest-session eviction        | P5    | TODO   |

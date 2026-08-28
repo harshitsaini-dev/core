@@ -30,6 +30,7 @@ export * from './random.js';
 export * from './kdf.js';
 export * from './aes.js';
 export * from './account.js';
+export * from './pin.js';
 export * from './blind-index.js';
 export * from './sharing.js';
 export * from './totp.js';

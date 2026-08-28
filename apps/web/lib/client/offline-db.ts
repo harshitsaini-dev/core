@@ -262,6 +262,48 @@ export async function readUnlockMaterial(): Promise<OfflineUnlock | null> {
   return row ? open<OfflineUnlock>(row) : null;
 }
 
+/**
+ * What quick unlock needs, and what it deliberately does not hold.
+ *
+ * The Account Key wrapped under a key derived from the PIN — the same wrapper
+ * the master password produces, with a different key at the front. Sealed under
+ * the device key like everything else in this table, which is the part that
+ * matters: four digits are four digits, and a blob somebody can carry away and
+ * grind through offline would be a bad trade at any iteration count. Off this
+ * browser profile there is nothing here to attack.
+ *
+ * `attempts` is stored rather than counted in memory. A counter that lives in a
+ * tab is a counter that resets when the tab is closed, which is not a limit —
+ * it is a pause.
+ */
+export interface PinMaterial {
+  readonly email: string;
+  /** Random salt for the PIN derivation, base64url. */
+  readonly salt: string;
+  /** The Account Key, wrapped under the PIN key. */
+  readonly accountKeyWrapped: string;
+  /** Failed attempts since the last success. */
+  readonly attempts: number;
+}
+
+export async function writePinMaterial(material: PinMaterial): Promise<void> {
+  if (!isSupported()) return;
+  await db().secrets.put({ id: 'pin', ...(await seal(material)) });
+}
+
+export async function readPinMaterial(): Promise<PinMaterial | null> {
+  if (!isSupported()) return null;
+
+  const row = await db().secrets.get('pin');
+  return row ? open<PinMaterial>(row) : null;
+}
+
+/** Forget the PIN. Called on the last wrong attempt, and when it is turned off. */
+export async function clearPinMaterial(): Promise<void> {
+  if (!isSupported()) return;
+  await db().secrets.delete('pin');
+}
+
 // ---------------------------------------------------------------------------
 // The sync cursor
 // ---------------------------------------------------------------------------

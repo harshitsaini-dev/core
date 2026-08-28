@@ -1,10 +1,13 @@
 'use client';
 
+import type { AccountKeys } from '@core/crypto';
 import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { LoginFailed, login, unlockOffline } from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
+import { pinStatus } from '@/lib/client/pin';
+import { PinUnlock } from './pin-unlock';
 
 /**
  * Unlock.
@@ -28,9 +31,33 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  // `null` until the lookup finishes, and null forever on a device with no PIN.
+  // Rendering the password form first and replacing it a moment later would
+  // move the field under a cursor that is already typing.
+  const [pinEmail, setPinEmail] = useState<string | null>(null);
+  const [pinDismissed, setPinDismissed] = useState(false);
+
+  useEffect(() => {
+    void pinStatus().then((status) => setPinEmail(status.enabled ? status.email : null));
+  }, []);
 
   const router = useRouter();
   const unlock = useVault((state) => state.unlock);
+
+  /**
+   * Into the vault, however the keys were obtained.
+   *
+   * Client-side navigation, deliberately. The keys live in memory and are never
+   * persisted, so a full page load would discard them and land on a locked
+   * vault a moment after unlocking it.
+   */
+  const enter = useCallback(
+    (keys: AccountKeys) => {
+      unlock(keys);
+      router.push('/vault');
+    },
+    [router, unlock],
+  );
 
   const onSubmit = useCallback(
     async (event: React.FormEvent) => {
@@ -54,13 +81,7 @@ export default function LoginPage() {
           keys = await unlockOffline(email, password, setProgress);
         }
 
-        unlock(keys);
-        // Client-side navigation, deliberately. The keys live in memory and are
-        // never persisted, so a full page load would discard them and land on a
-        // locked vault a moment after unlocking it. That is the cost of not
-        // writing keys to disk, and it makes router.push a correctness
-        // requirement here rather than a preference.
-        router.push('/vault');
+        enter(keys);
       } catch (cause) {
         // One message for a wrong password, an unknown address and a failed
         // unwrap alike. The API refuses to distinguish those, and a UI that
@@ -75,8 +96,23 @@ export default function LoginPage() {
         setProgress('');
       }
     },
-    [busy, email, password, router, unlock],
+    [busy, email, enter, password],
   );
+
+  // Rendered instead of the password form, never above it: two credential
+  // fields on one screen is an invitation to type the wrong secret into the
+  // wrong box. The way back is a button, not a scroll.
+  if (pinEmail !== null && !pinDismissed) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
+        <PinUnlock
+          email={pinEmail}
+          onUnlocked={enter}
+          onUsePassword={() => setPinDismissed(true)}
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
