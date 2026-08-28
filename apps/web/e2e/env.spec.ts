@@ -11,9 +11,26 @@ import { openVault as openAccount } from './helpers/vault';
 
 const PASSWORD = 'correct-horse-battery-staple-7391';
 
-/** An unlocked vault. The signup page has its own tests; here it is scenery. */
+/**
+ * An unlocked vault, on the environment screen.
+ *
+ * The signup page has its own tests; here it is scenery, so the account is
+ * created through the API. The last two lines are not: they were dropped when
+ * this helper was switched over to the shared one, and every test in this file
+ * then ran against the vault list, waiting for a field that only exists on the
+ * next screen.
+ */
 async function openEnv(page: Page, label: string): Promise<string> {
-  return openAccount(page, label, PASSWORD);
+  const email = await openAccount(page, label, PASSWORD);
+
+  // Navigated from inside the app, not with `goto`. A full page load discards
+  // the in-memory keys and lands on a locked screen — which is by design, and
+  // is also why the vault reaches this page with router.push.
+  await page.getByTestId('open-env').click();
+  await expect(page).toHaveURL(/\/env$/);
+  await expect(page.getByTestId('project-name')).toBeVisible();
+
+  return email;
 }
 
 async function makeProject(page: Page, name: string): Promise<void> {
