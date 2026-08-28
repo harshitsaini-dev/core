@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @core/web dev",
+    "smoke": "node scripts/smoke.mjs",
     "build": "pnpm --filter @core/web build",
     "start": "pnpm --filter @core/web start",
     "typecheck": "tsc --build && pnpm --filter @core/web exec tsc --noEmit && pnpm --filter @core/web exec tsc --noEmit -p e2e/tsconfig.json",

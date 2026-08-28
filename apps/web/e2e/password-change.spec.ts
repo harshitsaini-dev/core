@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openVault as openAccount } from './helpers/vault';
 
 /**
  * Changing the master password.
@@ -13,27 +14,9 @@ import type { Page } from '@playwright/test';
 const OLD_PASSWORD = 'correct-horse-battery-staple-7391';
 const NEW_PASSWORD = 'entirely-different-passphrase-4482';
 
-function uniqueEmail(label: string): string {
-  return `${label}-${crypto.randomUUID()}@core.test`;
-}
-
+/** An unlocked vault. The signup page has its own tests; here it is scenery. */
 async function signUp(page: Page, label: string): Promise<string> {
-  const email = uniqueEmail(label);
-
-  await page.goto('/signup');
-  await page.getByLabel('email').fill(email);
-  await page.getByLabel('master password', { exact: true }).fill(OLD_PASSWORD);
-  await page.getByLabel('confirm master password').fill(OLD_PASSWORD);
-  await page.getByRole('button', { name: 'create vault' }).click();
-
-  await expect(page.getByTestId('kit-acknowledge')).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId('kit-acknowledge').check();
-  await page.getByTestId('kit-continue').click();
-
-  await expect(page).toHaveURL(/\/login$/);
-  await unlock(page, email, OLD_PASSWORD);
-
-  return email;
+  return openAccount(page, label, OLD_PASSWORD);
 }
 
 async function unlock(page: Page, email: string, password: string): Promise<void> {

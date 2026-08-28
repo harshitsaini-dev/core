@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openVault as openAccount } from './helpers/vault';
 
 /**
  * Importing a CSV from another password manager.
@@ -12,28 +13,9 @@ import type { Page } from '@playwright/test';
 
 const PASSWORD = 'correct-horse-battery-staple-7391';
 
-function uniqueEmail(label: string): string {
-  return `${label}-${crypto.randomUUID()}@core.test`;
-}
-
+/** An unlocked vault. The signup page has its own tests; here it is scenery. */
 async function openVault(page: Page, label: string): Promise<void> {
-  const email = uniqueEmail(label);
-
-  await page.goto('/signup');
-  await page.getByLabel('email').fill(email);
-  await page.getByLabel('master password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('confirm master password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'create vault' }).click();
-
-  await expect(page.getByTestId('kit-acknowledge')).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId('kit-acknowledge').check();
-  await page.getByTestId('kit-continue').click();
-
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('email').fill(email);
-  await page.getByLabel('master password').fill(PASSWORD);
-  await page.getByTestId('unlock').click();
-  await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+  await openAccount(page, label, PASSWORD);
 }
 
 async function choose(page: Page, csv: string): Promise<void> {

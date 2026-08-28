@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openVault as openAccount } from './helpers/vault';
 
 /**
  * The rest of a login item: one-time codes, recovery codes and custom fields.
@@ -14,28 +15,9 @@ const PASSWORD = 'correct-horse-battery-staple-7391';
 /** RFC 4648's canonical base32 example. Valid, and easy to recognise. */
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
 
-function uniqueEmail(label: string): string {
-  return `${label}-${crypto.randomUUID()}@core.test`;
-}
-
+/** An unlocked vault. The signup page has its own tests; here it is scenery. */
 async function openVault(page: Page, label: string): Promise<void> {
-  const email = uniqueEmail(label);
-
-  await page.goto('/signup');
-  await page.getByLabel('email').fill(email);
-  await page.getByLabel('master password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('confirm master password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'create vault' }).click();
-
-  await expect(page.getByTestId('kit-acknowledge')).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId('kit-acknowledge').check();
-  await page.getByTestId('kit-continue').click();
-
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('email').fill(email);
-  await page.getByLabel('master password').fill(PASSWORD);
-  await page.getByTestId('unlock').click();
-  await expect(page).toHaveURL(/\/vault$/, { timeout: 45_000 });
+  await openAccount(page, label, PASSWORD);
 }
 
 test.describe('one-time codes', () => {
