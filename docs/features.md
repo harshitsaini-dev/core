@@ -110,8 +110,8 @@ P5 Hardening+Deploy · P6 Post-v1
 | ENV-05 | Copy whole environment to clipboard as `.env`        | P4    | DONE   |
 | ENV-06 | Export as shell `export KEY="value"` lines           | P4    | DONE   |
 | ENV-07 | Export as Docker `--env` / `docker-compose` fragment | P6    | TODO   |
-| ENV-08 | Mask / unmask all values with one button             | P4    | TODO   |
-| ENV-09 | Drag-and-drop `.env` import with parsing             | P4    | TODO   |
+| ENV-08 | Mask / unmask all values with one button             | P4    | DONE   |
+| ENV-09 | Drag-and-drop `.env` import with parsing             | P4    | DONE   |
 | ENV-10 | Paste-to-import from clipboard                       | P4    | TODO   |
 | ENV-11 | Version history per variable                         | P4    | TODO   |
 | ENV-12 | Diff viewer between versions (red/green)             | P4    | TODO   |

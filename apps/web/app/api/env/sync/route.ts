@@ -1,7 +1,7 @@
-import { environments, envVars, projects } from '@core/db';
+import { environments, envVarVersions, envVars, projects } from '@core/db';
 import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import type { SyncedEnvVar, SyncedEnvironment, SyncedProject } from '@core/shared';
-import { and, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
@@ -68,6 +68,21 @@ const varUpsert = z.object({
 
 const varDelete = z.object({ op: z.literal('var-delete'), id: z.uuid() });
 
+/**
+ * A previous value, kept so a change can be seen and undone.
+ *
+ * Sent by the client alongside the upsert that replaced it, rather than derived
+ * here — the server cannot read either value and so cannot tell whether
+ * anything changed.
+ */
+const varVersion = z.object({
+  op: z.literal('var-version'),
+  id: z.uuid(),
+  envVarId: z.uuid(),
+  keyEnc: envelope,
+  valueEnc: envelope,
+});
+
 const pushSchema = z.object({
   operations: z
     .array(
@@ -78,6 +93,7 @@ const pushSchema = z.object({
         environmentDelete,
         varUpsert,
         varDelete,
+        varVersion,
       ]),
     )
     .max(1000),
@@ -146,6 +162,37 @@ async function ownedIds(
     .where(inArray(environments.projectId, projectIds));
 
   return { projectIds, environmentIds: environmentRows.map((row) => row.id) };
+}
+
+/**
+ * How many previous values to keep per variable.
+ *
+ * Not unlimited, and the reason is not storage. Every one of these is a
+ * production secret that was live at some point, and a key rotated because it
+ * leaked is exactly the one nobody wants kept forever. Ten is enough to undo a
+ * mistake and short enough that history is not an archive.
+ */
+const MAX_VERSIONS = 10;
+
+async function pruneVersions(
+  db: ReturnType<typeof getRequestContext>['db'],
+  envVarId: string,
+): Promise<void> {
+  const rows = await db
+    .select({ id: envVarVersions.id })
+    .from(envVarVersions)
+    .where(eq(envVarVersions.envVarId, envVarId))
+    .orderBy(asc(envVarVersions.createdAt));
+
+  const excess = rows.slice(0, Math.max(0, rows.length - MAX_VERSIONS));
+  if (excess.length === 0) return;
+
+  await db.delete(envVarVersions).where(
+    inArray(
+      envVarVersions.id,
+      excess.map((row) => row.id),
+    ),
+  );
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -359,6 +406,24 @@ export async function POST(request: NextRequest): Promise<Response> {
           .onConflictDoNothing();
         varsOwned.add(operation.id);
       }
+      continue;
+    }
+
+    if (operation.op === 'var-version') {
+      if (!varsOwned.has(operation.envVarId)) continue;
+
+      await db
+        .insert(envVarVersions)
+        .values({
+          id: operation.id,
+          envVarId: operation.envVarId,
+          keyEnc: unsafeAsEncrypted(operation.keyEnc),
+          valueEnc: unsafeAsEncrypted(operation.valueEnc),
+          createdAt: now,
+        })
+        .onConflictDoNothing();
+
+      await pruneVersions(db, operation.envVarId);
       continue;
     }
 

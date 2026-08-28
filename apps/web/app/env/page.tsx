@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  countChanges,
+  diffLines,
   formatDotenv,
   formatShellExport,
   isValidEnvKey,
@@ -12,6 +14,8 @@ import { Button, Input, Panel, Textarea } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { copySecret, pulse } from '@/lib/client/clipboard';
+import { fetchHistory } from '@/lib/client/env-api';
+import type { EnvVarVersion } from '@/lib/client/env-api';
 import { activeProjects, environmentsOf, useEnv, varsOf } from '@/lib/client/env-store';
 import { toast } from '@/lib/client/toast-store';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
@@ -40,6 +44,8 @@ export default function EnvPage() {
   const environments = useEnv((store) => store.environments);
   const vars = useEnv((store) => store.vars);
   const loading = useEnv((store) => store.loading);
+  const saving = useEnv((store) => store.saving);
+  const savedAt = useEnv((store) => store.savedAt);
   const error = useEnv((store) => store.error);
   const load = useEnv((store) => store.load);
   const reset = useEnv((store) => store.reset);
@@ -99,6 +105,24 @@ export default function EnvPage() {
           <span className="text-muted ml-3 text-xs tracking-widest uppercase">env</span>
         </h1>
         <div className="flex items-center gap-3">
+          {/*
+            The only save feedback this screen has. Without it there is no way
+            to tell a change that landed from one still in flight — which is
+            uncomfortable on a page full of production secrets, and was also
+            what made the first history test race the push it was waiting for.
+          */}
+          {saving > 0 || savedAt !== null ? (
+            <p
+              className={
+                saving > 0 ? 'text-warning font-mono text-xs' : 'text-accent-dim font-mono text-xs'
+              }
+              aria-live="polite"
+              data-testid="env-status"
+            >
+              <span aria-hidden="true">{saving > 0 ? '○ ' : '● '}</span>
+              {saving > 0 ? 'saving' : 'saved'}
+            </p>
+          ) : null}
           <Button type="button" variant="ghost" onClick={() => router.push('/vault')}>
             vault
           </Button>
@@ -542,6 +566,8 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(row.value);
   const [shown, setShown] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const visible = revealed || shown;
 
@@ -565,15 +591,27 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
             data-testid="var-row-edit"
             className="min-w-0 flex-1"
           />
+          {/*
+            The row stays in edit mode until the change has been saved, the same
+            way the vault's item form does. Closing on click looks faster and
+            leaves nothing on screen that says whether it worked — and it lets a
+            second click fire a second save of the same value.
+          */}
           <Button
             type="button"
+            disabled={busy}
             onClick={() => {
-              void saveVar(row.environmentId, { id: row.id, key: row.key, value: draft });
-              setEditing(false);
+              setBusy(true);
+              void saveVar(row.environmentId, { id: row.id, key: row.key, value: draft }).finally(
+                () => {
+                  setBusy(false);
+                  setEditing(false);
+                },
+              );
             }}
             data-testid="var-row-save"
           >
-            save
+            {busy ? '... saving' : 'save'}
           </Button>
           <Button
             type="button"
@@ -635,6 +673,15 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
           <Button
             type="button"
             variant="ghost"
+            onClick={() => setHistoryOpen((current) => !current)}
+            aria-pressed={historyOpen}
+            data-testid="var-row-history"
+          >
+            history
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => {
               void deleteVar(row.id);
               toast(`${row.key} removed.`, { tone: 'warning' });
@@ -645,6 +692,156 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
           </Button>
         </>
       )}
+
+      {historyOpen ? <History row={row} /> : null}
     </li>
+  );
+}
+
+/**
+ * What a variable used to be.
+ *
+ * Shown as a diff against the value it has now, because "it was
+ * `postgres://old-host/db`" is far less useful than seeing which part of it
+ * moved — and a connection string differs from its predecessor by one word
+ * about as often as not.
+ *
+ * The old values are masked like the current one. They are secrets too: a
+ * rotated key is still valid until somebody revokes it, and the reason it was
+ * rotated is often that it leaked.
+ */
+function History({ row }: { row: DecryptedEnvVar }) {
+  const keys = useVault((vault) => vault.keys);
+  const recent = useEnv((store) => store.recentVersions[row.id]);
+
+  const [versions, setVersions] = useState<EnvVarVersion[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  /**
+   * Refetched whenever the variable changes, not only when the panel opens.
+   *
+   * Opening it immediately after an edit could show "no previous values" — the
+   * version had been written locally and the panel had already asked the server
+   * for a list that did not contain it yet. A single fetch cannot tell a
+   * history that is empty from one that has not arrived, and the panel said the
+   * first with the confidence of the second.
+   *
+   * Keyed on `updatedAt`, so a save re-asks and a redraw for any other reason
+   * does not.
+   */
+  useEffect(() => {
+    if (!keys) return;
+
+    let cancelled = false;
+    void fetchHistory(keys, row.id)
+      .then((result) => {
+        if (!cancelled) setVersions(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [keys, row.id, row.updatedAt]);
+
+  if (failed) {
+    return (
+      <p className="text-warning mt-3 w-full font-mono text-xs" data-testid="history-error">
+        <span aria-hidden="true">! </span>
+        Could not load the history.
+      </p>
+    );
+  }
+
+  // What the server returned, plus anything written in this session that it has
+  // not caught up with. Deduplicated on the value, since the same version
+  // arrives from both sides once the read catches up.
+  const merged = [...(recent ?? []), ...(versions ?? [])].filter(
+    (entry, index, all) => all.findIndex((other) => other.value === entry.value) === index,
+  );
+
+  if (versions === null && merged.length === 0) {
+    return (
+      <p className="text-muted mt-3 w-full font-mono text-xs">
+        <span aria-hidden="true">&gt; </span>
+        loading...
+      </p>
+    );
+  }
+
+  if (merged.length === 0) {
+    return (
+      <p className="text-muted mt-3 w-full font-mono text-xs" data-testid="history-empty">
+        <span aria-hidden="true">&gt; </span>
+        no previous values
+      </p>
+    );
+  }
+
+  return (
+    <div className="border-line mt-3 w-full border-l pl-3" data-testid="history">
+      <button
+        type="button"
+        onClick={() => setRevealed((current) => !current)}
+        aria-pressed={revealed}
+        data-testid="history-reveal"
+        className="text-muted hover:text-accent mb-2 font-mono text-[10px] tracking-widest uppercase"
+      >
+        {revealed ? 'hide old values' : 'show old values'}
+      </button>
+
+      <ol className="space-y-3">
+        {merged.map((version, index) => {
+          // Each version is compared with what replaced it: the next newer
+          // version, or the value the variable has now for the most recent.
+          const replacedBy = index === 0 ? row.value : (merged[index - 1]?.value ?? '');
+          const lines = diffLines(version.value, replacedBy);
+
+          return (
+            <li key={version.id} data-testid="history-entry">
+              <p className="text-muted font-mono text-[10px]">
+                <span aria-hidden="true">&gt; </span>
+                {new Date(version.createdAt).toLocaleString()} ·{' '}
+                <span data-testid="history-change-count">{countChanges(lines)}</span> line(s)
+                changed
+              </p>
+
+              {revealed ? (
+                <pre
+                  className="secret mt-1 overflow-x-auto font-mono text-[11px] leading-relaxed"
+                  data-testid="history-diff"
+                >
+                  {lines.map((line, position) => (
+                    <div
+                      key={position}
+                      data-kind={line.kind}
+                      className={
+                        line.kind === 'removed'
+                          ? 'text-danger'
+                          : line.kind === 'added'
+                            ? 'text-accent'
+                            : 'text-muted'
+                      }
+                    >
+                      <span aria-hidden="true">
+                        {line.kind === 'removed' ? '- ' : line.kind === 'added' ? '+ ' : '  '}
+                      </span>
+                      {line.text}
+                    </div>
+                  ))}
+                </pre>
+              ) : (
+                <p className="text-muted secret mt-1 font-mono text-[11px]">
+                  {maskValue(version.value)}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }

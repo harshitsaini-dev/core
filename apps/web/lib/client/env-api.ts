@@ -118,7 +118,14 @@ export type EnvOperation =
       noteEnc: string | null;
       sortOrder: number;
     }
-  | { op: 'var-delete'; id: string };
+  | { op: 'var-delete'; id: string }
+  | {
+      op: 'var-version';
+      id: string;
+      envVarId: string;
+      keyEnc: string;
+      valueEnc: string;
+    };
 
 export async function toProjectUpsert(
   keys: AccountKeys,
@@ -195,6 +202,54 @@ export async function pushEnv(operations: readonly EnvOperation[]): Promise<numb
 
   const body = (await response.json()) as { cursor: number };
   return body.cursor;
+}
+
+export interface EnvVarVersion {
+  readonly id: string;
+  readonly key: string;
+  readonly value: string;
+  readonly createdAt: number;
+}
+
+/** The value a variable had before a change, ready to store. */
+export async function toVersion(
+  keys: AccountKeys,
+  previous: { id: string; key: string; value: string },
+): Promise<EnvOperation> {
+  return {
+    op: 'var-version',
+    id: crypto.randomUUID(),
+    envVarId: previous.id,
+    keyEnc: await encryptString(keys.dataKey, previous.key),
+    valueEnc: await encryptString(keys.dataKey, previous.value),
+  };
+}
+
+/**
+ * The previous values of one variable.
+ *
+ * Fetched on demand rather than carried by every sync: each of these is a
+ * secret in its own right, and a project of forty variables would otherwise
+ * ship four hundred blobs nobody asked to see.
+ */
+export async function fetchHistory(keys: AccountKeys, envVarId: string): Promise<EnvVarVersion[]> {
+  const response = await fetch(`/api/env/history?varId=${encodeURIComponent(envVarId)}`, {
+    credentials: 'same-origin',
+  });
+  if (!response.ok) throw new Error('Could not load the history.');
+
+  const body = (await response.json()) as {
+    versions: { id: string; keyEnc: string; valueEnc: string; createdAt: number }[];
+  };
+
+  return Promise.all(
+    body.versions.map(async (row) => ({
+      id: row.id,
+      key: await open(keys.dataKey, row.keyEnc, 'UNREADABLE'),
+      value: await open(keys.dataKey, row.valueEnc, ''),
+      createdAt: row.createdAt,
+    })),
+  );
 }
 
 export function newEnvId(): string {

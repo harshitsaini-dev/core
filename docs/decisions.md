@@ -634,3 +634,42 @@ session owns and every write is checked against the same walk, because getting
 it wrong here would not leak a name — it would hand somebody else's production
 secrets to whoever asked for them by id. Four of the eleven API tests are that
 attack.
+
+---
+
+## ADR-023 — Variable history is bounded, masked, and not read back from the server
+
+**Date:** 2026-08-28 · **Status:** Accepted
+
+**Context.** A variable keeps its previous values so a change can be seen and
+undone. Every one of those is a production secret that was live at some point.
+
+**Decision — ten per variable.** Not unlimited, and not for storage reasons. A
+key rotated because it leaked is exactly the one nobody wants kept forever. Ten
+is enough to undo a mistake and short enough that history is not an archive.
+
+**Decision — old values are masked like current ones,** and shown as a diff
+against what replaced them. "It was `postgres://old-host/db`" is far less useful
+than seeing which part moved, and a connection string differs from its
+predecessor by one word about as often as not.
+
+**Decision — history is a separate endpoint,** not part of sync. A project of
+forty variables would otherwise carry four hundred blobs on every refresh that
+it will almost certainly never show.
+
+**Decision — the panel does not depend on reading back what was just written.**
+The client knows the old value: it is what it just replaced. It keeps that in
+memory and merges it with whatever the server returns.
+
+That last one is the interesting one, and it came from a test that failed
+intermittently on the phone viewport. A read immediately after a write did not
+always include the row — and the panel then said "no previous values", which is
+a false statement made with complete confidence. Refetching when the variable
+changes helped and did not fix it. Not asking at all does.
+
+**Consequences.** The diff is written here rather than pulled in, for the same
+reason as the `.env` parser: what it compares is a production secret and it runs
+in the origin holding the vault keys. Thirteen tests, including the property
+that makes a diff trustworthy — every line of both sides appears somewhere in
+the output, because a diff that quietly drops a line of a private key is worse
+than none.

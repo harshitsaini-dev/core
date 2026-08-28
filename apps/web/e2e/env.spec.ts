@@ -54,6 +54,7 @@ async function addVar(page: Page, key: string, value: string): Promise<void> {
   await page.getByTestId('var-value').fill(value);
   await page.getByTestId('var-add').click();
   await expect(page.getByTestId('var-list')).toContainText(key);
+  await expect(page.getByTestId('env-status')).toContainText('saved');
 }
 
 test.describe('projects and environments', () => {
@@ -367,5 +368,123 @@ test.describe('files', () => {
 
     await page.getByTestId('import-apply').click();
     await expect(page.getByTestId('var-row')).toHaveCount(2);
+  });
+});
+
+test.describe('variable history', () => {
+  test.slow();
+
+  test('records the value a change replaced', async ({ page }) => {
+    const calls: string[] = [];
+    page.on('response', (response) => {
+      if (response.url().includes('/api/env/')) {
+        calls.push(response.request().method() + ' ' + response.status());
+      }
+    });
+
+    await openEnv(page, 'env-history');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'API_URL', 'https://one.example.com');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('https://two.example.com');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    await expect(page.getByTestId('history-entry'), calls.join(', ')).toHaveCount(1, {
+      timeout: 20_000,
+    });
+  });
+
+  test('shows what moved, not just what it was', async ({ page }) => {
+    // "It was postgres://old-host/db" is far less useful than seeing which part
+    // of it changed.
+    await openEnv(page, 'env-history-diff');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'DB', 'postgres://old-host/db');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('postgres://new-host/db');
+    await page.getByTestId('var-row-save').click();
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    // Waited for rather than clicked straight away: the panel fetches, and the
+    // control only exists once there is something to reveal.
+    await expect(page.getByTestId('history-reveal')).toBeVisible();
+    await page.getByTestId('history-reveal').click();
+
+    const diff = page.getByTestId('history-diff');
+    await expect(diff.locator('[data-kind="removed"]')).toContainText('old-host');
+    await expect(diff.locator('[data-kind="added"]')).toContainText('new-host');
+  });
+
+  test('masks the old values until they are asked for', async ({ page }) => {
+    // A rotated key is still valid until somebody revokes it, and the reason it
+    // was rotated is often that it leaked.
+    await openEnv(page, 'env-history-masked');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'TOKEN', 'sk_live_old_secret');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-edit').fill('sk_live_new_secret');
+    await page.getByTestId('var-row-save').click();
+    // The row stays open until the save lands, so this is the barrier. The
+    // status indicator is not one: it reads "saved" from the first save onward.
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    await expect(page.getByTestId('history-reveal')).toBeVisible();
+    await expect(page.getByTestId('history')).not.toContainText('sk_live_old_secret');
+
+    await page.getByTestId('history-reveal').click();
+    await expect(page.getByTestId('history-diff')).toContainText('sk_live_old_secret');
+  });
+
+  test('says so when there is nothing to show', async ({ page }) => {
+    await openEnv(page, 'env-history-empty');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'NEVER_CHANGED', 'one');
+
+    await page.getByTestId('var-row-history').click();
+    await expect(page.getByTestId('history-empty')).toBeVisible();
+  });
+
+  test('does not record a save that changed nothing', async ({ page }) => {
+    // Otherwise the history fills with entries identical to each other and the
+    // one somebody is looking for is harder to find.
+    await openEnv(page, 'env-history-noop');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'SAME', 'unchanged');
+
+    await page.getByTestId('var-row-edit-open').click();
+    await page.getByTestId('var-row-save').click();
+    // The row stays open until the save lands, so this is the barrier. The
+    // status indicator is not one: it reads "saved" from the first save onward.
+    await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+
+    await page.getByTestId('var-row-history').click();
+    await expect(page.getByTestId('history-empty')).toBeVisible();
+  });
+
+  test('keeps every change in order', async ({ page }) => {
+    await openEnv(page, 'env-history-order');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'STEP', 'one');
+
+    for (const value of ['two', 'three']) {
+      await page.getByTestId('var-row-edit-open').click();
+      await page.getByTestId('var-row-edit').fill(value);
+      await page.getByTestId('var-row-save').click();
+      await expect(page.getByTestId('var-row-edit')).toHaveCount(0);
+    }
+
+    await page.getByTestId('var-row-history').click();
+    await expect(page.getByTestId('history-entry')).toHaveCount(2);
+
+    await page.getByTestId('history-reveal').click();
+    // Newest first: the most recent previous value is "two".
+    await expect(page.getByTestId('history-entry').first()).toContainText('two');
   });
 });

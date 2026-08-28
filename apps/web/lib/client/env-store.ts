@@ -10,8 +10,9 @@ import {
   toEnvironmentUpsert,
   toProjectUpsert,
   toVarUpsert,
+  toVersion,
 } from './env-api';
-import type { EnvOperation } from './env-api';
+import type { EnvOperation, EnvVarVersion } from './env-api';
 import { useVault } from './vault-store';
 
 /**
@@ -35,6 +36,26 @@ interface EnvState {
   readonly vars: readonly DecryptedEnvVar[];
   readonly cursor: number;
   readonly loading: boolean;
+  /** How many pushes are in flight. Drives the only save feedback this screen has. */
+  readonly saving: number;
+  /**
+   * When the last push landed, or null if none has.
+   *
+   * Separate from `saving` so that "saved" means something was saved. A single
+   * flag reads as "saved" before anything has happened, which is worse than
+   * useless: it is an indicator that agrees with you whatever you ask it.
+   */
+  readonly savedAt: number | null;
+  /**
+   * Versions written in this session, by variable id.
+   *
+   * Kept because a read straight after a write is not reliable: the history
+   * endpoint can answer without the row that was created moments earlier, and
+   * a panel that then says "no previous values" is stating something false with
+   * complete confidence. The client already knows what the old value was — it
+   * is what it just replaced — so it does not need to ask.
+   */
+  readonly recentVersions: Readonly<Record<string, EnvVarVersion[]>>;
   readonly error: string | null;
 
   load: () => Promise<void>;
@@ -65,6 +86,9 @@ const EMPTY = {
   vars: [] as readonly DecryptedEnvVar[],
   cursor: 0,
   loading: false,
+  saving: 0,
+  savedAt: null,
+  recentVersions: {} as Readonly<Record<string, EnvVarVersion[]>>,
   error: null,
 };
 
@@ -242,7 +266,32 @@ export const useEnv = create<EnvState>((set, get) => ({
         : [...get().vars, updated],
     });
 
-    await commit(set, get, [await toVarUpsert(keys, updated)]);
+    // The previous value is kept only when it actually changed, and it is sent
+    // in the same push as the change itself. Recording a "version" identical to
+    // the current value would fill the history with noise and make the one
+    // entry somebody is looking for harder to find.
+    const changed = existing !== undefined && existing.value !== entry.value;
+
+    if (changed && existing) {
+      const archived: EnvVarVersion = {
+        id: newEnvId(),
+        key: existing.key,
+        value: existing.value,
+        createdAt: now,
+      };
+
+      set({
+        recentVersions: {
+          ...get().recentVersions,
+          [id]: [archived, ...(get().recentVersions[id] ?? [])],
+        },
+      });
+    }
+
+    await commit(set, get, [
+      ...(changed && existing ? [await toVersion(keys, existing)] : []),
+      await toVarUpsert(keys, updated),
+    ]);
   },
 
   deleteVar: async (id) => {
@@ -332,11 +381,17 @@ type Getter = () => EnvState;
 async function commit(set: Setter, get: Getter, operations: EnvOperation[]): Promise<void> {
   if (operations.length === 0) return;
 
+  // Counted rather than a boolean: two changes can be in flight at once, and a
+  // flag would report "saved" the moment the first of them finished.
+  set({ saving: get().saving + 1 });
+
   try {
     const cursor = await pushEnv(operations);
-    set({ cursor: Math.max(get().cursor, cursor), error: null });
+    set({ cursor: Math.max(get().cursor, cursor), savedAt: Date.now(), error: null });
   } catch {
     set({ error: 'Not saved. Check your connection and try again.' });
+  } finally {
+    set({ saving: Math.max(0, get().saving - 1) });
   }
 }
 
