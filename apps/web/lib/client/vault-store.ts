@@ -3,6 +3,7 @@
 import type { AccountKeys } from '@core/crypto';
 import { create } from 'zustand';
 import { logout } from './auth';
+import { useGeneratorHistory } from './generator-history';
 import { useLockSettings } from './lock-settings';
 import * as offline from './offline-db';
 
@@ -50,7 +51,13 @@ export const useVault = create<VaultState>((set, get) => ({
 
   unlock: (keys) => set({ state: 'unlocked', keys, lockedAutomatically: false }),
 
-  lock: (automatic = false) => set({ state: 'locked', keys: null, lockedAutomatically: automatic }),
+  lock: (automatic = false) => {
+    // The generator history holds plaintext passwords in memory. Locking is
+    // supposed to end access to secrets, and a list of freshly generated ones
+    // surviving it would be a hole in exactly the control this is.
+    useGeneratorHistory.getState().clear();
+    set({ state: 'locked', keys: null, lockedAutomatically: automatic });
+  },
 
   panic: async () => {
     // Lock first. If anything after this hangs, the keys are already gone —

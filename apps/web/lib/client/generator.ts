@@ -1,4 +1,11 @@
-import { randomChoice, randomInt, shuffleInPlace } from '@core/crypto';
+import {
+  bytesToBase64Url,
+  bytesToHex,
+  randomBytes,
+  randomChoice,
+  randomInt,
+  shuffleInPlace,
+} from '@core/crypto';
 
 /**
  * Password and passphrase generation.
@@ -111,4 +118,47 @@ export function generatePassphrase(words = 6, separator = '-'): string {
 export function generateApiKey(bytes = 32): string {
   const alphabet = `${LOWER}${UPPER}${DIGITS}`;
   return Array.from({ length: bytes }, () => alphabet[randomInt(alphabet.length)]).join('');
+}
+
+/**
+ * A UUID.
+ *
+ * `crypto.randomUUID` where it exists, which is everywhere this app runs, and a
+ * hand-built v4 where it does not — a page served over plain HTTP in a browser
+ * that gates it on a secure context. That fallback is not a security
+ * compromise: it draws from the same CSPRNG and only assembles the bytes here.
+ */
+export function generateUuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+
+  const bytes = randomBytes(16);
+  // Version 4, variant 10xx. Written out because a UUID that fails a strict
+  // parser is a UUID that gets rejected somewhere far from here.
+  bytes[6] = ((bytes[6] as number) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80;
+
+  const hex = bytesToHex(bytes);
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-');
+}
+
+/** Random hex. The shape a secret is usually wanted in for a config file. */
+export function generateHex(bytes = 32): string {
+  return bytesToHex(randomBytes(bytes));
+}
+
+/**
+ * Random base64url.
+ *
+ * url-safe rather than standard base64, because these end up in `.env` files
+ * and query strings, and a `+` or `/` in either is a bug found later by
+ * somebody else.
+ */
+export function generateBase64(bytes = 32): string {
+  return bytesToBase64Url(randomBytes(bytes));
 }

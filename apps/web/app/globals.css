@@ -302,6 +302,72 @@ textarea:-webkit-autofill {
 }
 
 /*
+ * A range slider.
+ *
+ * Rebuilt like every other control here: the native one is a rounded pill on
+ * every platform and cannot be talked out of it. Track and thumb are both
+ * square, and the thumb is deliberately larger than it looks like it needs to
+ * be — this is dragged with a thumb on a phone.
+ */
+.control-range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.control-range::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--color-line);
+}
+
+.control-range::-moz-range-track {
+  height: 2px;
+  background: var(--color-line);
+}
+
+.control-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.85rem;
+  height: 1.1rem;
+  margin-top: -0.5rem;
+  background: var(--color-accent);
+  border: none;
+}
+
+.control-range::-moz-range-thumb {
+  width: 0.85rem;
+  height: 1.1rem;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 0;
+}
+
+.control-range:focus-visible {
+  outline: none;
+}
+
+.control-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 10px rgb(0 255 65 / 0.45);
+}
+
+.control-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 10px rgb(0 255 65 / 0.45);
+}
+
+/*
+ * A value that has not been asked for yet.
+ *
+ * Masked with bullets rather than blurred: a blur is reversible by anyone with
+ * a screenshot and a filter, and this one has never been shown at all.
+ */
+.is-hidden {
+  user-select: none;
+}
+
+/*
  * Blur-all.
  *
  * `.secret` marks anything that is a value rather than a label: a title, a

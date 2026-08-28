@@ -94,7 +94,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | GEN-01 | Password generator with length, case, digits, symbols | P3    | DONE   |
 | GEN-02 | Pronounceable passphrase generator (diceware style)   | P3    | DONE   |
 | GEN-03 | Exclude-ambiguous-characters toggle                   | P3    | DONE   |
-| GEN-04 | Generator history (session-scoped, never persisted)   | P3    | TODO   |
+| GEN-04 | Generator history (session-scoped, never persisted)   | P3    | DONE   |
 | GEN-05 | API-key utility: random 32 / 64 character keys        | P4    | DONE   |
 | GEN-06 | UUID / hex / base64 quick generators                  | P4    | DONE   |
 | GEN-07 | Master-password strength meter (zxcvbn)               | P2    | DONE   |
