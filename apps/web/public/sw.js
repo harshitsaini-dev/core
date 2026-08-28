@@ -20,11 +20,24 @@
  *      Cache-first would mean shipping a stale app after a deploy, which for
  *      a security tool means shipping a stale *fix*.
  *
- *   3. **Static assets are cache-first.** They are content-hashed, so a stale
- *      one is impossible by construction.
+ *   3. **Code is network-first; media is cache-first.** Rule 2's reasoning
+ *      applies with more force to the JavaScript than to the HTML, because the
+ *      JavaScript *is* the app — every key derivation and every encrypt happens
+ *      there, and a stale copy of it is a stale copy of the crypto.
+ *
+ *      This used to serve all scripts and styles cache-first, on the stated
+ *      grounds that they are content-hashed and so could never go stale. They
+ *      are not, in development: Next keeps chunk names stable across
+ *      recompiles, so one cached `main-app.js` outlived every edit after it.
+ *      The symptom was a page that changed only on a hard reload — the new HTML
+ *      arriving over the old bundle — which reads as a hydration bug and is
+ *      not one.
+ *
+ *      Images, fonts and the manifest stay cache-first. They are named by hash
+ *      or effectively never change, and they are not code.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `core-shell-${VERSION}`;
 const ASSET_CACHE = `core-assets-${VERSION}`;
 
@@ -80,11 +93,14 @@ function isRscRequest(request, url) {
   return request.headers.get('RSC') === '1' || url.searchParams.has('_rsc');
 }
 
-function isStaticAsset(url) {
-  return (
-    url.pathname.startsWith('/_next/static/') ||
-    /\.(?:png|svg|ico|webmanifest|woff2?|css|js)$/.test(url.pathname)
-  );
+/** Code: the scripts and styles that make up the running app. */
+function isCode(url) {
+  return /\.(?:css|js|mjs)$/.test(url.pathname);
+}
+
+/** Everything else worth keeping: not code, and not expected to change. */
+function isMedia(url) {
+  return /\.(?:png|svg|ico|webmanifest|woff2?)$/.test(url.pathname);
 }
 
 self.addEventListener('fetch', (event) => {
@@ -106,7 +122,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (isStaticAsset(url)) {
+  // Network-first, so an edit or a deploy is picked up on the next reload
+  // rather than on a hard one. The cache is still there underneath: offline,
+  // the fetch throws and the last good bundle is served.
+  if (isCode(url)) {
+    event.respondWith(networkFirst(request, ASSET_CACHE));
+    return;
+  }
+
+  if (isMedia(url)) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
   }
 });
@@ -143,9 +167,12 @@ async function networkFirst(request, cacheName) {
 /**
  * Cache assets the page reports having loaded.
  *
- * A precache list cannot name content-hashed chunks, and in development the
- * names change on every compilation. So the page sends the list instead: after
- * load it enumerates what it actually fetched and asks for those to be kept.
+ * A precache list cannot name content-hashed chunks. So the page sends the list
+ * instead: after load it enumerates what it actually fetched and asks for those
+ * to be kept.
+ *
+ * This says nothing about freshness — the entries it writes are only ever read
+ * when the network is gone, because code is fetched network-first (rule 3).
  *
  * This is what makes offline *hydration* work, as opposed to merely showing
  * cached HTML. Without it the markup renders from cache, the scripts fail, and

@@ -52,19 +52,24 @@ test.describe('offline vault', () => {
     // hydration does not complete, so the form ignores typing.
     //
     // The cause is the environment, not obviously the code. The suite runs
-    // against `next dev`, which compiles chunks on demand, renames them on
-    // every compilation and holds an HMR socket open — none of which survives
-    // having the network cut. Five attempts at caching the right assets from
-    // the page did not close it, and the remaining ones amount to reshaping the
-    // product to suit a development server.
+    // against `next dev`, which compiles chunks on demand and holds an HMR
+    // socket open — neither of which survives having the network cut. Five
+    // attempts at caching the right assets from the page did not close it, and
+    // the remaining ones amount to reshaping the product to suit a development
+    // server.
+    //
+    // This used to also blame `next dev` for renaming chunks on every
+    // compilation. It does not: `/_next/static/chunks/app/page.js` keeps its
+    // name and changes its contents, which is a different problem and was a
+    // real one — see 'service worker freshness' at the bottom of this file.
     //
     // What does work, and is covered by the tests below: reloading offline,
     // writing offline and syncing on reconnect, and unlocking from the local
     // copy. This assertion should be re-run against a Workers build, alongside
     // the prelogin timing test, which is waiting on the same thing.
-    // Skipped against `next dev`, which compiles chunks on demand and renames
-    // them on every compilation — the page is served from the shell cache but
-    // never hydrates, so the result would say nothing about the product.
+    // Skipped against `next dev`, which compiles chunks on demand — the page is
+    // served from the shell cache but never hydrates, so the result would say
+    // nothing about the product.
     test.skip(
       process.env.WORKERS_BUILD !== '1',
       'cold offline navigation is only meaningful against a Workers build',
@@ -239,5 +244,92 @@ test.describe('offline vault', () => {
         { timeout: 15_000 },
       )
       .toBe(0);
+  });
+});
+
+test.describe('service worker freshness', () => {
+  /*
+   * The worker sits between the browser and every script the app loads, so the
+   * question "is this the current code?" is one it answers rather than the
+   * browser.
+   *
+   * It answered wrong for a while. Scripts and styles were served cache-first,
+   * on the written grounds that they are content-hashed and so could never go
+   * stale. In development they are not: `/_next/static/chunks/app/page.js`
+   * keeps its name across recompiles, so the first copy cached outlived every
+   * edit made after it. The page only changed on a hard reload, which bypasses
+   * the worker entirely — the new HTML arriving over the old bundle, a symptom
+   * that reads as a hydration bug and is not one.
+   *
+   * These two tests are the rule stated from both sides: with a network, the
+   * network wins; without one, the cache still answers. A regression in either
+   * direction is a different product — one that ships stale crypto, or one that
+   * does not work on a train.
+   */
+
+  /** A script URL this page actually loaded, and which the worker handles. */
+  async function loadedScript(page: Page): Promise<string> {
+    await page.goto('/');
+    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
+      timeout: 30_000,
+    });
+
+    // Loaded twice on purpose. The first visit fetches its scripts before the
+    // worker exists, so nothing passes through it and the asset cache is never
+    // created. The second visit is the one this is about anyway: the refresh
+    // that used to show the old page.
+    await page.reload();
+    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, {
+      timeout: 30_000,
+    });
+
+    const url = await page.evaluate(() => {
+      const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+      return entries.map((entry) => entry.name).find((name) => /\/_next\/.*\.js$/.test(name));
+    });
+
+    expect(url, 'the page loaded no script the worker would handle').toBeTruthy();
+    return url as string;
+  }
+
+  /** Write something that is definitely not the real script into the cache. */
+  async function poison(page: Page, url: string, body: string): Promise<void> {
+    await page.evaluate(
+      async ([target, content]) => {
+        const names = await caches.keys();
+        const assets = names.find((name) => name.startsWith('core-assets-'));
+        if (!assets) throw new Error(`no asset cache among: ${names.join(', ')}`);
+
+        const cache = await caches.open(assets);
+        await cache.put(target as string, new Response(content as string));
+      },
+      [url, body],
+    );
+  }
+
+  const POISON = '/* a stale bundle */';
+
+  test('serves the current script even when a stale one is cached', async ({ page }) => {
+    const url = await loadedScript(page);
+    await poison(page, url, POISON);
+
+    const served = await page.evaluate(async (target) => (await fetch(target)).text(), url);
+
+    // Cache-first would hand back the poison. Network-first goes and looks.
+    expect(served).not.toBe(POISON);
+  });
+
+  test('falls back to the cached script with no network', async ({ page, context }) => {
+    // The other half. Network-first is only acceptable because the cache is
+    // still underneath it — otherwise this change would have traded a stale
+    // vault for one that does not open at all.
+    const url = await loadedScript(page);
+    await poison(page, url, POISON);
+
+    await context.setOffline(true);
+    const served = await page.evaluate(async (target) => (await fetch(target)).text(), url);
+    await context.setOffline(false);
+
+    expect(served).toBe(POISON);
   });
 });
