@@ -97,12 +97,30 @@ export default function LoginPage() {
         let keys;
         try {
           keys = await login(email, password, setProgress, botToken ?? undefined);
-        } catch (networkFailure) {
-          // A rejected password is final; only an unreachable server is worth
-          // falling back for. Trying the local copy after a genuine rejection
-          // would let an old password keep working after it was changed
-          // elsewhere.
-          if (networkFailure instanceof LoginFailed) throw networkFailure;
+        } catch (failure) {
+          /*
+           * Only an unreachable server is worth falling back for.
+           *
+           * This used to rethrow `LoginFailed` and treat everything else as a
+           * network problem, which was right until there were other things it
+           * could be. A new browser gets `DeviceVerificationRequired` — the
+           * password was accepted and a code is on its way — and that fell into
+           * the offline path, where a device with nothing stored answered
+           * `LoginFailed`, and the screen said the credentials were wrong. The
+           * code had already been sent; there was just nowhere to type it.
+           *
+           * Listed as what may fall through rather than what may not, so the
+           * next error added to this path does not quietly inherit the wrong
+           * branch.
+           */
+          const answered =
+            failure instanceof LoginFailed ||
+            failure instanceof DeviceVerificationRequired ||
+            failure instanceof RateLimited ||
+            failure instanceof BotCheckFailed;
+
+          if (answered) throw failure;
+
           setProgress('offline — unlocking from this device');
           keys = await unlockOffline(email, password, setProgress);
         }
