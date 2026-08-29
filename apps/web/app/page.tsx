@@ -66,7 +66,7 @@ const VISIBLE = [
 
 export default function Home() {
   return (
-    <main className="mx-auto min-h-dvh max-w-4xl px-6 py-16">
+    <main id="main" className="mx-auto min-h-dvh max-w-4xl px-6 py-16">
       <section>
         <h1 className="text-accent text-glow text-3xl font-bold tracking-tight">
           <span className="cursor">core</span>

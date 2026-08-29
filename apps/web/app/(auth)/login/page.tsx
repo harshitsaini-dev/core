@@ -104,7 +104,10 @@ export default function LoginPage() {
   // wrong box. The way back is a button, not a scroll.
   if (pinEmail !== null && !pinDismissed) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
+      <main
+        id="main"
+        className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16"
+      >
         <PinUnlock
           email={pinEmail}
           onUnlocked={enter}
@@ -115,7 +118,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
+    <main id="main" className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
       <Panel>
         <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
           <span className="cursor">core unlock</span>

@@ -94,7 +94,10 @@ function EnvPage() {
 
   if (state === 'locked') {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6 py-16">
+      <main
+        id="main"
+        className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6 py-16"
+      >
         <Panel>
           <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
             <span className="cursor">core</span>
@@ -117,7 +120,7 @@ function EnvPage() {
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-4xl px-4 pt-8 pb-28 sm:px-6 sm:pb-8">
+    <main id="main" className="mx-auto min-h-dvh max-w-4xl px-4 pt-8 pb-28 sm:px-6 sm:pb-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-accent text-glow text-lg font-bold tracking-tight">
           <span className="cursor">core</span>

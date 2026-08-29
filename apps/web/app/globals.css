@@ -470,3 +470,47 @@ textarea:-webkit-autofill {
   }
 }
 
+/*
+ * A visible focus ring on everything that takes focus.
+ *
+ * A floor, like the reduced-motion rule above, and for the same reason: the
+ * components that were written carefully already carry `focus-visible` styles,
+ * and this catches the raw `<button>` in a panel somebody added at speed. A
+ * keyboard user meeting one of those has no idea where they are.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click does not leave a ring
+ * behind on every button it touches — that is the difference the pseudo-class
+ * exists for, and using `:focus` is why so many products removed the ring
+ * entirely and left keyboard users with nothing.
+ *
+ * `outline` rather than a border or a shadow: it is drawn outside the box, so
+ * nothing reflows when it appears, and it survives on elements that already use
+ * their border for state.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Skip to the content.
+ *
+ * Off-screen until focused, which is the only way this is worth having: every
+ * screen here opens with a header and a row of controls, and a keyboard user
+ * who wants the vault list should not tab through them on every page.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  font-size: 0.875rem;
+}
+
+.skip-link:focus {
+  left: 0;
+}

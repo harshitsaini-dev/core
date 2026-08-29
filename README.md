@@ -170,15 +170,18 @@ End-to-end tests run against a real browser:
 
 ```bash
 pnpm e2e:install    # one-time: download the browsers
-pnpm e2e            # visible browser, slowed so you can follow it
+pnpm e2e            # the full suite, headless, four workers
+pnpm e2e:headed     # one visible browser, paced so you can follow it
 pnpm e2e:ui         # time-travel UI, watch mode, locator picker
 pnpm e2e:debug      # step through with the Playwright Inspector
-pnpm e2e:headless   # unattended run, what CI does
 pnpm e2e:report     # open the last HTML report
 ```
 
-Runs headed by default outside CI. `SLOWMO=500` changes the pacing and
-`DEVTOOLS=1` opens DevTools alongside it.
+Headless by default. A watchable run is a real thing and `e2e:headed` is it —
+but the suite runs for half an hour, and four browser windows appearing over
+whatever else is on screen is an interruption rather than a run being watched.
+
+`SLOWMO=500` changes the pacing and `DEVTOOLS=1` opens DevTools alongside it.
 
 The API specs drive HTTP directly, so a headed run shows a browser sitting on a
 blank page — there is nothing to paint until the UI exists.

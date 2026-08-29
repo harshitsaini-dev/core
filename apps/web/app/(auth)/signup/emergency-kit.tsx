@@ -49,7 +49,7 @@ export function EmergencyKit({ email, recoveryKey }: EmergencyKitProps) {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6 py-16">
+    <main id="main" className="mx-auto flex min-h-dvh max-w-2xl flex-col justify-center px-6 py-16">
       <Panel className="print:border-black print:bg-white print:text-black">
         <h1 className="text-accent text-xl font-bold tracking-tight print:text-black">
           core — emergency kit

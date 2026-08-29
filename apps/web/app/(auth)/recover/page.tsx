@@ -103,7 +103,7 @@ export default function RecoverPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
+    <main id="main" className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16">
       <Panel>
         <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
           <span className="cursor">core --recover</span>

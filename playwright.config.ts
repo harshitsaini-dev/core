@@ -24,9 +24,23 @@ import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
 
-// Headed by default outside CI: a test run you can watch catches things a
-// summary line never will. Opt out with HEADED=0 for a quick unattended run.
-const headed = !isCI && process.env.HEADED !== '0';
+/**
+ * Headless by default, headed on request.
+ *
+ * This used to be the other way round, on the grounds that a run you can watch
+ * catches what a summary line never will — which is true, and is why
+ * `pnpm e2e:headed` still exists.
+ *
+ * What made it the wrong default is that the suite runs for half an hour at
+ * four workers, and four browser windows appearing and disappearing on top of
+ * whatever else is on the screen is not a run being watched. It is an
+ * interruption, repeated a few hundred times, on a machine somebody is trying
+ * to work on.
+ *
+ *   pnpm e2e              headless, four workers, full speed
+ *   pnpm e2e:headed       visible, and with WORKERS=1 paced to be followable
+ */
+const headed = !isCI && process.env.HEADED === '1';
 
 /**
  * How many at once.

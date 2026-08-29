@@ -83,6 +83,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-bg text-fg min-h-dvh antialiased">
+        {/*
+          Off-screen until it is focused. Every screen here opens with a header
+          and a row of controls, and a keyboard user who wants the list should
+          not tab through them on every page.
+
+          `<main>` is the target because every page in the app already has one,
+          so there is nothing to keep in sync.
+        */}
+        <a href="#main" className="skip-link" data-testid="skip-link">
+          skip to content
+        </a>
         {children}
         <Toaster />
         <ServiceWorker />
