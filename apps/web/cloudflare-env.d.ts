@@ -4,6 +4,9 @@ interface __BaseEnv_Env {
   RATE_LIMIT: KVNamespace;
   DB: D1Database;
   AUTH_PEPPER: string;
+  /** Optional. Without it the three email features are simply off. */
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
   NEXT_PUBLIC_APP_URL: string;
   RATE_LIMIT_TEST_MODE?: string;
 }

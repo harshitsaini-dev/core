@@ -10,6 +10,7 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
 import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rate-limit';
+import { alert } from '@/lib/server/alerts';
 import { record } from '@/lib/server/audit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailIndex } from '@/lib/server/secrets';
@@ -247,6 +248,17 @@ export async function POST(request: NextRequest): Promise<Response> {
     // whether an address is real.
     if (outcome.lockedNow) {
       await record(db, pepper, request, outcome.userId, 'account_locked');
+      // Only on the attempt that crosses the threshold, not on every failure
+      // after it. Ten emails for one guessing run is how somebody learns to
+      // filter these out of sight.
+      await alert(
+        db,
+        context.email,
+        pepper,
+        outcome.userId,
+        'account_locked',
+        request.headers.get('cf-ipcountry'),
+      );
     }
   }
 

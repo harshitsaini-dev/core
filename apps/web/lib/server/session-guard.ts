@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { alert } from './alerts';
 import { record } from './audit';
 import type { RequestContext } from './context';
 import { SESSION_COOKIE, resolveSession, revokeAllSessions } from './session';
@@ -32,6 +33,18 @@ export async function requireSession(
     // handled token reuse into a 500 — and the caller would learn nothing about
     // whether their session survived.
     await record(context.db, context.pepper, request, lookup.userId, 'session_reuse_detected');
+
+    // Every session has just been revoked, so the owner is about to be asked
+    // for their master password on every device with no explanation. This is
+    // the explanation.
+    await alert(
+      context.db,
+      context.email,
+      context.pepper,
+      lookup.userId,
+      'session_reuse_detected',
+      request.headers.get('cf-ipcountry'),
+    );
 
     return null;
   }

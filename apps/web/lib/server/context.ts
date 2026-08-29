@@ -2,6 +2,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createDatabase } from '@core/db';
 import type { Database } from '@core/db';
 import type { Bytes } from '@core/crypto';
+import type { EmailConfig } from './email';
 import { parsePepper } from './secrets';
 
 /**
@@ -24,6 +25,14 @@ export interface RequestContext {
    * on `callerAddress` for why it has to exist at all.
    */
   readonly rateLimitTestMode: boolean;
+  /**
+   * How to send email, if this instance can.
+   *
+   * Optional by design. An instance without it is a working instance with three
+   * notifications switched off, not a broken one — which is the right default
+   * for something anybody can self-host in fifteen minutes.
+   */
+  readonly email: EmailConfig;
 }
 
 /**
@@ -41,5 +50,6 @@ export function getRequestContext(): RequestContext {
     kv: env.RATE_LIMIT,
     pepper: parsePepper(env.AUTH_PEPPER),
     rateLimitTestMode: env.RATE_LIMIT_TEST_MODE === '1',
+    email: { apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL },
   };
 }

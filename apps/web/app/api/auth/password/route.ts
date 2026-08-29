@@ -9,6 +9,7 @@ import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
 import { eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { alert } from '@/lib/server/alerts';
 import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { checkLimit } from '@/lib/server/rate-limit';
@@ -140,6 +141,17 @@ export async function POST(request: NextRequest): Promise<Response> {
   // change had already committed, so a failed log line reported a password
   // change as a failure when it had succeeded.
   await record(db, pepper, request, userId, changed ? 'password_changed' : 'login_failed');
+
+  if (changed) {
+    await alert(
+      db,
+      context.email,
+      pepper,
+      userId,
+      'password_changed',
+      request.headers.get('cf-ipcountry'),
+    );
+  }
 
   if (!changed) return authFailure();
 
