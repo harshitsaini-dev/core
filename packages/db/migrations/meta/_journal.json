@@ -15,6 +15,13 @@
       "when": 1787769837782,
       "tag": "0001_recovery_verifier",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788002779597,
+      "tag": "0002_email_tokens",
+      "breakpoints": true
     }
   ]
 }

@@ -349,6 +349,7 @@ export const auditLog = sqliteTable(
         'device_trusted',
         'session_revoked',
         'session_reuse_detected',
+        'account_unlocked',
         'export',
         'account_locked',
       ],
@@ -364,6 +365,57 @@ export const auditLog = sqliteTable(
     createdAt: createdAt(),
   },
   (table) => [index('audit_log_user_idx').on(table.userId, table.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// One-time email tokens
+// ---------------------------------------------------------------------------
+
+/**
+ * A token emailed to an account's own address, good once.
+ *
+ * Used for the two things email is allowed to do here, and it is worth being
+ * exact about what those are: **neither of them opens a vault.**
+ *
+ * `unlock` clears a lockout. Ten wrong passwords locks an account for fifteen
+ * minutes, and somebody who genuinely mistyped should not have to sit and wait
+ * — but the link only lifts the lock. They still need the master password
+ * afterwards, and the server still could not open the vault if it wanted to.
+ *
+ * `device` approves a sign-in from somewhere unfamiliar. Same shape: it lets a
+ * correct password proceed, and does nothing on its own.
+ *
+ * That distinction is the whole design. A magic link that signed you in would
+ * make the mailbox equivalent to the vault, and every one of this product's
+ * claims would then be a claim about somebody's email provider.
+ */
+export const emailTokens = sqliteTable(
+  'email_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    purpose: text('purpose', { enum: ['unlock', 'device'] }).notNull(),
+
+    /**
+     * SHA-256 of the token, never the token itself.
+     *
+     * The same reasoning as the session table: a database dump must not yield
+     * usable links. The value in the email exists only in the email.
+     */
+    tokenHash: text('token_hash').notNull(),
+
+    expiresAt: timestamp('expires_at').notNull(),
+    /** Set the moment it is accepted, so a link works exactly once. */
+    usedAt: timestamp('used_at'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('email_tokens_hash_idx').on(table.tokenHash),
+    index('email_tokens_user_idx').on(table.userId, table.purpose),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -393,6 +445,8 @@ export const shares = sqliteTable(
 // Inferred types
 // ---------------------------------------------------------------------------
 
+export type EmailToken = typeof emailTokens.$inferSelect;
+export type NewEmailToken = typeof emailTokens.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Folder = typeof folders.$inferSelect;

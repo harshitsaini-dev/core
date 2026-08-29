@@ -42,6 +42,7 @@ export default function LoginPage() {
   // single-use, so the form has to know when it no longer holds a good one.
   const [botToken, setBotToken] = useState<string | null>(null);
   const [botReset, setBotReset] = useState(0);
+  const [unlockSent, setUnlockSent] = useState(false);
 
   useEffect(() => {
     void Promise.all([pinStatus(), passkeyStatus()]).then(([pin, passkey]) => {
@@ -171,10 +172,48 @@ export default function LoginPage() {
           </Field>
 
           {error ? (
-            <p role="alert" className="text-danger font-mono text-xs" data-testid="login-error">
-              <span aria-hidden="true">! </span>
-              {error}
-            </p>
+            <>
+              <p role="alert" className="text-danger font-mono text-xs" data-testid="login-error">
+                <span aria-hidden="true">! </span>
+                {error}
+              </p>
+
+              {/*
+                Offered after any failure rather than only after a lockout,
+                because the client is not told which one happened — the server
+                answers identically for a wrong password, an unknown address
+                and a locked account, and a UI that knew the difference would
+                be handing back the oracle the API refuses to give.
+
+                The endpoint sends nothing unless the account exists and is
+                actually locked, so offering it here costs nothing.
+              */}
+              {unlockSent ? (
+                <p className="text-muted font-mono text-xs" data-testid="unlock-sent">
+                  <span aria-hidden="true">&gt; </span>
+                  If that address has an account and it is locked, a link is on its way. It lifts
+                  the lock only — you will still need your master password.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUnlockSent(true);
+                    void fetch('/api/auth/unlock-request', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email }),
+                      credentials: 'same-origin',
+                    });
+                  }}
+                  disabled={email === ''}
+                  className="text-accent-dim hover:text-accent font-mono text-xs disabled:opacity-40"
+                  data-testid="request-unlock"
+                >
+                  &gt; locked out? email me a link
+                </button>
+              )}
+            </>
           ) : null}
 
           <TurnstileGate onToken={setBotToken} resetSignal={botReset} />
