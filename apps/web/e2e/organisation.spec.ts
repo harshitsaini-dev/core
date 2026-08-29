@@ -255,3 +255,82 @@ test.describe('tags', () => {
     for (const body of bodies) expect(body).not.toContain('divorce-lawyer');
   });
 });
+
+test.describe('dragging an item into a folder', () => {
+  test.slow();
+
+  test('files it, and the folder then holds it', async ({ page }) => {
+    await openVault(page, 'ui-drag');
+    await makeFolder(page, 'Work');
+    await makeLogin(page, 'Payroll');
+
+    await page.getByTestId('item-row').dragTo(page.getByTestId('folder-chip'));
+
+    await page.getByTestId('folder-chip').click();
+    await expect(page.getByTestId('item-row')).toHaveCount(1);
+    await expect(page.getByTestId('item-list')).toContainText('Payroll');
+  });
+
+  test('dropping on unfiled takes it back out', async ({ page }) => {
+    // The way out has to be the same gesture as the way in, or filing something
+    // by accident leaves somebody hunting through a menu to undo it.
+    await openVault(page, 'ui-drag-out');
+    await makeFolder(page, 'Work');
+    await makeLogin(page, 'Payroll', { folder: 'Work' });
+
+    await page.getByTestId('folder-chip').click();
+    await page.getByTestId('item-row').dragTo(page.getByTestId('folder-none'));
+
+    await expect(page.getByTestId('item-row')).toHaveCount(0);
+    await page.getByTestId('folder-none').click();
+    await expect(page.getByTestId('item-list')).toContainText('Payroll');
+  });
+
+  test('does not light up for something dragged in from outside', async ({ page }) => {
+    // Without the type check the chip highlights for a file dragged off the
+    // desktop and then does nothing with it, which reads as a drop that failed.
+    await openVault(page, 'ui-drag-foreign');
+    await makeFolder(page, 'Work');
+    await makeLogin(page, 'Payroll');
+
+    const lights = async (type: string): Promise<boolean> =>
+      page.getByTestId('folder-chip').evaluate(async (chip, mime) => {
+        const transfer = new DataTransfer();
+        transfer.setData(mime, 'whatever');
+        chip.dispatchEvent(
+          new DragEvent('dragover', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+        );
+
+        // Two frames, so React has definitely rendered the state this set.
+        // Reading in the same tick reports "not lit" for both types and the
+        // test then passes for the wrong reason.
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return chip.getAttribute('data-drop-target') === 'true';
+      }, type);
+
+    expect(await lights('text/plain')).toBe(false);
+    // The same call with our own type, so a chip that never lights up at all
+    // cannot pass this test.
+    expect(await lights('application/x-core-item')).toBe(true);
+  });
+
+  test('is off while selecting', async ({ page }) => {
+    // A drag that began as a reach for a checkbox would file an item somewhere
+    // nobody chose.
+    await openVault(page, 'ui-drag-selecting');
+    await makeFolder(page, 'Work');
+    await makeLogin(page, 'Payroll');
+
+    await expect(page.getByTestId('item-row')).toHaveAttribute('draggable', 'true');
+
+    await page.getByTestId('toggle-select').click();
+    await expect(page.getByTestId('item-row')).toHaveAttribute('draggable', 'false');
+  });
+
+  test('is off when there is no folder to drop into', async ({ page }) => {
+    await openVault(page, 'ui-drag-nowhere');
+    await makeLogin(page, 'Payroll');
+
+    await expect(page.getByTestId('item-row')).toHaveAttribute('draggable', 'false');
+  });
+});

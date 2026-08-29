@@ -309,6 +309,7 @@ export default function VaultPage() {
   }, [state, setBlur]);
   const tags = useMemo(() => collectTags(live), [live]);
   const visibleFolders = useMemo(() => orderFolders(activeFolders(folders)), [folders]);
+  const moveMany = useItems((store) => store.moveMany);
 
   // A filter pointing at a folder that has since been deleted would show an
   // empty vault with no way back, so it falls away with the folder.
@@ -458,6 +459,11 @@ export default function VaultPage() {
             onFolder={setFolderFilter}
             onTag={setTagFilter}
             onManage={() => setView({ kind: 'folders' })}
+            onDropInto={(itemId, folderId) => {
+              void moveMany([itemId], folderId);
+              const folder = visibleFolders.find((entry) => entry.folder.id === folderId);
+              toast(`Moved to ${folder ? folder.folder.name : 'unfiled'}.`);
+            }}
           />
 
           {error ? (
@@ -488,6 +494,7 @@ export default function VaultPage() {
               layout={layout}
               selecting={selecting}
               onEdit={openItem}
+              draggable={visibleFolders.length > 0}
             />
           </PullToRefresh>
 
@@ -994,6 +1001,7 @@ function Filters({
   onFolder,
   onTag,
   onManage,
+  onDropInto,
 }: {
   folders: readonly { folder: DecryptedFolder; depth: number }[];
   tags: readonly string[];
@@ -1002,6 +1010,8 @@ function Filters({
   onFolder: (value: FolderFilter) => void;
   onTag: (value: string | null) => void;
   onManage: () => void;
+  /** Files a dragged item. `null` means unfiled. */
+  onDropInto: (itemId: string, folderId: string | null) => void;
 }) {
   if (folders.length === 0 && tags.length === 0) return null;
 
@@ -1019,6 +1029,7 @@ function Filters({
               onClick={() => onFolder(folderFilter === folder.id ? null : folder.id)}
               testId="folder-chip"
               color={folder.color}
+              onDropItem={(id) => onDropInto(id, folder.id)}
             >
               {depth > 0 ? <span aria-hidden="true">└ </span> : null}
               {folder.name}
@@ -1028,6 +1039,7 @@ function Filters({
             active={folderFilter === 'none'}
             onClick={() => onFolder(folderFilter === 'none' ? null : 'none')}
             testId="folder-none"
+            onDropItem={(id) => onDropInto(id, null)}
           >
             unfiled
           </Chip>
@@ -1060,29 +1072,75 @@ function Filters({
   );
 }
 
+/**
+ * The MIME type a dragged item carries.
+ *
+ * A private type rather than `text/plain`, so that a folder chip lights up for
+ * an item from this list and not for a word dragged out of a text editor. Read
+ * from `dataTransfer.types` during the drag, which is the only thing a browser
+ * lets a drop target see before the drop actually happens.
+ *
+ * Dragging is an addition and never the only way to file something: the item
+ * form has a folder select and the bulk bar has "move to folder", both of which
+ * work from a keyboard. Drag and drop does not, and making it the only path
+ * would remove a feature from anybody who does not use a mouse.
+ */
+const ITEM_DRAG_TYPE = 'application/x-core-item';
+
 function Chip({
   active,
   onClick,
   children,
   testId,
   color,
+  onDropItem,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
   testId: string;
   color?: string | null;
+  /** Given, this chip accepts an item dragged onto it. */
+  onDropItem?: (id: string) => void;
 }) {
+  const [over, setOver] = useState(false);
+
+  const drop = onDropItem
+    ? {
+        onDragOver: (event: React.DragEvent) => {
+          // Only for a drag that carries one of our items. Without this the
+          // chip would light up for a file dragged in from the desktop and
+          // then do nothing with it.
+          if (!event.dataTransfer.types.includes(ITEM_DRAG_TYPE)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          setOver(true);
+        },
+        onDragLeave: () => setOver(false),
+        onDrop: (event: React.DragEvent) => {
+          event.preventDefault();
+          setOver(false);
+
+          const id = event.dataTransfer.getData(ITEM_DRAG_TYPE);
+          if (id !== '') onDropItem(id);
+        },
+      }
+    : {};
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
       data-testid={testId}
+      {...drop}
+      data-drop-target={onDropItem && over ? 'true' : undefined}
       className={
-        active
-          ? 'border-accent text-accent shadow-glow-soft border px-2 py-1 font-mono text-xs'
-          : 'border-line text-muted hover:border-accent hover:text-accent border px-2 py-1 font-mono text-xs'
+        over
+          ? 'border-accent text-accent shadow-glow-soft border border-dashed px-2 py-1 font-mono text-xs'
+          : active
+            ? 'border-accent text-accent shadow-glow-soft border px-2 py-1 font-mono text-xs'
+            : 'border-line text-muted hover:border-accent hover:text-accent border px-2 py-1 font-mono text-xs'
       }
     >
       {color ? (
@@ -1290,6 +1348,7 @@ function ItemList({
   layout,
   selecting,
   onEdit,
+  draggable,
 }: {
   items: readonly DecryptedItem[];
   loading: boolean;
@@ -1297,6 +1356,8 @@ function ItemList({
   layout: Layout;
   selecting: boolean;
   onEdit: (id: string) => void;
+  /** Whether there is any folder to drop onto. */
+  draggable: boolean;
 }) {
   if (loading && items.length === 0) {
     return (
@@ -1323,7 +1384,16 @@ function ItemList({
       data-testid="item-list"
     >
       {items.map((item) => (
-        <ItemRow key={item.id} item={item} layout={layout} selecting={selecting} onEdit={onEdit} />
+        <ItemRow
+          key={item.id}
+          item={item}
+          layout={layout}
+          selecting={selecting}
+          onEdit={onEdit}
+          // Off while selecting: a drag that started as a reach for a checkbox
+          // would file an item somewhere nobody chose.
+          draggable={draggable && !selecting}
+        />
       ))}
     </ul>
   );
@@ -1334,11 +1404,14 @@ function ItemRow({
   layout,
   selecting,
   onEdit,
+  draggable,
 }: {
   item: DecryptedItem;
   layout: Layout;
   selecting: boolean;
   onEdit: (id: string) => void;
+  /** Off while selecting, and off when there is nowhere to drop. */
+  draggable: boolean;
 }) {
   const [copied, setCopied] = useState<'username' | 'password' | null>(null);
 
@@ -1401,6 +1474,11 @@ function ItemRow({
           : 'border-line relative overflow-hidden border-b py-4'
       }
       data-testid="item-row"
+      draggable={draggable}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(ITEM_DRAG_TYPE, item.id);
+        event.dataTransfer.effectAllowed = 'move';
+      }}
       {...swipe.handlers}
     >
       {swipe.offset !== 0 ? (
