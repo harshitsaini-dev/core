@@ -160,6 +160,31 @@ describe('parseGoogleMigration', () => {
   });
 });
 
+describe('parseGoogleMigration and the URI it arrives in', () => {
+  /**
+   * The payload is standard base64, so it contains `+`. Written into a query
+   * string without percent-encoding, URL parsing turns that `+` into a space
+   * and `atob` throws on the whole string — an export that reads perfectly
+   * being reported as not an export at all.
+   */
+  it('reads a data param whose plus signs were never encoded', () => {
+    // A secret chosen so its base64 contains a `+`, which is the only way this
+    // test can fail for the right reason.
+    const secret = [0xfb, 0x1e, 0x7f, 0xa0, 0x3e, 0xc1, 0xff, 0x0e, 0x7f, 0xb0];
+    const payload = lengthDelimited(1, account({ secret, name: 'Site:me', issuer: 'Site' }));
+    const base64 = btoa(String.fromCharCode(...payload));
+    expect(base64, 'the fixture must contain a plus to test anything').toContain('+');
+
+    const encoded = parseGoogleMigration(
+      `otpauth-migration://offline?data=${encodeURIComponent(base64)}`,
+    );
+    const raw = parseGoogleMigration(`otpauth-migration://offline?data=${base64}`);
+
+    expect(encoded).toHaveLength(1);
+    expect(raw).toEqual(encoded);
+  });
+});
+
 describe('base32Encode', () => {
   it('round-trips through the decoder', () => {
     for (const length of [1, 2, 5, 10, 20, 32]) {

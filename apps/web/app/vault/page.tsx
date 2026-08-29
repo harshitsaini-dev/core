@@ -44,6 +44,7 @@ import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { ActivityPanel } from './activity';
 import { CheckupPanel } from './checkup';
 import { GeneratorPanel } from './generator';
+import { GoogleImport } from './google-import';
 import { LockSettingsPanel } from './lock-settings';
 import { PinSetupPanel } from './pin-setup';
 import { PlaintextExportPanel } from './plaintext-export';
@@ -1676,7 +1677,7 @@ function ImportPanel({ onBack }: { onBack: () => void }) {
 
       toast(
         preview.skipped > 0
-          ? `Imported ${preview.items.length}; skipped ${preview.skipped} empty row(s).`
+          ? `Imported ${preview.items.length}; skipped ${preview.skipped} row(s) with nothing in them.`
           : `Imported ${preview.items.length} item(s).`,
       );
       onBack();
@@ -1796,6 +1797,8 @@ function ImportPanel({ onBack }: { onBack: () => void }) {
           {error}
         </p>
       ) : null}
+
+      <GoogleImport onDone={onBack} />
 
       <Button
         type="button"

@@ -9,6 +9,7 @@ import { generatePassword } from '@/lib/client/generator';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { activeFolders, useItems } from '@/lib/client/items-store';
+import { ScanQr } from './scan-qr';
 
 /**
  * Create or edit an item.
@@ -496,6 +497,9 @@ function LoginForm({ existing, onDone, onCancel }: FormProps) {
           invalid={totpError !== ''}
           data-testid="item-totp"
         />
+        <div className="mt-3">
+          <ScanQr onScanned={onTotpChange} label="scan the qr code" />
+        </div>
       </Field>
 
       <Field

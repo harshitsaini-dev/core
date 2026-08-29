@@ -139,7 +139,15 @@ export function parseGoogleMigration(uri: string): MigratedAccount[] {
   if (!data) return [];
 
   try {
-    const binary = atob(data.replace(/-/g, '+').replace(/_/g, '/'));
+    // A space is not base64, and there is exactly one way it gets here: the
+    // `data` param was written with a literal `+` rather than `%2B`, and URL
+    // parsing turned it into a space. Google percent-encodes its own export, so
+    // the common path never hits this — but a URI that has been through
+    // anything that decoded it once arrives with spaces, and `atob` then throws
+    // on the whole thing. The failure looks like "that is not a Google export",
+    // which is a lie about a payload that is perfectly readable.
+    const normalised = data.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(normalised);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0)) as Bytes;
 
     const reader = new Reader(bytes);

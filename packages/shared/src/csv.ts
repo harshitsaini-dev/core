@@ -106,7 +106,7 @@ const HEADERS: Record<ImportField, string[]> = {
   password: ['loginpassword', 'password', 'pass', 'passwordfield'],
   url: ['loginuri', 'url', 'uri', 'website', 'site', 'loginurl', 'hostname'],
   notes: ['notes', 'note', 'comment', 'extra'],
-  totp: ['logintotp', 'totp', 'otpauth', 'authkey', 'twofactor'],
+  totp: ['logintotp', 'totp', 'otpauth', 'otpsecret', 'otpurl', 'authkey', 'twofactor', 'otp'],
 };
 
 function normalise(header: string): string {
@@ -149,16 +149,25 @@ export interface ImportedItem {
 
 export interface CsvImport {
   readonly items: ImportedItem[];
-  /** Rows that had no title and no password, so there was nothing to store. */
+  /** Rows where every field but the title was empty, so there was nothing to store. */
   readonly skipped: number;
 }
 
 /**
  * Turn rows into items, given a mapping.
  *
- * A row with neither a title nor a password is skipped: every exporter emits
+ * A row is skipped when there is nothing in it to store: every exporter emits
  * blank lines and section markers, and an item called "" with nothing in it is
  * worse than no item.
+ *
+ * "Nothing to store" means every mapped field except the title is empty — not
+ * just the password. Several exporters put their non-login entries in the same
+ * file: NordPass writes credit cards, Proton writes its own types, and those
+ * rows have a name and nothing else this app understands. Keeping them produced
+ * a vault full of titles with no contents, which reads as an import that lost
+ * the passwords rather than one that skipped a card.
+ *
+ * A note with no password is still kept, because its notes column is not empty.
  *
  * A row with a password but no title keeps the URL as its title, or failing
  * that the username. Refusing it would lose a password over a cosmetic problem.
@@ -181,7 +190,7 @@ export function rowsToItems(rows: readonly CsvRow[], mapping: ColumnMapping): Cs
     const notes = at(row, 'notes');
     const totp = at(row, 'totp');
 
-    if (title === '' && password === '') {
+    if (username === '' && password === '' && url === '' && notes === '' && totp === '') {
       skipped += 1;
       continue;
     }

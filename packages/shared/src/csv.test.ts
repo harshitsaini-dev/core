@@ -152,6 +152,37 @@ describe('rowsToItems', () => {
     expect(result.skipped).toBe(1);
   });
 
+  it('skips a row that is only a title', () => {
+    // NordPass writes credit cards into the same file as the logins, and Proton
+    // writes its own types. Those rows have a name and nothing else this app
+    // understands, and keeping them made a vault full of titles with no
+    // contents — which reads as an import that lost the passwords.
+    const result = rowsToItems(
+      [
+        ['Visa ending 4021', '', '', ''],
+        ['GitHub', '', 'secret', ''],
+      ],
+      mapping,
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.title).toBe('GitHub');
+    expect(result.skipped).toBe(1);
+  });
+
+  it('keeps a note that has no password', () => {
+    // The other side of the rule above. A titled row with something in any
+    // field is worth keeping, and dropping it would lose real writing.
+    const result = rowsToItems([['Wifi', '', '', '', 'the code is on the router']], {
+      title: 0,
+      username: 1,
+      password: 2,
+      url: 3,
+      notes: 4,
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual({ title: 'Wifi', notes: 'the code is on the router' });
+  });
+
   it('never drops a password over a missing title', () => {
     // Refusing the row would lose a password to a cosmetic problem.
     const result = rowsToItems([['', 'me', 'secret', 'https://example.com']], mapping);
@@ -183,5 +214,53 @@ describe('mappingIsUsable', () => {
     expect(mappingIsUsable({ username: 0 })).toBe(false);
     expect(mappingIsUsable({ title: 0 })).toBe(true);
     expect(mappingIsUsable({ password: 1 })).toBe(true);
+  });
+  it('reads the headers the common exporters actually write', () => {
+    // Checked against real export files rather than guessed. The mapping is
+    // shown and editable, but a first guess that gets these wrong means
+    // everybody remaps by hand, and the ones who do not notice import a vault
+    // with the username and email the wrong way round.
+    const cases: Record<string, string> = {
+      chrome: 'name,url,username,password,note',
+      safari: 'Title,URL,Username,Password,Notes,OTPAuth',
+      lastpass: 'url,username,password,totp,extra,name,grouping,fav',
+      onepassword: 'Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes',
+      bitwarden:
+        'folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp',
+      dashlane: 'username,username2,username3,title,password,note,url,category,otpSecret',
+      nordpass: 'name,url,username,password,note,cardholdername,cardnumber,folder',
+      proton: 'type,name,url,email,username,password,note,totp,createTime,vault',
+      keepass: 'Group,Title,Username,Password,URL,Notes',
+    };
+
+    for (const [name, header] of Object.entries(cases)) {
+      const mapped = detectColumns(header.split(','));
+      expect(mapped.title, name).toBeDefined();
+      expect(mapped.username, name).toBeDefined();
+      expect(mapped.password, name).toBeDefined();
+      expect(mapped.url, name).toBeDefined();
+    }
+  });
+
+  it('finds the one-time code column whatever it is called', () => {
+    // Each of these is a different exporter's spelling. Missing one loses the
+    // second factor silently: the import reports success and the item simply
+    // has no code.
+    for (const header of ['totp', 'OTPAuth', 'otpSecret', 'login_totp', 'authkey']) {
+      expect(detectColumns(['name', 'password', header]).totp, header).toBe(2);
+    }
+  });
+
+  it('does not find a title where the exporter wrote none', () => {
+    // Firefox exports no title column at all. Inventing one would be worse than
+    // falling back to the URL, which is what `rowsToItems` does.
+    const firefox = 'url,username,password,httpRealm,formActionOrigin,guid'.split(',');
+    expect(detectColumns(firefox).title).toBeUndefined();
+
+    const items = rowsToItems(
+      [['https://example.com', 'me', 'secret', '', '', '']],
+      detectColumns(firefox),
+    );
+    expect(items.items[0]?.title).toBe('https://example.com');
   });
 });

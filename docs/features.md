@@ -69,7 +69,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-14 | Drag-and-drop items into folders (desktop)                   | P4    | TODO   |
 | VLT-15 | Linked items (DB credential linked to an ENV project)        | P4    | DONE   |
 | VLT-16 | Duplicate item detection                                     | P6    | TODO   |
-| VLT-17 | Scan a TOTP QR code with the camera                          | P6    | TODO   |
+| VLT-17 | Scan a TOTP QR code with the camera                          | P6    | DONE   |
 
 ## ORG — Search, Filter, Organisation
 
@@ -196,10 +196,10 @@ P5 Hardening+Deploy · P6 Post-v1
 | IO-02 | Plaintext CSV / JSON export with a hard confirmation gate | P5    | DONE   |
 | IO-03 | Import wizard with column mapping                         | P5    | DONE   |
 | IO-04 | Bitwarden import                                          | P5    | DONE   |
-| IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | TODO   |
+| IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | DONE   |
 | IO-06 | Scheduled encrypted backup reminder                       | P6    | TODO   |
 | IO-07 | Restore-from-backup flow                                  | P5    | DONE   |
-| IO-08 | Import 2FA secrets from a Google Authenticator export QR  | P6    | TODO   |
+| IO-08 | Import 2FA secrets from a Google Authenticator export QR  | P6    | DONE   |
 
 ## OSS — Self-Hosting & Project Health
 

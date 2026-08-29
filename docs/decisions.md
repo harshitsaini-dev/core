@@ -782,3 +782,67 @@ UI-11 asserts reduced motion, UI-12 asserts a focus ring on every control, and
 
 **Revisit** if a Lighthouse job is wanted against a deployed instance, where the
 server is the real one and the numbers mean something.
+
+## ADR-031 — QR codes are read by the browser, not by a bundled decoder
+
+**Status.** Accepted.
+
+Scanning a QR code needs a decoder. The usual answer is a library, and the usual
+library is a few hundred kilobytes of WebAssembly or minified JavaScript for a
+feature most people use twice — once to add a code, once to move house.
+
+`BarcodeDetector` is in Chrome, Edge and Android WebView already. It is not in
+Safari or Firefox. So the decision is which of the two to be wrong about: ship
+weight to everybody, or lose the camera on some browsers.
+
+**Decision.** Use `BarcodeDetector` and say plainly where it is missing.
+
+The fallback is not a consolation prize. Every site that shows a QR code also
+prints the secret under "can't scan the code?", and this app already accepted
+both a bare base32 secret and a whole `otpauth://` URI in that field — it did
+before this feature existed. Where the API is absent the scanner renders one
+sentence pointing at that field, rather than a button that fails when pressed.
+
+The file path matters more than it looks. Google's export screen is on the phone
+holding the accounts, so most people cannot scan it with that same phone's
+camera; a screenshot sent to the machine doing the import is the normal route.
+`BarcodeDetector` reads a `Blob` as happily as a video frame, so both paths are
+the same three lines.
+
+Nothing is uploaded. The frame and the file are decoded in the page and dropped.
+A photograph of a QR code for a 2FA secret is a 2FA secret.
+
+**Revisit** when Safari ships it, which would make the fallback text wrong and
+worth deleting.
+
+## ADR-032 — Google Authenticator's export is parsed by hand
+
+**Status.** Accepted.
+
+Google's "transfer accounts" QR code is not an `otpauth://` link. It is
+`otpauth-migration://offline?data=` followed by base64 protobuf — which is why
+pasting it into the secret field does nothing and why it needs its own way in.
+
+Reading protobuf normally means `protobufjs` and a `.proto` file. That is a
+dependency and a build step for one message with six fields, none of them
+nested beyond one level.
+
+**Decision.** Write the reader. It is about eighty lines: varints, length-
+delimited fields, and skipping anything unrecognised, which is what the wire
+format is designed to allow. Same reasoning as the hand-written TOTP next door.
+
+Two behaviours are deliberate and are the ones worth remembering:
+
+Counter-based (HOTP) codes are in the export and this app does not generate
+them. They are listed and refused rather than imported, because an item that
+shows a number and never the right one is worse than an item that is not there.
+
+A long export is split across several QR codes. Scans accumulate and are
+de-duplicated by secret, so scanning the second code adds to the first instead
+of replacing it — the failure that would otherwise import only the last batch
+and look like it worked.
+
+Anything unreadable yields an empty list rather than a throw, and the screen
+turns that into the sentence naming the menu the right code lives behind. A
+plain `otpauth://` link is the thing people try first, and "nothing happened" is
+the worst possible answer to it.

@@ -35,6 +35,37 @@ test.describe('one-time codes', () => {
     await expect(page.getByTestId('totp-code')).toHaveText(/^\d{6}$/);
   });
 
+  test('a scanned qr code fills the secret and generates', async ({ page }) => {
+    // Decoding the image is the browser's job, so the decoder is stubbed and
+    // what is left under test is ours: the `otpauth://` URI a setup screen
+    // encodes is not a base32 secret, and storing it as one produces a field
+    // that never generates a working code.
+    await page.addInitScript(() => {
+      class FakeDetector {
+        async detect(source: Blob): Promise<{ rawValue: string }[]> {
+          return [{ rawValue: await source.text() }];
+        }
+      }
+
+      Object.defineProperty(window, 'BarcodeDetector', { value: FakeDetector, writable: true });
+    });
+
+    await openVault(page, 'totp-scan');
+
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('Scanned');
+    await page.getByTestId('scan-file').setInputFiles({
+      name: 'code.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(`otpauth://totp/Scanned:kaya?secret=${TOTP_SECRET}&issuer=Scanned`),
+    });
+
+    await expect(page.getByTestId('item-totp')).toHaveValue(TOTP_SECRET);
+
+    await page.getByTestId('item-save').click();
+    await expect(page.getByTestId('totp-code')).toHaveText(/^\d{6}$/);
+  });
+
   test('shows how long the code has left', async ({ page }) => {
     // A code with four seconds on it will be rejected by the time it is pasted,
     // and without the countdown that reads as a wrong secret.
