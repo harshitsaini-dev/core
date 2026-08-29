@@ -4,6 +4,7 @@ import type { Database } from '@core/db';
 import type { Bytes } from '@core/crypto';
 import type { EmailConfig } from './email';
 import { emailEnabled, send } from './email';
+import { thresholdInWords, windowInWords } from './lockout';
 import { emailDecrypt } from './secrets';
 
 /**
@@ -23,10 +24,20 @@ import { emailDecrypt } from './secrets';
  * device — those would make an intercepted alert worth reading. It says which
  * account, what happened, roughly where, and what to do. Somebody who did the
  * thing recognises it; somebody who did not now knows.
+ *
+ * The numbers come from `lockout.ts` rather than being written out here. They
+ * were prose once, and lowering the threshold left this email telling people
+ * that ten attempts had failed when five had — which is worse than saying
+ * nothing, because somebody reading it would reasonably conclude a stranger
+ * had made the other five.
  */
 
 /** The events worth interrupting somebody for. */
 export type Alert = 'password_changed' | 'account_locked' | 'session_reuse_detected';
+
+function capitalise(word: string): string {
+  return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+}
 
 const WORDING: Record<Alert, { subject: string; body: (where: string) => string }> = {
   password_changed: {
@@ -42,8 +53,9 @@ const WORDING: Record<Alert, { subject: string; body: (where: string) => string 
   account_locked: {
     subject: 'Your Core account was locked after repeated failures',
     body: (where) =>
-      `Ten sign-in attempts failed in a row${where}, so the account is locked ` +
-      'for fifteen minutes. It unlocks itself; there is nothing to do.\n\n' +
+      `${capitalise(thresholdInWords())} sign-in attempts failed in a row${where}, so the ` +
+      `account is locked for ${windowInWords()} minutes. It unlocks itself; there is ` +
+      'nothing to do.\n\n' +
       'If that was you mistyping, you can ignore this.\n\n' +
       'If it was not, somebody is guessing. They did not get in — the lock is ' +
       'what stopped them — but a master password being guessed at is worth ' +

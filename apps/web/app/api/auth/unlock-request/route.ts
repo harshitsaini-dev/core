@@ -7,6 +7,7 @@ import { emailEnabled, send } from '@/lib/server/email';
 import { issueToken } from '@/lib/server/email-tokens';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
+import { thresholdInWords, windowInWords } from '@/lib/server/lockout';
 import { emailDecrypt, emailIndex } from '@/lib/server/secrets';
 
 /**
@@ -30,6 +31,10 @@ import { emailDecrypt, emailIndex } from '@/lib/server/secrets';
  */
 
 const schema = z.object({ email: z.string().email().max(320) });
+
+function capitalise(word: string): string {
+  return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+}
 
 export async function POST(request: NextRequest): Promise<Response> {
   let context: ReturnType<typeof getRequestContext>;
@@ -105,15 +110,16 @@ export async function POST(request: NextRequest): Promise<Response> {
       to: await emailDecrypt(pepper, row.emailEnc),
       subject: 'Unlock your Core account',
       text:
-        'Your Core account locked itself after ten failed sign-in attempts.\n\n' +
+        `${capitalise(thresholdInWords())} sign-in attempts failed in a row, so your Core ` +
+        `account locked itself for ${windowInWords()} minutes.\n\n` +
         'If that was you, this link lifts the lock straight away:\n\n' +
         `${base}/unlock?token=${token}\n\n` +
-        'It works once and expires in fifteen minutes.\n\n' +
+        `It works once and expires in ${windowInWords()} minutes.\n\n` +
         'It does not sign you in and it does not open your vault — you will ' +
         'still need your master password. Nobody here can open it for you.\n\n' +
         'If it was not you, do nothing. Whoever was guessing did not get in.\n\n' +
-        'Either way you are not locked out for good: the lock clears itself ' +
-        'within fifteen minutes. This link only saves the wait.\n\n— Core\n',
+        'Either way you are not locked out for good: the lock clears itself. ' +
+        'This link only saves the wait.\n\n— Core\n',
     });
   } catch {
     // Same answer as every other path. An error here must not become the one

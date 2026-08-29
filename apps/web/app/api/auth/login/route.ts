@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
 import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rate-limit';
 import { alert } from '@/lib/server/alerts';
+import { LOCKOUT_THRESHOLD, LOCKOUT_WINDOW_MS } from '@/lib/server/lockout';
 import { record } from '@/lib/server/audit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
 import { verifyTurnstile } from '@/lib/server/turnstile';
@@ -72,22 +73,6 @@ async function bookkeeping(work: Promise<unknown>): Promise<void> {
  * enumeration oracle for a temporary inconvenience, which is the wrong way
  * round for a product whose entire claim is that the server knows nothing.
  */
-/**
- * Failures before an account locks.
- *
- * Tied to `LIMITS.login.capacity`, and it has to be: the limiter refuses a
- * caller after that many attempts in a minute, and a refusal never reaches this
- * code — so a threshold above the bucket is a threshold a single caller can
- * never reach. It was ten against a bucket of five, which meant the lockout
- * fired only for an attacker spread across enough addresses to keep every
- * bucket alive, and never for anybody else. The feature was there; almost
- * nothing could trigger it.
- *
- * Raising one without the other puts it back in that state, which is why this
- * reads the limit rather than restating it.
- */
-const LOCKOUT_THRESHOLD = LIMITS.login.capacity;
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 
 /**
  * POST /api/auth/login
