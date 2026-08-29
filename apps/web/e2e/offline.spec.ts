@@ -371,3 +371,48 @@ test.describe('service worker freshness', () => {
     expect(served).toBe(POISON);
   });
 });
+
+test.describe('an update taking over', () => {
+  /*
+   * The worker calls `skipWaiting`, so there is never an update sitting in a
+   * waiting state to prompt about — it installs and claims the page at once,
+   * which for a security tool is the right way round. What that does not do is
+   * replace the JavaScript already running.
+   *
+   * So the prompt is "the update is already here, this tab is the old one",
+   * and the two things worth testing are that it appears when a controller is
+   * replaced and that it does not appear on a first install, which is not an
+   * update and would interrupt every new visitor.
+   */
+
+  test('says so when a new worker replaces the old one', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, {
+      timeout: 30_000,
+    });
+
+    // Dispatched rather than driven by deploying a second worker: the listener
+    // is what is under test, and installing a real update mid-test would take
+    // the page with it.
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
+
+    await expect(page.getByText('A new version of core is ready.')).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test('says nothing on a first install', async ({ page, context }) => {
+    // A visitor who has never been here has not been updated. Interrupting them
+    // with a reload prompt on their first page load would be noise.
+    await context.clearCookies();
+    await page.goto('/');
+
+    // Long enough for the worker to install and claim, which is the moment the
+    // event fires. If a toast were going to appear, it would be by now.
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, {
+      timeout: 30_000,
+    });
+
+    await expect(page.getByText('A new version of core is ready.')).toHaveCount(0);
+  });
+});

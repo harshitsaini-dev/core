@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import { toast } from '@/lib/client/toast-store';
 
 /**
  * Register the service worker and keep it told what the app has loaded.
@@ -34,8 +35,47 @@ function reportAssets(): void {
   }
 }
 
+/**
+ * Tell the page when a new version has taken over.
+ *
+ * The worker calls `skipWaiting`, so an update installs and claims the page
+ * immediately rather than sitting in a waiting state — for a security tool, a
+ * user parked on last week's build is worse than an interrupted one. What that
+ * does not do is replace the JavaScript already running, which keeps going
+ * until a reload.
+ *
+ * So there is no "an update is waiting" prompt to show; there is a "the update
+ * is already here, this tab is the old one" prompt, which is the honest version
+ * of the same thing. It is a toast with an action rather than an automatic
+ * reload: reloading a vault out from under somebody mid-edit would lose what
+ * they were typing, and the keys with it.
+ */
+function watchForUpdates(): () => void {
+  const container = navigator.serviceWorker;
+  if (!container) return () => undefined;
+
+  // `controllerchange` also fires the first time a worker takes control of a
+  // page that had none, which is an install and not an update. Only a change
+  // *from* an existing controller is worth interrupting somebody for.
+  let had = container.controller !== null;
+
+  const onChange = (): void => {
+    if (had) {
+      toast('A new version of core is ready.', {
+        action: { label: 'reload', run: () => window.location.reload() },
+      });
+    }
+    had = true;
+  };
+
+  container.addEventListener('controllerchange', onChange);
+  return () => container.removeEventListener('controllerchange', onChange);
+}
+
 export function ServiceWorker() {
   const pathname = usePathname();
+
+  useEffect(() => watchForUpdates(), []);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;

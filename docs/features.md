@@ -135,7 +135,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | PWA-09 | Haptic feedback on copy (Vibration API)          | P3    | DONE   |
 | PWA-10 | Safe-area insets and one-handed reachability     | P3    | DONE   |
 | PWA-11 | Keyboard shortcuts across desktop                | P3    | DONE   |
-| PWA-12 | Update-available prompt when a new SW is waiting | P5    | TODO   |
+| PWA-12 | Prompt to reload when a new version has taken over | P5  | DONE   |
 
 ## UI — Terminal Theme & Interaction
 
