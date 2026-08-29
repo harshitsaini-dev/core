@@ -12,8 +12,11 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Optional — only needed for the features that use them.
 RESEND_API_KEY=
-# Self-hosters: change this to a domain you control and have verified.
-RESEND_FROM_EMAIL="Core <no-reply@kernel.harshitsaini.in>"
+# A domain you control and have verified with Resend. Not the domain the app is
+# served from unless you have verified that one too — an unverified sender is
+# accepted by Resend and then dropped or filed as spam by the receiver, which
+# looks like the email never being sent.
+RESEND_FROM_EMAIL="Core <no-reply@mail.example.com>"
 TURNSTILE_SECRET_KEY=
 
 # Rate limiting: name the caller with a header instead of the connection.
