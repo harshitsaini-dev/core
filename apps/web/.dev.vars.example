@@ -17,7 +17,25 @@ RESEND_API_KEY=
 # accepted by Resend and then dropped or filed as spam by the receiver, which
 # looks like the email never being sent.
 RESEND_FROM_EMAIL="Core <no-reply@mail.example.com>"
+# Leave this empty locally.
+#
+# With a secret key set, every request without a Turnstile token is refused —
+# which is every request the test suite makes, because an API-level test cannot
+# solve a challenge. Turnstile itself is covered by unit tests in
+# `lib/server/turnstile.test.ts`; the browser suite runs with it off, and
+# production has it on.
+#
+# To see the widget while developing, set only the *site* key in
+# `apps/web/.env.local` and leave this blank: the server allows everything when
+# it has no secret, so the widget renders and nothing is refused.
 TURNSTILE_SECRET_KEY=
+# The site key is NOT set here. It is public and inlined at build time, so Next
+# reads it from `.env.local` rather than from this file, which Wrangler reads
+# for the Worker's own bindings. Setting it here does nothing and looks like it
+# should work:
+#     apps/web/.env.local
+#     NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x...
+
 
 # Rate limiting: name the caller with a header instead of the connection.
 #

@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Field, Input, Panel, Warning } from '@core/ui';
+import { TurnstileGate } from '../turnstile-gate';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { signup } from '@/lib/client/auth';
 import { MINIMUM_SCORE, estimate } from '@/lib/client/strength';
@@ -37,6 +38,10 @@ export default function SignupPage() {
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [recoveryKey, setRecoveryKey] = useState('');
+  // Held here rather than read from the DOM at submit time: a token is
+  // single-use, so the form has to know when it no longer holds a good one.
+  const [botToken, setBotToken] = useState<string | null>(null);
+  const [botReset, setBotReset] = useState(0);
 
   useEffect(() => {
     if (password === '') {
@@ -78,7 +83,7 @@ export default function SignupPage() {
       setStage('working');
 
       try {
-        const result = await signup(email, password, setProgress);
+        const result = await signup(email, password, setProgress, botToken ?? undefined);
         setRecoveryKey(result.recoveryKey);
         setStage('kit');
       } catch {
@@ -89,9 +94,13 @@ export default function SignupPage() {
         setStage('form');
       } finally {
         setProgress('');
+        // A used token is spent whether or not the signup worked, so the next
+        // attempt needs a fresh one.
+        setBotToken(null);
+        setBotReset((n) => n + 1);
       }
     },
-    [canSubmit, email, password],
+    [botToken, canSubmit, email, password],
   );
 
   if (stage === 'kit') {
@@ -173,6 +182,8 @@ export default function SignupPage() {
               {error}
             </p>
           ) : null}
+
+          <TurnstileGate onToken={setBotToken} resetSignal={botReset} />
 
           <Button type="submit" disabled={!canSubmit} className="w-full">
             {stage === 'working' ? `... ${progress}` : 'create vault'}

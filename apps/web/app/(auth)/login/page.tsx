@@ -8,6 +8,7 @@ import { LoginFailed, login, unlockOffline } from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
 import { passkeyStatus } from '@/lib/client/passkey';
 import { pinStatus } from '@/lib/client/pin';
+import { TurnstileGate } from '../turnstile-gate';
 import { PinUnlock } from './pin-unlock';
 
 /**
@@ -37,6 +38,10 @@ export default function LoginPage() {
   // move the field under a cursor that is already typing.
   const [pinEmail, setPinEmail] = useState<string | null>(null);
   const [pinDismissed, setPinDismissed] = useState(false);
+  // Held here rather than read from the DOM at submit time: a token is
+  // single-use, so the form has to know when it no longer holds a good one.
+  const [botToken, setBotToken] = useState<string | null>(null);
+  const [botReset, setBotReset] = useState(0);
 
   useEffect(() => {
     void Promise.all([pinStatus(), passkeyStatus()]).then(([pin, passkey]) => {
@@ -76,7 +81,7 @@ export default function LoginPage() {
       try {
         let keys;
         try {
-          keys = await login(email, password, setProgress);
+          keys = await login(email, password, setProgress, botToken ?? undefined);
         } catch (networkFailure) {
           // A rejected password is final; only an unreachable server is worth
           // falling back for. Trying the local copy after a genuine rejection
@@ -100,9 +105,14 @@ export default function LoginPage() {
         );
         setBusy(false);
         setProgress('');
+        // A used token is spent, whether or not the sign-in worked. Without
+        // this the next attempt sends the same one and fails verification in a
+        // way that reads as the password being wrong.
+        setBotToken(null);
+        setBotReset((n) => n + 1);
       }
     },
-    [busy, email, enter, password],
+    [botToken, busy, email, enter, password],
   );
 
   // Rendered instead of the password form, never above it: two credential
@@ -166,6 +176,8 @@ export default function LoginPage() {
               {error}
             </p>
           ) : null}
+
+          <TurnstileGate onToken={setBotToken} resetSignal={botReset} />
 
           <Button
             type="submit"

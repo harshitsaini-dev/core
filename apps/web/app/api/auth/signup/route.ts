@@ -6,6 +6,7 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
+import { verifyTurnstile } from '@/lib/server/turnstile';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailEncrypt, emailIndex } from '@/lib/server/secrets';
@@ -114,6 +115,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     context.rateLimitTestMode,
   );
   if (retryAfter !== null) return tooManyRequests(retryAfter);
+
+  // After the limiter, before anything expensive. A refused token should cost
+  // this server one HTTP call, not an Argon2id verification.
+  if (!(await verifyTurnstile(context.turnstile, request))) return badRequest();
 
   const { db, pepper } = context;
 

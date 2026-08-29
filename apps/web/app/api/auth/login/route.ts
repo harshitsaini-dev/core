@@ -13,6 +13,7 @@ import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rat
 import { alert } from '@/lib/server/alerts';
 import { record } from '@/lib/server/audit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
+import { verifyTurnstile } from '@/lib/server/turnstile';
 import { emailIndex } from '@/lib/server/secrets';
 import { issueSession, sessionCookie } from '@/lib/server/session';
 import { AUTH_RESPONSE_BUDGET_MS, constantTime } from '@/lib/server/timing';
@@ -142,6 +143,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   const decision = address === null ? null : await consume(context.kv, pepper, 'login', address);
 
   if (decision && !decision.allowed) return tooManyRequests(decision.retryAfter);
+
+  // After the limiter, before anything expensive. A refused token should cost
+  // this server one HTTP call, not an Argon2id verification — and before the
+  // constant-time block, so it cannot become a way to time the answer.
+  if (!(await verifyTurnstile(context.turnstile, request))) return badRequest();
 
   /**
    * Progressive delay (RL-03).

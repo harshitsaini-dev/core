@@ -180,7 +180,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | RL-02 | Endpoint-specific throttles (login 5/min, sync 100/min)   | P5    | DONE   |
 | RL-03 | Progressive response delay on repeated failures           | P5    | DONE   |
 | RL-04 | Token-bucket algorithm for burst tolerance                | P5    | DONE   |
-| RL-05 | Cloudflare Turnstile on signup, login, share-open         | P5    | TODO   |
+| RL-05 | Cloudflare Turnstile on signup and login                  | P5    | DONE   |
 | RL-06 | Account-level lockout after N consecutive failures        | P5    | DONE   |
 | RL-07 | Constant-time responses across all auth paths             | P2    | DONE   |
 | RL-08 | Server-side pepper in the verifier                        | P2    | DONE   |

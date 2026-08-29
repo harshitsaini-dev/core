@@ -86,6 +86,12 @@ jobs:
         run: pnpm build:cf
         env:
           NEXT_PUBLIC_APP_URL: ${{ env.APP_URL }}
+          # The Turnstile site key is public — it is in the page's HTML by
+          # design — so it is a variable rather than a secret. It still has to
+          # be here: `NEXT_PUBLIC_*` is inlined at build time, so a value set
+          # only in Cloudflare would never reach the widget. Unset is fine and
+          # means the widget is simply not rendered.
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
 
       # Migrations before the code, not after. A new column the new code reads
       # has to exist before that code starts serving; the other order is a

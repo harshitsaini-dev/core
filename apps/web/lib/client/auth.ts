@@ -16,6 +16,7 @@ import {
 import type { AccountKeys } from '@core/crypto';
 import type { KdfParams } from '@core/shared';
 import * as offline from './offline-db';
+import { TURNSTILE_HEADER } from './turnstile';
 
 /**
  * Key derivation, made cheap for the test suite.
@@ -73,10 +74,15 @@ export interface SignupResult {
   readonly recoveryKey: string;
 }
 
-async function postJson(path: string, body: unknown): Promise<Response> {
+async function postJson(path: string, body: unknown, botToken?: string): Promise<Response> {
   return fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // A header rather than a body field, so the server can refuse a request
+      // before parsing anything a stranger sent it.
+      ...(botToken ? { [TURNSTILE_HEADER]: botToken } : {}),
+    },
     body: JSON.stringify(body),
     // Same-origin only; there is no reason for these to be cross-origin and
     // every reason not to allow it.
@@ -95,6 +101,7 @@ export async function signup(
   email: string,
   masterPassword: string,
   onProgress?: (step: string) => void,
+  botToken?: string,
 ): Promise<SignupResult> {
   onProgress?.('calibrating key derivation');
   const params = await chooseKdfParams();
@@ -109,16 +116,20 @@ export async function signup(
   const recoveryVerifier = await deriveRecoveryVerifier(recoveryKey);
 
   onProgress?.('creating account');
-  const response = await postJson('/api/auth/signup', {
-    email,
-    authKey: bytesToBase64Url(authKey),
-    kdfSalt: bytesToBase64Url(salt),
-    kdfParams: params,
-    accountKeyWrapped: wrappedAccountKey,
-    publicKey,
-    privateKeyWrapped: wrappedPrivateKey,
-    recoveryVerifier,
-  });
+  const response = await postJson(
+    '/api/auth/signup',
+    {
+      email,
+      authKey: bytesToBase64Url(authKey),
+      kdfSalt: bytesToBase64Url(salt),
+      kdfParams: params,
+      accountKeyWrapped: wrappedAccountKey,
+      publicKey,
+      privateKeyWrapped: wrappedPrivateKey,
+      recoveryVerifier,
+    },
+    botToken,
+  );
 
   wipe(authKey);
 
@@ -160,6 +171,7 @@ export async function login(
   email: string,
   masterPassword: string,
   onProgress?: (step: string) => void,
+  botToken?: string,
 ): Promise<AccountKeys> {
   onProgress?.('fetching parameters');
   const pre = await postJson('/api/auth/prelogin', { email });
@@ -174,10 +186,11 @@ export async function login(
   );
 
   onProgress?.('signing in');
-  const response = await postJson('/api/auth/login', {
-    email,
-    authKey: bytesToBase64Url(authKey),
-  });
+  const response = await postJson(
+    '/api/auth/login',
+    { email, authKey: bytesToBase64Url(authKey) },
+    botToken,
+  );
 
   wipe(authKey);
 

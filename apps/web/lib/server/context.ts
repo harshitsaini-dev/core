@@ -4,6 +4,7 @@ import type { Database } from '@core/db';
 import type { Bytes } from '@core/crypto';
 import type { EmailConfig } from './email';
 import { parsePepper } from './secrets';
+import type { TurnstileConfig } from './turnstile';
 
 /**
  * Access to the Cloudflare bindings declared in wrangler.toml.
@@ -33,6 +34,14 @@ export interface RequestContext {
    * for something anybody can self-host in fifteen minutes.
    */
   readonly email: EmailConfig;
+  /**
+   * Bot protection, if this instance has it.
+   *
+   * Also optional. The rate limiter and the account lockout are there either
+   * way; this is for the case neither sees — a thousand addresses making three
+   * requests each.
+   */
+  readonly turnstile: TurnstileConfig;
 }
 
 /**
@@ -51,5 +60,6 @@ export function getRequestContext(): RequestContext {
     pepper: parsePepper(env.AUTH_PEPPER),
     rateLimitTestMode: env.RATE_LIMIT_TEST_MODE === '1',
     email: { apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL },
+    turnstile: { secretKey: env.TURNSTILE_SECRET_KEY },
   };
 }

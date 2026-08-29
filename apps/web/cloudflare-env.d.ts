@@ -7,6 +7,8 @@ interface __BaseEnv_Env {
   /** Optional. Without it the three email features are simply off. */
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
+  /** Optional. Without it Turnstile is off and the limiter is the only gate. */
+  TURNSTILE_SECRET_KEY?: string;
   NEXT_PUBLIC_APP_URL: string;
   RATE_LIMIT_TEST_MODE?: string;
 }
