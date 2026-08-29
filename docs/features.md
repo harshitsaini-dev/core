@@ -209,7 +209,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2    | DONE   |
 | OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e           | P2    | DONE   |
 | OSS-06 | Crypto test vectors published for independent audit     | P1    | DONE   |
-| OSS-07 | SECURITY.md with a responsible-disclosure policy        | P5    | TODO   |
+| OSS-07 | SECURITY.md with a responsible-disclosure policy        | P5    | DONE   |
 | OSS-08 | Self-hosting guide with screenshots                     | P5    | TODO   |
 | OSS-09 | MIT licence                                             | P0    | DONE   |
 | OSS-10 | Lighthouse PWA score 100 in CI                          | P5    | TODO   |
