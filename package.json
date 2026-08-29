@@ -39,7 +39,8 @@
     "db:seed": "tsx scripts/seed-dev.mts",
     "assets": "tsx scripts/generate-assets.mts",
     "build:cf": "pnpm --filter @core/web exec opennextjs-cloudflare build",
-    "preview": "pnpm --filter @core/web exec opennextjs-cloudflare preview"
+    "preview": "pnpm --filter @core/web exec opennextjs-cloudflare preview",
+    "deploy": "pnpm --filter @core/web exec opennextjs-cloudflare deploy"
   },
   "devDependencies": {
     "@core/crypto": "workspace:*",

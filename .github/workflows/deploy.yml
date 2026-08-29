@@ -1,0 +1,95 @@
+name: Deploy
+
+# Deploys from CI, never from a laptop, and the reason is not preference.
+#
+# The OpenNext build cannot run on Windows. pnpm links `react`, `react-dom` and
+# `styled-jsx` into the build output as symlinks, and esbuild on Windows cannot
+# traverse them — the build fails with "Access is denied" on each. OpenNext
+# warns about this itself and recommends WSL. So the choices were WSL on one
+# machine or Linux in CI, and CI wins on the thing that matters more than
+# convenience: every deploy comes from a clean checkout on an identical
+# machine, rather than from whatever state a working directory happens to be in.
+#
+# `workers-build.yml` already proves this build works here.
+
+on:
+  # Only by hand, and only from main. A password manager should not go out
+  # because somebody merged a README change, and a deploy that happens without
+  # anybody deciding to deploy is a deploy nobody is watching.
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm'
+        required: true
+        default: ''
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: build and deploy to Cloudflare
+    runs-on: ubuntu-latest
+    # Restricted so the API token is only readable by a run that an owner
+    # started, not by one a fork can trigger.
+    environment: production
+    steps:
+      - name: Check the confirmation
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "Confirmation was '${{ inputs.confirm }}', expected 'deploy'."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The same gates a push runs, again, because a green run from an hour ago
+      # says nothing about the commit being deployed now.
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+      - name: Build for the Workers runtime
+        run: pnpm build:cf
+
+      # Migrations before the code, not after. A new column the new code reads
+      # has to exist before that code starts serving; the other order is a
+      # window where every request fails.
+      - name: Apply migrations to the remote database
+        run: pnpm db:migrate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy
+        run: pnpm --filter @core/web exec opennextjs-cloudflare deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # `AUTH_PEPPER` is deliberately not set here. It is a Worker secret, set
+      # once with `wrangler secret put`, and a deploy that could rewrite it
+      # could also lose it — which would lock every existing account out
+      # permanently, since the verifier cannot be recomputed without it.
+      - name: Check the deployed instance answers
+        run: |
+          url="${{ vars.DEPLOY_URL }}"
+          if [ -z "$url" ]; then
+            echo "No DEPLOY_URL variable set; skipping the check."
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+          echo "$url -> $code"
+          test "$code" = "200"
