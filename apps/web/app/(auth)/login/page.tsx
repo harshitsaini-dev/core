@@ -4,7 +4,14 @@ import type { AccountKeys } from '@core/crypto';
 import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { LoginFailed, RateLimited, login, unlockOffline } from '@/lib/client/auth';
+import {
+  DeviceVerificationRequired,
+  LoginFailed,
+  RateLimited,
+  login,
+  unlockOffline,
+  verifyDevice,
+} from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
 import { passkeyStatus } from '@/lib/client/passkey';
 import { pinStatus } from '@/lib/client/pin';
@@ -27,6 +34,7 @@ import { PinUnlock } from './pin-unlock';
 export default function LoginPage() {
   const emailId = useId();
   const passwordId = useId();
+  const codeId = useId();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,6 +51,11 @@ export default function LoginPage() {
   const [botToken, setBotToken] = useState<string | null>(null);
   const [botReset, setBotReset] = useState(0);
   const [unlockSent, setUnlockSent] = useState(false);
+  // Set when the password was right and this browser is not recognised. The
+  // password is kept because the code releases a session and the password is
+  // still what opens the vault — see `verifyDevice`.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState('');
 
   useEffect(() => {
     void Promise.all([pinStatus(), passkeyStatus()]).then(([pin, passkey]) => {
@@ -103,6 +116,17 @@ export default function LoginPage() {
         // limit is about this caller's request rate rather than the account,
         // so saying so leaks nothing — and reporting it as "wrong credentials"
         // told people the one thing that was definitely not true.
+        if (cause instanceof DeviceVerificationRequired) {
+          // Not a failure. The password was right; the browser is new.
+          setNeedsCode(true);
+          setError('');
+          setBusy(false);
+          setProgress('');
+          setBotToken(null);
+          setBotReset((n) => n + 1);
+          return;
+        }
+
         setError(
           cause instanceof RateLimited
             ? `Too many attempts from here. Try again in about ${Math.ceil(
@@ -138,6 +162,106 @@ export default function LoginPage() {
           onUnlocked={enter}
           onUsePassword={() => setPinDismissed(true)}
         />
+      </main>
+    );
+  }
+
+  /*
+   * The password was right and this browser is new.
+   *
+   * Shown instead of the password form rather than beside it. The password has
+   * already been accepted; asking for it again next to a code would suggest one
+   * of them failed.
+   */
+  if (needsCode) {
+    return (
+      <main
+        id="main"
+        className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16"
+      >
+        <Panel>
+          <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
+            <span className="cursor">core verify</span>
+          </h1>
+          <p className="text-muted mt-4 font-mono text-xs leading-relaxed">
+            <span aria-hidden="true">&gt; </span>
+            Your password was right, and this browser has not signed in to this account before. A
+            six-digit code is on its way to your email.
+          </p>
+          <p className="text-muted mt-2 font-mono text-xs leading-relaxed">
+            <span aria-hidden="true">&gt; </span>
+            The code does not open your vault — your master password already did that, here in this
+            browser. It only lets this device through.
+          </p>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (busy || code.length !== 6) return;
+
+              setBusy(true);
+              setError('');
+
+              void verifyDevice(email, password, code, setProgress)
+                .then(enter)
+                .catch((cause: unknown) => {
+                  setError(
+                    cause instanceof RateLimited
+                      ? cause.message
+                      : 'That code did not work. After three tries it stops working — sign in again for a new one.',
+                  );
+                  setCode('');
+                  setBusy(false);
+                  setProgress('');
+                });
+            }}
+            className="mt-8 space-y-6"
+            noValidate
+          >
+            <Field label="six-digit code" htmlFor={codeId}>
+              <Input
+                id={codeId}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+                disabled={busy}
+                data-testid="device-code"
+              />
+            </Field>
+
+            {error ? (
+              <p role="alert" className="text-danger font-mono text-xs" data-testid="device-error">
+                <span aria-hidden="true">! </span>
+                {error}
+              </p>
+            ) : null}
+
+            <Button
+              type="submit"
+              disabled={busy || code.length !== 6}
+              className="w-full"
+              data-testid="verify-device"
+            >
+              {busy ? `... ${progress}` : 'verify this device'}
+            </Button>
+          </form>
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setNeedsCode(false);
+              setCode('');
+              setError('');
+            }}
+            className="mt-6"
+            data-testid="device-back"
+          >
+            back
+          </Button>
+        </Panel>
       </main>
     );
   }

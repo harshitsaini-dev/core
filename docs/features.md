@@ -44,7 +44,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-08 | WebAuthn passkey unlock, PRF-derived (biometric, FaceID)     | P5    | DONE   |
 | AUTH-09 | Device PIN quick-unlock backed by the device key             | P3    | DONE   |
 | AUTH-10 | Emailed link that lifts a lockout — never a sign-in          | P5    | DONE   |
-| AUTH-11 | New-device / new-country login approval via email OTP        | P5    | TODO   |
+| AUTH-11 | New-device sign-in approval by emailed code                  | P5    | DONE   |
 | AUTH-12 | Concurrent session limit with oldest-session eviction        | P5    | DONE   |
 | AUTH-13 | Open-session list with individual revoke                     | P5    | DONE   |
 | AUTH-14 | Inactivity auto-lock with configurable timeout               | P3    | DONE   |
@@ -69,6 +69,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-14 | Drag-and-drop items into folders (desktop)                   | P4    | TODO   |
 | VLT-15 | Linked items (DB credential linked to an ENV project)        | P4    | DONE   |
 | VLT-16 | Duplicate item detection                                     | P6    | TODO   |
+| VLT-17 | Scan a TOTP QR code with the camera                          | P6    | TODO   |
 
 ## ORG — Search, Filter, Organisation
 
@@ -198,6 +199,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | TODO   |
 | IO-06 | Scheduled encrypted backup reminder                       | P6    | TODO   |
 | IO-07 | Restore-from-backup flow                                  | P5    | DONE   |
+| IO-08 | Import 2FA secrets from a Google Authenticator export QR  | P6    | TODO   |
 
 ## OSS — Self-Hosting & Project Health
 

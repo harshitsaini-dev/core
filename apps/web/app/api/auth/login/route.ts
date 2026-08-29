@@ -319,31 +319,76 @@ export async function POST(request: NextRequest): Promise<Response> {
    * Skipped entirely where the instance cannot send mail. An unconfigured
    * self-hosted copy must not be one where nobody can ever sign in.
    */
-  if (emailEnabled(context.email) && !(await isKnownDevice(db, outcome.userId, request))) {
-    const code = await issueToken(db, outcome.userId, 'device');
+  let needsVerification = false;
+  try {
+    needsVerification =
+      emailEnabled(context.email) && !(await isKnownDevice(db, outcome.userId, request));
+  } catch {
+    /*
+     * Fails open, and that is a decision rather than an oversight.
+     *
+     * Two ways to be wrong here. Closed: an internal fault locks somebody out
+     * of their own vault from every browser, and the only way back is a
+     * redeploy. Open: a new control silently does not apply, which is the
+     * behaviour this product had until today.
+     *
+     * The second is plainly the lesser one — the password is still required
+     * either way, and this check only ever added a second step to a sign-in
+     * that had already passed. A control that can lock out the person it
+     * protects is worse than one that occasionally does not fire.
+     */
+    console.warn('device recognition failed; issuing a session without it');
+  }
 
-    await send(context.email, {
-      to: await emailDecrypt(pepper, outcome.emailEnc ?? ''),
-      subject: `${code} is your Core sign-in code`,
-      text:
-        `Somebody signed in to your Core vault with the right master password, from a ` +
-        `device this account has not seen before${
-          request.headers.get('cf-ipcountry') ? ` in ${request.headers.get('cf-ipcountry')}` : ''
-        }.\n\n` +
-        `The code is ${code}. It expires in ${windowInWords()} minutes and works once.\n\n` +
-        'If that was you, enter it and this browser will be remembered.\n\n' +
-        'If it was not, somebody has your master password. They cannot get in ' +
-        'without this code — but change that password now, from a device you ' +
-        'already use.\n\n— Core\n',
-    });
+  if (needsVerification) {
+    // The code and the mail together. If either fails there is nothing to
+    // enter, so the same reasoning applies: let the sign-in through rather
+    // than leave somebody holding a form for a code that was never sent.
+    let code: string;
+    try {
+      code = await issueToken(db, outcome.userId, 'device');
+    } catch {
+      console.warn('could not issue a device code; issuing a session without it');
+      code = '';
+    }
 
-    return new Response(JSON.stringify({ status: 'verify' }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
-      },
-    });
+    const delivered =
+      code === ''
+        ? false
+        : await send(context.email, {
+            to: await emailDecrypt(pepper, outcome.emailEnc ?? ''),
+            subject: `${code} is your Core sign-in code`,
+            text:
+              `Somebody signed in to your Core vault with the right master password, from a ` +
+              `device this account has not seen before${
+                request.headers.get('cf-ipcountry')
+                  ? ` in ${request.headers.get('cf-ipcountry')}`
+                  : ''
+              }.\n\n` +
+              `The code is ${code}. It expires in ${windowInWords()} minutes and works once.\n\n` +
+              'If that was you, enter it and this browser will be remembered.\n\n' +
+              'If it was not, somebody has your master password. They cannot get in ' +
+              'without this code — but change that password now, from a device you ' +
+              'already use.\n\n— Core\n',
+          });
+
+    /*
+     * Only hold the sign-in back if the code actually went out.
+     *
+     * A form asking for a code that was never sent is a locked door with no
+     * key, and `send` already answers false rather than throwing when Resend
+     * refuses or is unreachable. The check applies whenever it can be applied,
+     * and gets out of the way when it cannot.
+     */
+    if (delivered) {
+      return new Response(JSON.stringify({ status: 'verify' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      });
+    }
   }
 
   const issued = await issueSession(db, pepper, outcome.userId);
