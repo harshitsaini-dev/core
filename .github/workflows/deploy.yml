@@ -57,6 +57,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Resolved once, used by the build and by the check at the end.
+      #
+      # Required, not optional. `NEXT_PUBLIC_APP_URL` is inlined at build time,
+      # so leaving it unset does not fail — it ships `http://localhost:3000` as
+      # the canonical URL and in every Open Graph tag, which is what the first
+      # deployment did.
+      - name: Resolve the public URL
+        run: |
+          url="${{ vars.DEPLOY_URL }}"
+          if [ -z "$url" ]; then
+            echo "DEPLOY_URL is not set. It is the address this instance is"
+            echo "served from, and the build inlines it — without it the"
+            echo "deployed site would advertise localhost as its own URL."
+            exit 1
+          fi
+          case "$url" in https://*|http://*) ;; *) url="https://$url" ;; esac
+          echo "APP_URL=${url%/}" >> "$GITHUB_ENV"
+          echo "Building for ${url%/}"
+
       # The same gates a push runs, again, because a green run from an hour ago
       # says nothing about the commit being deployed now.
       - run: pnpm typecheck
@@ -65,6 +84,8 @@ jobs:
 
       - name: Build for the Workers runtime
         run: pnpm build:cf
+        env:
+          NEXT_PUBLIC_APP_URL: ${{ env.APP_URL }}
 
       # Migrations before the code, not after. A new column the new code reads
       # has to exist before that code starts serving; the other order is a
@@ -90,19 +111,12 @@ jobs:
       # step above.
       - name: Check the deployed instance answers
         run: |
-          url="${{ vars.DEPLOY_URL }}"
-          if [ -z "$url" ]; then
-            echo "No DEPLOY_URL variable set; skipping the check."
-            exit 0
-          fi
+          url="$APP_URL"
 
-          # A scheme, if the variable was set without one. The first run failed
-          # here on `core.harshitsaini.in` — curl exited 6, could not resolve,
-          # and under `bash -e` that ended the step before the assertion below
-          # ever ran. `|| true` is what makes the comparison the thing that
-          # decides, rather than curl's own exit code.
-          case "$url" in https://*|http://*) ;; *) url="https://$url" ;; esac
-
+          # `|| true` is what makes the comparison decide rather than curl's own
+          # exit code. The first run set DEPLOY_URL without a scheme, curl
+          # exited 6, and under `bash -e` that ended the step before the
+          # assertion it was there to feed.
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$url" || true)
           echo "$url -> ${code:-no answer}"
 
