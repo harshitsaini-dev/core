@@ -55,10 +55,72 @@ describe('send', () => {
     expect(body.to).toEqual([EMAIL.to]);
     expect(body.text).toBe(EMAIL.text);
 
-    // Text only, on purpose. An HTML mail from a password manager is a mail
-    // with a styled button in it, which is the exact shape of the phishing it
-    // would be teaching people to click.
-    expect(body.html).toBeUndefined();
+    // Both, so a client that shows text gets the version written for it.
+    expect(body.html).toContain('core_');
+  });
+
+  it('never turns a link into a button', async () => {
+    /*
+     * The one rule the HTML has. A styled call-to-action in a mail from a
+     * password manager teaches the habit that gets people phished — click the
+     * nice button in the message saying something is wrong with your account —
+     * and this product should not be the one teaching it.
+     *
+     * So a URL appears as itself, and the words around it are never the link.
+     */
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const url = 'https://core.example.com/unlock?token=abc123';
+    await send(CONFIG, {
+      ...EMAIL,
+      text: `Use this link:
+
+${url}
+
+It expires.`,
+    });
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body)) as {
+      html: string;
+    };
+
+    // The address is the link text, so somebody can read where it goes.
+    expect(body.html).toContain(`>${url}</a>`);
+
+    // And nothing is dressed up as a button.
+    expect(body.html).not.toMatch(/border-radius|padding:\s*1[2-9]px\s+3[0-9]px/i);
+    expect(body.html.toLowerCase()).not.toContain('click here');
+  });
+
+  it('loads nothing from anywhere', async () => {
+    // No image, no font, no tracking pixel: nothing to be blocked, and reading
+    // the mail tells this server nothing about when or whether it was read.
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await send(CONFIG, EMAIL);
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body)) as {
+      html: string;
+    };
+
+    expect(body.html).not.toContain('<img');
+    expect(body.html).not.toContain('@import');
+    expect(body.html).not.toContain('<script');
+  });
+
+  it('escapes what it renders', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await send(CONFIG, { ...EMAIL, text: '<script>alert(1)</script>' });
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body)) as {
+      html: string;
+    };
+
+    expect(body.html).toContain('&lt;script&gt;');
   });
 
   it('reports a refusal rather than throwing', async () => {

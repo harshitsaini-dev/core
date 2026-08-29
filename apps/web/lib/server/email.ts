@@ -1,3 +1,5 @@
+import { renderEmail } from './email-template';
+
 /**
  * Sending email.
  *
@@ -32,13 +34,12 @@ export interface Email {
   readonly to: string;
   readonly subject: string;
   /**
-   * Plain text, and only plain text.
+   * The message, as text.
    *
-   * No HTML, and that is a decision rather than an omission. An HTML mail from
-   * a password manager is a mail with a styled button in it, which is the exact
-   * shape of the phishing it would be teaching people to click. Text that says
-   * where it came from and what it is asking, with the link visible as a link,
-   * is harder to imitate convincingly.
+   * This is the source of both versions. The HTML alongside it renders these
+   * same paragraphs rather than restating them, so the two cannot drift into
+   * saying different things — which is the failure mode of every codebase that
+   * keeps a text and an HTML copy of the same email.
    */
   readonly text: string;
 }
@@ -63,7 +64,11 @@ export async function send(config: EmailConfig, email: Email): Promise<boolean> 
         from: config.from,
         to: [email.to],
         subject: email.subject,
+        // Both, so a client that shows text gets the version written for it.
+        // The HTML is rendered from the same text, and its one rule is that a
+        // URL is never a button — see `email-template.ts`.
         text: email.text,
+        html: renderEmail(email.subject, email.text),
       }),
       // A hung third party must not hold a Worker open. The features here are
       // all notifications; none of them is worth waiting on.

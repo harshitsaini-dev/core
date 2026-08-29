@@ -111,15 +111,9 @@ export async function POST(request: NextRequest): Promise<Response> {
         'It works once and expires in fifteen minutes.\n\n' +
         'It does not sign you in and it does not open your vault — you will ' +
         'still need your master password. Nobody here can open it for you.\n\n' +
-        'If it was not you, do nothing. The lock expires by itself in fifteen ' +
-        'minutes, and whoever was guessing did not get in.
-
-' +
-        'Either way you are not locked out for good: the lock clears itself. ' +
-        'This link only saves the wait.
-
-— Core
-',
+        'If it was not you, do nothing. Whoever was guessing did not get in.\n\n' +
+        'Either way you are not locked out for good: the lock clears itself ' +
+        'within fifteen minutes. This link only saves the wait.\n\n— Core\n',
     });
   } catch {
     // Same answer as every other path. An error here must not become the one
