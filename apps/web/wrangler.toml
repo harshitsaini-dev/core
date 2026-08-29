@@ -30,11 +30,13 @@ compatibility_flags = ["nodejs_compat"]
 # ---------------------------------------------------------------------------
 preview_urls = false
 
-# The `*.workers.dev` address stays on for now: it is the only way to reach
-# this instance until a custom domain is pointed at it. Worth turning off once
-# one is, so there is a single origin — two addresses for a password manager is
-# two places for a session cookie to exist and one more thing to imitate.
-workers_dev = true
+# One origin, now that `core.harshitsaini.in` answers.
+#
+# The `*.workers.dev` address was the only way in until the domain was pointed
+# here. Leaving it on afterwards means two addresses serving the same vault:
+# two places a session cookie can exist, two origins a service worker can be
+# registered against, and a second name that looks official enough to imitate.
+workers_dev = false
 
 # ---------------------------------------------------------------------------
 # D1 — the encrypted vault.
