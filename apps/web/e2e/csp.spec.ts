@@ -202,3 +202,36 @@ test.describe('policy enforcement', () => {
     expect(cspErrors, `the app violated its own policy: ${cspErrors.join('; ')}`).toEqual([]);
   });
 });
+
+test.describe('frames', () => {
+  /*
+   * Two directives with similar names and opposite jobs, and only one of them
+   * is the clickjacking defence.
+   *
+   * `frame-ancestors` governs who may embed this page. It is `'none'` and must
+   * stay that way — a vault inside somebody else's iframe is the attack.
+   *
+   * `frame-src` governs what this page may embed. It was `'none'` too, which
+   * silently broke Turnstile: the widget is an iframe, `strict-dynamic` let its
+   * script load, and the only sign that the widget never appeared was a console
+   * error. It now allows exactly one host, and only where Turnstile is
+   * configured.
+   */
+
+  test('nothing may embed this page, ever', async ({ page }) => {
+    await page.goto('/login');
+    expect(directive(await cspOf(page), 'frame-ancestors')).toBe("frame-ancestors 'none'");
+  });
+
+  test('this page embeds nothing but a bot check, if one is configured', async ({ page }) => {
+    await page.goto('/login');
+
+    const frameSrc = directive(await cspOf(page), 'frame-src');
+
+    // Either the strict form, or the strict form plus exactly one host. A third
+    // origin appearing here is a change worth noticing.
+    expect(["frame-src 'none'", "frame-src 'self' https://challenges.cloudflare.com"]).toContain(
+      frameSrc,
+    );
+  });
+});

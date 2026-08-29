@@ -21,6 +21,10 @@ import type { NextRequest } from 'next/server';
 
 /** Directives that never change between requests. */
 function policy(nonce: string, isDev: boolean): string {
+  // Inlined at build time, like everywhere else it is read. An instance that
+  // did not configure Turnstile gets the stricter policy.
+  const turnstile = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
+
   const directives = [
     "default-src 'self'",
 
@@ -63,7 +67,26 @@ function policy(nonce: string, isDev: boolean): string {
     // No plugins, no embedded content, and nothing may frame this page —
     // clickjacking a vault is a real attack, not a theoretical one.
     "object-src 'none'",
-    "frame-src 'none'",
+
+    /*
+     * Frames, and the one exception.
+     *
+     * Turnstile renders its widget in an iframe on `challenges.cloudflare.com`.
+     * `strict-dynamic` is enough to *load* its script — a script inserted by a
+     * nonced one is trusted — but it says nothing about framing, so with
+     * `frame-src 'none'` the script loads, the widget never appears, and the
+     * only sign is a console error nobody is reading. That is exactly what
+     * happened on the first deployment with Turnstile enabled.
+     *
+     * Added only when Turnstile is configured, so an instance without it keeps
+     * `frame-src 'none'` exactly as before.
+     *
+     * This is a much narrower grant than it sounds. `frame-src` governs what
+     * this page may embed; `frame-ancestors 'none'` below governs who may embed
+     * this page, and that is the one that stops a vault being clickjacked. It
+     * is untouched.
+     */
+    turnstile ? "frame-src 'self' https://challenges.cloudflare.com" : "frame-src 'none'",
     "frame-ancestors 'none'",
 
     // Restricts where a nonced script can navigate the top level, which closes

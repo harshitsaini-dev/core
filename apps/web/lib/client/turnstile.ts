@@ -7,11 +7,16 @@
  *
  * The script is third-party and this app's Content Security Policy is
  * `script-src 'self' 'nonce-…' 'strict-dynamic'`. `strict-dynamic` is what
- * makes loading it possible at all: a script the nonced bundle inserts is
- * trusted because the bundle inserted it, so no host needs adding to the
- * policy. Listing `challenges.cloudflare.com` instead would have widened the
- * directive this product leans on hardest, permanently, for a feature two pages
- * use.
+ * makes loading it possible without naming a host in `script-src`: a script the
+ * nonced bundle inserts is trusted because the bundle inserted it.
+ *
+ * That is not the whole story, and the first deployment found out how. The
+ * widget itself is an **iframe**, and `strict-dynamic` says nothing about
+ * framing — under `frame-src 'none'` the script loaded, the widget never
+ * appeared, and the only trace was a console error. `middleware.ts` now allows
+ * `challenges.cloudflare.com` in `frame-src`, and only when Turnstile is
+ * configured. `frame-ancestors 'none'` — who may embed *this* page, which is
+ * the clickjacking one — is untouched.
  *
  * And the whole thing is optional. With no site key configured there is no
  * widget, no script, and no request to Cloudflare — an instance without bot
