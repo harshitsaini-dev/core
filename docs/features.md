@@ -151,7 +151,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | UI-08 | Command-line style empty and error states               | P3    | DONE   |
 | UI-09 | Anti-screenshot blur-all toggle                         | P3    | DONE   |
 | UI-10 | True OLED black for battery saving                      | P1    | DONE   |
-| UI-11 | Reduced-motion support                                  | P5    | TODO   |
+| UI-11 | Reduced-motion support                                  | P5    | DONE   |
 | UI-12 | Full keyboard navigation and visible focus rings        | P5    | TODO   |
 | UI-13 | Optional light theme (inverted terminal)                | P6    | TODO   |
 

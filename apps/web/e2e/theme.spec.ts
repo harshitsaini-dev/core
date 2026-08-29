@@ -299,3 +299,58 @@ test.describe('terminal motifs', () => {
     await expect(page.getByTestId('empty-state')).toContainText('no match for "zzzzzz"');
   });
 });
+
+test.describe('reduced motion', () => {
+  /*
+   * The floor, not the individual opt-outs.
+   *
+   * Each effect in `globals.css` has its own `prefers-reduced-motion` rule and
+   * its own reason. What is checked here is the catch-all underneath them,
+   * which is the part that keeps working when somebody adds an animation next
+   * month without reading the file.
+   *
+   * Emulated per test rather than through `test.use({ reducedMotion })`, which
+   * did not reach the page under this config — `matchMedia` still reported
+   * false, so the first version of this asserted nothing and failed for the
+   * right reason.
+   */
+
+  test('nothing on the vault animates', async ({ page }) => {
+    await openVault(page, 'motion-vault');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'on' : 'off',
+        ),
+      )
+      .toBe('on');
+
+    const moving = await page.evaluate(() =>
+      [...document.querySelectorAll('*')]
+        .flatMap((el) => {
+          const style = getComputedStyle(el);
+          return [style.animationDuration, style.transitionDuration];
+        })
+        // `0.01ms` is serialised back as `1e-05s`; `100000s` is the autofill
+        // hack, which is not motion and is excluded in the stylesheet.
+        .filter((value) => !['0s', '1e-05s', '100000s'].includes(value)),
+    );
+
+    expect(moving, 'something still animates under prefers-reduced-motion').toEqual([]);
+  });
+
+  test('the landing page does not animate either', async ({ page }) => {
+    // The first screen anybody sees, and the one with the blinking cursor.
+    await page.goto('/');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    const cursor = await page
+      .locator('.cursor')
+      .first()
+      .evaluate((el) => getComputedStyle(el, '::after').animationDuration);
+
+    expect(['0s', '1e-05s']).toContain(cursor);
+  });
+});

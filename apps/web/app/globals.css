@@ -433,3 +433,40 @@ textarea:-webkit-autofill {
     animation: none;
   }
 }
+
+/*
+ * Reduced motion, as a floor rather than as four separate opt-outs.
+ *
+ * The individual rules above still exist and still say why each effect is
+ * there. This is what catches the ones nobody remembered: a Tailwind
+ * `transition-colors` on a button, a transform written inline by a gesture, an
+ * animation added next month by somebody who did not read this file.
+ *
+ * Near-zero rather than `none`, because `transitionend` and `animationend` do
+ * not fire when a duration is zero, and code that waits for them would hang.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+   * Except this one, which is not motion.
+   *
+   * A hundred-thousand-second transition is how Chromium's autofill background
+   * is kept from ever arriving; shortening it to a millisecond would paint the
+   * box pale yellow for anyone who asked for less animation.
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill {
+    transition-duration: 100000s !important;
+  }
+}
+
