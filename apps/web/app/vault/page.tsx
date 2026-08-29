@@ -37,6 +37,8 @@ import {
 } from '@/lib/client/backup-reminder';
 import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
+import { readSavedViews, writeSavedViews } from '@/lib/client/offline-db';
+import type { SavedView } from '@/lib/client/offline-db';
 import { toast } from '@/lib/client/toast-store';
 import { useView } from '@/lib/client/view-store';
 import {
@@ -463,6 +465,17 @@ export default function VaultPage() {
               void moveMany([itemId], folderId);
               const folder = visibleFolders.find((entry) => entry.folder.id === folderId);
               toast(`Moved to ${folder ? folder.folder.name : 'unfiled'}.`);
+            }}
+          />
+
+          <SavedViews
+            query={query}
+            folderFilter={folderFilter}
+            tagFilter={tagFilter}
+            onApply={(view) => {
+              setQuery(view.query);
+              setFolderFilter(view.folder as FolderFilter);
+              setTagFilter(view.tag);
             }}
           />
 
@@ -993,6 +1006,133 @@ function PullToRefresh({
  * Nothing renders at all until there is something to filter by. An empty row of
  * controls on a new vault teaches nothing and takes the space the list needs.
  */
+/**
+ * Named filter combinations.
+ *
+ * The vault this is for is the one with four hundred items, where "work logins
+ * tagged aws that are not in Archive" is a thing somebody assembles twice a
+ * week and reassembles from scratch every time.
+ *
+ * Nothing is saved unless it is named, and the control to save only appears
+ * when a filter is actually set — an empty view is the vault, which already
+ * has a button.
+ *
+ * Stored sealed under the device key rather than in `localStorage`, because a
+ * view's name is the person's own words and those are the same words the rest
+ * of this app refuses to let out. Local to this browser as a result; see the
+ * note on `SavedView`.
+ */
+function SavedViews({
+  query,
+  folderFilter,
+  tagFilter,
+  onApply,
+}: {
+  query: string;
+  folderFilter: FolderFilter;
+  tagFilter: string | null;
+  onApply: (view: SavedView) => void;
+}) {
+  const [views, setViews] = useState<readonly SavedView[]>([]);
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    void readSavedViews().then(setViews);
+  }, []);
+
+  const filtering = query.trim() !== '' || folderFilter !== null || tagFilter !== null;
+
+  async function persist(next: readonly SavedView[]): Promise<void> {
+    setViews(next);
+    await writeSavedViews(next);
+  }
+
+  async function save(): Promise<void> {
+    const trimmed = name.trim();
+    if (trimmed === '') return;
+
+    // Saving over a name that is already there, rather than ending up with two
+    // chips reading the same word and no way to tell them apart.
+    const view: SavedView = {
+      id: crypto.randomUUID(),
+      name: trimmed,
+      query,
+      folder: folderFilter,
+      tag: tagFilter,
+    };
+
+    await persist([...views.filter((entry) => entry.name !== trimmed), view]);
+    setName('');
+    setNaming(false);
+    toast(`Saved "${trimmed}".`);
+  }
+
+  if (views.length === 0 && !filtering) return null;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="saved-views">
+      {views.map((view) => (
+        <span key={view.id} className="border-line flex items-center border">
+          <button
+            type="button"
+            onClick={() => onApply(view)}
+            className="text-muted hover:text-accent px-2 py-1 font-mono text-xs"
+            data-testid="saved-view"
+          >
+            {view.name}
+          </button>
+          <button
+            type="button"
+            onClick={() => void persist(views.filter((entry) => entry.id !== view.id))}
+            aria-label={`forget the view ${view.name}`}
+            className="text-muted hover:text-danger px-2 py-1 font-mono text-xs"
+            data-testid="saved-view-forget"
+          >
+            x
+          </button>
+        </span>
+      ))}
+
+      {filtering ? (
+        naming ? (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+          >
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="name this view"
+              aria-label="name this view"
+              autoFocus
+              data-testid="saved-view-name"
+            />
+            <Button type="submit" disabled={name.trim() === ''} data-testid="saved-view-save">
+              save
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setNaming(false)}>
+              cancel
+            </Button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNaming(true)}
+            className="text-muted hover:text-accent border-line border border-dashed px-2 py-1 font-mono text-xs"
+            data-testid="saved-view-add"
+          >
+            + save this view
+          </button>
+        )
+      ) : null}
+    </div>
+  );
+}
+
 function Filters({
   folders,
   tags,

@@ -334,3 +334,126 @@ test.describe('dragging an item into a folder', () => {
     await expect(page.getByTestId('item-row')).toHaveAttribute('draggable', 'false');
   });
 });
+
+test.describe('saved views', () => {
+  test.slow();
+
+  test('brings back a filter combination by name', async ({ page }) => {
+    // The vault this is for is the one with four hundred items, where the same
+    // combination gets reassembled from scratch twice a week.
+    await openVault(page, 'ui-views');
+    await makeFolder(page, 'Work');
+    await makeLogin(page, 'Payroll', { folder: 'Work' });
+    await makeLogin(page, 'Netflix');
+
+    await page.getByTestId('folder-chip').click();
+    await page.getByTestId('saved-view-add').click();
+    await page.getByTestId('saved-view-name').fill('work things');
+    await page.getByTestId('saved-view-save').click();
+
+    // Clear the filter by hand, then let the saved view put it back.
+    await page.getByTestId('folder-all').click();
+    await expect(page.getByTestId('item-row')).toHaveCount(2);
+
+    await page.getByTestId('saved-view').click();
+    await expect(page.getByTestId('item-row')).toHaveCount(1);
+    await expect(page.getByTestId('item-list')).toContainText('Payroll');
+  });
+
+  test('offers nothing to save when nothing is filtered', async ({ page }) => {
+    // An unfiltered view is the vault, which already has a button.
+    await openVault(page, 'ui-views-empty');
+    await makeLogin(page, 'Netflix');
+
+    await expect(page.getByTestId('saved-view-add')).toHaveCount(0);
+
+    await page.getByTestId('search').fill('net');
+    await expect(page.getByTestId('saved-view-add')).toBeVisible();
+  });
+
+  test('survives a reload, because it is not in memory', async ({ page, context }) => {
+    await openVault(page, 'ui-views-reload');
+    await makeLogin(page, 'Netflix');
+
+    await page.getByTestId('search').fill('net');
+    await page.getByTestId('saved-view-add').click();
+    await page.getByTestId('saved-view-name').fill('streaming');
+    await page.getByTestId('saved-view-save').click();
+
+    await page.reload();
+    // The reload lands on the locked screen -- keys live in memory only -- and
+    // the strip is on the vault behind it, so this checks the stored value
+    // directly rather than through a second unlock.
+    const rows = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('core-vault');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      return new Promise<number>((resolve) => {
+        const store = db.transaction('secrets').objectStore('secrets');
+        const get = store.get('views');
+        get.onsuccess = () => resolve(get.result === undefined ? 0 : 1);
+        get.onerror = () => resolve(0);
+      });
+    });
+
+    expect(rows).toBe(1);
+    expect(context).toBeTruthy();
+  });
+
+  test('stores the name sealed, not in the clear', async ({ page }) => {
+    // A view's name is the person's own words, and the folder tests already
+    // refuse to let those reach the network. Writing one in plaintext on the
+    // device would undo that here instead.
+    await openVault(page, 'ui-views-sealed');
+    await makeLogin(page, 'Lawyer');
+
+    await page.getByTestId('search').fill('law');
+    await page.getByTestId('saved-view-add').click();
+    await page.getByTestId('saved-view-name').fill('divorce-lawyer');
+    await page.getByTestId('saved-view-save').click();
+    await expect(page.getByTestId('saved-view')).toContainText('divorce-lawyer');
+
+    const stored = await page.evaluate(() => JSON.stringify(localStorage));
+    expect(stored).not.toContain('divorce-lawyer');
+
+    const sealed = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('core-vault');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      return new Promise<string>((resolve) => {
+        const get = db.transaction('secrets').objectStore('secrets').get('views');
+        get.onsuccess = () => resolve(JSON.stringify(get.result ?? null));
+        get.onerror = () => resolve('null');
+      });
+    });
+
+    expect(sealed).not.toBe('null');
+    expect(sealed).not.toContain('divorce-lawyer');
+  });
+
+  test('goes with everything else when the panic button is pressed', async ({ page }) => {
+    await openVault(page, 'ui-views-panic');
+    await makeLogin(page, 'Netflix');
+
+    await page.getByTestId('search').fill('net');
+    await page.getByTestId('saved-view-add').click();
+    await page.getByTestId('saved-view-name').fill('streaming');
+    await page.getByTestId('saved-view-save').click();
+
+    await page.getByTestId('panic').click();
+    await expect(page.getByTestId('vault-state')).toContainText('locked');
+
+    const found = await page.evaluate(async () => {
+      const names = await indexedDB.databases();
+      return names.some((entry) => entry.name === 'core-vault');
+    });
+
+    expect(found).toBe(false);
+  });
+});

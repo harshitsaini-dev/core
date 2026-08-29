@@ -243,6 +243,47 @@ export async function writeFolderCache(list: readonly SyncedFolder[]): Promise<v
  * one the server relies on: Argon2id, tuned so each guess costs real time and
  * memory. It is documented in the threat model rather than left implicit.
  */
+// ---------------------------------------------------------------------------
+// Saved views
+
+/**
+ * A named filter combination.
+ *
+ * Stored sealed under the device key, in the same table as the offline unlock
+ * material, and for the same reason: the name is the person's own words. "Work
+ * cards" says little, and the names people actually reach for say a great deal
+ * -- the vault tests already refuse to let a folder called `divorce-lawyer`
+ * reach the network, and writing one in the clear into `localStorage` would
+ * have undone that on the device instead.
+ *
+ * Local to this browser. Making them sync would mean a new encrypted object,
+ * an endpoint and a merge rule; a filter combination is not worth that, and a
+ * view that does not follow you to another machine is a smaller loss than the
+ * name of one sitting in plaintext on this one.
+ */
+export interface SavedView {
+  readonly id: string;
+  readonly name: string;
+  readonly query: string;
+  /** A folder id, `'none'` for unfiled, or null for no folder filter. */
+  readonly folder: string | null;
+  readonly tag: string | null;
+}
+
+export async function writeSavedViews(views: readonly SavedView[]): Promise<void> {
+  if (!isSupported()) return;
+  await db().secrets.put({ id: 'views', ...(await seal(views)) });
+}
+
+export async function readSavedViews(): Promise<SavedView[]> {
+  if (!isSupported()) return [];
+
+  const row = await db().secrets.get('views');
+  if (!row) return [];
+
+  return (await open<SavedView[]>(row)) ?? [];
+}
+
 export interface OfflineUnlock {
   readonly email: string;
   readonly kdfSalt: string;

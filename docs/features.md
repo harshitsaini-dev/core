@@ -86,7 +86,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ORG-09 | Password age indicator per item                | P4    | DONE   |
 | ORG-10 | Grid vs list view toggle                       | P3    | DONE   |
 | ORG-11 | Recently used section                          | P3    | DONE   |
-| ORG-12 | Saved filter views                             | P6    | TODO   |
+| ORG-12 | Saved filter views, sealed and local to the device | P6    | DONE   |
 
 ## GEN — Generators & Utilities
 
