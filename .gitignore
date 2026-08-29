@@ -71,3 +71,8 @@ AGENTS.md
 
 # next auto-generated types
 next-env.d.ts
+
+# What `pnpm smoke` leaves behind. It is a picture of a real vault taken on
+# whatever machine ran it — harmless on a throwaway test account, and not
+# something to have a habit of committing.
+vault-screenshot.png

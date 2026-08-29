@@ -60,6 +60,9 @@ console.log(
   'environments',
 );
 
+// Git-ignored. This is a picture of a vault, taken on whatever machine ran
+// the check — harmless on a throwaway account, and not a habit worth having
+// in a repository that anybody can read.
 await page.screenshot({ path: 'vault-screenshot.png', fullPage: true });
 console.log(errors.length === 0 ? 'no console or page errors' : errors.join('\n'));
 await browser.close();
