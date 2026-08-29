@@ -45,6 +45,7 @@ import { CheckupPanel } from './checkup';
 import { GeneratorPanel } from './generator';
 import { LockSettingsPanel } from './lock-settings';
 import { PinSetupPanel } from './pin-setup';
+import { PlaintextExportPanel } from './plaintext-export';
 import { CommandPalette } from './command-palette';
 import type { Command } from './command-palette';
 import { ItemForm } from './item-form';
@@ -71,6 +72,7 @@ type View =
   | { kind: 'pin' }
   | { kind: 'generator' }
   | { kind: 'activity' }
+  | { kind: 'plaintext-export' }
   | { kind: 'import' };
 
 /**
@@ -586,6 +588,14 @@ export default function VaultPage() {
             >
               import
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setView({ kind: 'plaintext-export' })}
+              data-testid="open-plaintext-export"
+            >
+              export
+            </Button>
             <Button type="button" variant="danger" onClick={() => void panic()} data-testid="panic">
               panic
             </Button>
@@ -649,6 +659,10 @@ export default function VaultPage() {
       {view.kind === 'password' ? <PasswordPanel onBack={() => setView({ kind: 'list' })} /> : null}
 
       {view.kind === 'import' ? <ImportPanel onBack={() => setView({ kind: 'list' })} /> : null}
+
+      {view.kind === 'plaintext-export' ? (
+        <PlaintextExportPanel items={live} onBack={() => setView({ kind: 'list' })} />
+      ) : null}
 
       {view.kind === 'folders' ? (
         <Folders folders={visibleFolders} items={live} onBack={() => setView({ kind: 'list' })} />

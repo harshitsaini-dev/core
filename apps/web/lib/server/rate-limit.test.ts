@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { LIMITS, failureDelayMs, spend, ttlSeconds } from './rate-limit';
+import { describe, expect, it, vi } from 'vitest';
+import { LIMITS, checkLimit, failureDelayMs, spend, ttlSeconds } from './rate-limit';
 import type { Bucket, Limit } from './rate-limit';
+
+/** A KV namespace that is a Map, which is all the limiter needs of one. */
+function memoryKv() {
+  const store = new Map<string, string>();
+  return {
+    get: async (key: string) => JSON.parse(store.get(key) ?? 'null') as unknown,
+    put: async (key: string, value: string) => void store.set(key, value),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
+
+const PEPPER = new Uint8Array(32) as Uint8Array<ArrayBuffer>;
 
 /**
  * The arithmetic, tested without KV and without waiting.
@@ -180,5 +192,89 @@ describe('failureDelayMs', () => {
       expect(delay).toBeGreaterThanOrEqual(previous);
       previous = delay;
     }
+  });
+});
+
+describe('refusal logging', () => {
+  /*
+   * Only refusals are logged. Logging the allowed ones would be logging every
+   * request the service ever serves, which is a traffic log by another name —
+   * and this product's whole position is that it does not keep one.
+   */
+
+  function request(ip = '203.0.113.7'): Request {
+    return new Request('https://example.test/api/auth/login', {
+      headers: { 'cf-connecting-ip': ip, 'cf-ipcountry': 'IN' },
+    });
+  }
+
+  it('says nothing while requests are allowed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const kv = memoryKv();
+
+    await checkLimit(request(), kv, PEPPER, 'login');
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('writes one filterable line when a caller is refused', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const kv = memoryKv();
+
+    // Past the login bucket's capacity.
+    for (let n = 0; n < LIMITS.login.capacity + 1; n += 1) {
+      await checkLimit(request(), kv, PEPPER, 'login');
+    }
+
+    const lines = warn.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.startsWith('{'));
+    expect(lines.length).toBeGreaterThan(0);
+
+    const entry = JSON.parse(lines[0] as string) as Record<string, unknown>;
+    expect(entry['event']).toBe('rate_limited');
+    expect(entry['endpoint']).toBe('login');
+    expect(entry['country']).toBe('IN');
+
+    warn.mockRestore();
+  });
+
+  it('never writes the address it is counting', async () => {
+    // The caller is identified by the same hash the limiter counts against, so
+    // two refusals from one address are visibly the same address without the
+    // address appearing anywhere.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const kv = memoryKv();
+
+    for (let n = 0; n < LIMITS.login.capacity + 1; n += 1) {
+      await checkLimit(request('198.51.100.42'), kv, PEPPER, 'login');
+    }
+
+    const written = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(written).not.toContain('198.51.100.42');
+
+    warn.mockRestore();
+  });
+
+  it('gives one address the same tag twice, and two addresses different ones', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const tagFor = async (ip: string): Promise<string> => {
+      const kv = memoryKv();
+      for (let n = 0; n < LIMITS.login.capacity + 2; n += 1) {
+        await checkLimit(request(ip), kv, PEPPER, 'login');
+      }
+      const lines = warn.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.startsWith('{'));
+      warn.mockClear();
+      return (JSON.parse(lines[0] as string) as { caller: string }).caller;
+    };
+
+    expect(await tagFor('203.0.113.1')).toBe(await tagFor('203.0.113.1'));
+    expect(await tagFor('203.0.113.1')).not.toBe(await tagFor('203.0.113.2'));
+
+    warn.mockRestore();
   });
 });

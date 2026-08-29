@@ -276,5 +276,52 @@ export async function checkLimit(
   }
 
   const decision = await consume(kv, pepper, endpoint, address);
-  return decision.allowed ? null : decision.retryAfter;
+  if (decision.allowed) return null;
+
+  await logRefusal(pepper, request, endpoint, decision.retryAfter);
+  return decision.retryAfter;
+}
+
+/**
+ * A line an operator can grep, written when a request is actually refused.
+ *
+ * Refusals are the only rate-limit event worth recording. Logging the allowed
+ * ones would be logging every request the service ever serves, which is a
+ * traffic log by another name — and this product's whole position is that it
+ * does not keep one.
+ *
+ * JSON on one line, because the thing somebody does with this is filter it, and
+ * a sentence is not filterable. Cloudflare's log view treats a JSON line as
+ * fields.
+ *
+ * The caller is identified by the same hash the limiter counts against, so two
+ * refusals from one address are visibly the same address without the address
+ * appearing anywhere. The country comes from the edge and is worth having:
+ * "four hundred refusals, one country, one endpoint" is a different story from
+ * four hundred spread across the world, and neither is legible without it.
+ */
+async function logRefusal(
+  pepper: Bytes,
+  request: Request,
+  endpoint: Endpoint,
+  retryAfter: number,
+): Promise<void> {
+  try {
+    const address = callerAddress(request, false) ?? 'unknown';
+
+    console.warn(
+      JSON.stringify({
+        event: 'rate_limited',
+        endpoint,
+        retryAfter,
+        // Truncated: enough to tell callers apart in a log, not enough to be a
+        // useful target for a table of precomputed address hashes.
+        caller: (await serverTag(pepper, 'rateLimit', address)).slice(0, 16),
+        country: request.headers.get('cf-ipcountry') ?? null,
+        at: new Date().toISOString(),
+      }),
+    );
+  } catch {
+    // A log line is not worth failing a request that has already been decided.
+  }
 }

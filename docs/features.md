@@ -185,14 +185,14 @@ P5 Hardening+Deploy · P6 Post-v1
 | RL-07 | Constant-time responses across all auth paths             | P2    | DONE   |
 | RL-08 | Server-side pepper in the verifier                        | P2    | DONE   |
 | RL-09 | Body-size limits and strict zod validation on every route | P2    | DONE   |
-| RL-10 | Structured abuse logging with hashed IPs                  | P5    | TODO   |
+| RL-10 | Structured abuse logging with hashed IPs                  | P5    | DONE   |
 
 ## IO — Import, Export, Backup
 
 | ID    | Feature                                                   | Phase | Status |
 | ----- | --------------------------------------------------------- | ----- | ------ |
 | IO-01 | Encrypted full-vault export (Core native format)          | P5    | DONE   |
-| IO-02 | Plaintext CSV / JSON export with a hard confirmation gate | P5    | TODO   |
+| IO-02 | Plaintext CSV / JSON export with a hard confirmation gate | P5    | DONE   |
 | IO-03 | Import wizard with column mapping                         | P5    | DONE   |
 | IO-04 | Bitwarden import                                          | P5    | DONE   |
 | IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | TODO   |
