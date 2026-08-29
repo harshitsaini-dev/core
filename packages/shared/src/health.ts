@@ -125,3 +125,59 @@ export function withoutPassword(items: readonly DecryptedItem[]): HealthEntry[] 
 export function withPassword(items: readonly DecryptedItem[]): DecryptedItem[] {
   return items.filter((item) => item.deletedAt === null && Boolean(loginFields(item)?.password));
 }
+
+export interface DuplicateGroup {
+  /** What the copies have in common, for the report to name them by. */
+  readonly title: string;
+  readonly items: readonly HealthEntry[];
+}
+
+/**
+ * The same account stored more than once.
+ *
+ * A different thing from reuse. Reuse is one password across several accounts,
+ * which is a risk. This is one account written down twice, which is a mess —
+ * and the mess that follows importing from somewhere and then importing again
+ * a month later, or moving a vault across in two passes because the first one
+ * missed something.
+ *
+ * Matched on type, title and username, and deliberately not on the URL. The
+ * same account exported by two different tools comes out as
+ * `https://github.com/login` and `github.com`, and treating those as different
+ * accounts would report nothing in exactly the case this exists for.
+ *
+ * Not matched on the password either. Two copies whose passwords have drifted
+ * apart are still two copies of one account, and they are the pair somebody
+ * most needs to see: one of them is the stale one that will not work.
+ *
+ * Which is why this reports and does not merge. Deciding which copy is the real
+ * one needs the person who made them, and a checkup that silently deleted the
+ * wrong half would be the worst thing in this app.
+ */
+export function duplicateItems(items: readonly DecryptedItem[]): DuplicateGroup[] {
+  const groups = new Map<string, DecryptedItem[]>();
+
+  for (const item of items) {
+    if (item.deletedAt !== null) continue;
+
+    const title = item.data.fields.title.trim().toLowerCase();
+    if (title === '') continue;
+
+    const username = (loginFields(item)?.username ?? '').trim().toLowerCase();
+
+    // Separated by a character a title cannot contain, so that a title ending
+    // in what looks like a username cannot collide with a shorter one.
+    const key = [item.data.type, title, username].join('\u0000');
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => ({
+      title: group[0]?.data.fields.title ?? '',
+      items: group.map(entry),
+    }))
+    .sort((a, b) => b.items.length - a.items.length || a.title.localeCompare(b.title));
+}

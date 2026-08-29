@@ -68,7 +68,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | VLT-13 | Bulk select: delete, move, tag                               | P3    | DONE   |
 | VLT-14 | Drag-and-drop items into folders (desktop)                   | P4    | TODO   |
 | VLT-15 | Linked items (DB credential linked to an ENV project)        | P4    | DONE   |
-| VLT-16 | Duplicate item detection                                     | P6    | TODO   |
+| VLT-16 | Duplicate item detection                                     | P6    | DONE   |
 | VLT-17 | Scan a TOTP QR code with the camera                          | P6    | DONE   |
 
 ## ORG — Search, Filter, Organisation

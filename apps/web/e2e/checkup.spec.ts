@@ -31,6 +31,20 @@ async function makeLogin(page: Page, title: string, password: string): Promise<v
   await expect(page.getByTestId('item-list')).toContainText(title);
 }
 
+async function makeAccount(
+  page: Page,
+  title: string,
+  username: string,
+  password: string,
+): Promise<void> {
+  await page.getByTestId('new-item').click();
+  await page.getByTestId('item-title').fill(title);
+  await page.getByTestId('item-username').fill(username);
+  await page.getByTestId('item-password').fill(password);
+  await page.getByTestId('item-save').click();
+  await expect(page.getByTestId('item-list')).toContainText(title);
+}
+
 async function openCheckup(page: Page): Promise<void> {
   await openPanel(page, 'open-checkup');
   await expect(page.getByTestId('checkup')).toBeVisible();
@@ -136,5 +150,33 @@ test.describe('security checkup', () => {
 
     await expect(page.getByTestId('checkup')).toHaveCount(0);
     await expect(page.getByTestId('item-list')).toBeVisible();
+  });
+
+  test('finds an account that was stored twice', async ({ page }) => {
+    // The state a vault ends up in when an import runs twice, which is easy to
+    // do by accident and invisible in a long list.
+    await openVault(page, 'checkup-duplicate');
+    await makeAccount(page, 'GitHub', 'kaya', STRONG);
+    await makeAccount(page, 'GitHub', 'kaya', 'Jm4!zRq8#tVw2$nX');
+
+    await openCheckup(page);
+
+    const duplicate = page.getByTestId('checkup-finding').filter({ hasText: 'is stored 2 times' });
+    await expect(duplicate).toHaveCount(1);
+    await expect(duplicate).toContainText('GitHub');
+  });
+
+  test('does not call two accounts on one site a duplicate', async ({ page }) => {
+    // A work login and a personal login on the same site are two accounts. A
+    // finding here would teach somebody to ignore this list.
+    await openVault(page, 'checkup-not-duplicate');
+    await makeAccount(page, 'GitHub', 'kaya', STRONG);
+    await makeAccount(page, 'GitHub', 'kaya-work', 'Jm4!zRq8#tVw2$nX');
+
+    await openCheckup(page);
+
+    await expect(page.getByTestId('checkup-finding').filter({ hasText: 'is stored' })).toHaveCount(
+      0,
+    );
   });
 });

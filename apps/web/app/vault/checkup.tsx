@@ -2,12 +2,13 @@
 
 import {
   OLD_PASSWORD_DAYS,
+  duplicateItems,
   oldPasswords,
   reusedPasswords,
   withPassword,
   withoutPassword,
 } from '@core/shared';
-import type { DecryptedItem, HealthEntry } from '@core/shared';
+import type { DecryptedItem, DuplicateGroup, HealthEntry } from '@core/shared';
 import { Button, Checkbox, Panel, Warning } from '@core/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { breachCount, useBreachSettings } from '@/lib/client/breach';
@@ -113,6 +114,7 @@ function collectFindings(
   reused: readonly { readonly items: readonly HealthEntry[] }[],
   old: readonly HealthEntry[],
   missing: readonly HealthEntry[],
+  duplicates: readonly DuplicateGroup[],
 ): Finding[] {
   const findings: Finding[] = [];
 
@@ -157,6 +159,20 @@ function collectFindings(
         'Reported, not judged — an old password is not a bad one. This is here to surface the one set years ago and forgotten.',
       tone: 'warning',
       entries: old,
+    });
+  }
+
+  for (const [index, group] of duplicates.entries()) {
+    // Below the password findings on purpose: two copies of one account is a
+    // mess rather than a risk, and putting it above a breached password would
+    // be wrong about which of the two matters.
+    findings.push({
+      id: `duplicate-${index}`,
+      title: `${group.title} is stored ${group.items.length} times`,
+      detail:
+        'One account written down more than once — usually an import that ran twice. Open them and keep the one that still works; if the passwords differ, one of these is stale.',
+      tone: 'muted',
+      entries: group.items,
     });
   }
 
@@ -265,9 +281,10 @@ export function CheckupPanel({
   const reused = useMemo(() => reusedPasswords(items), [items]);
   const old = useMemo(() => oldPasswords(items), [items]);
   const missing = useMemo(() => withoutPassword(items), [items]);
+  const duplicates = useMemo(() => duplicateItems(items), [items]);
 
   const scanning = total > 0 && scanned < total;
-  const findings = collectFindings(weak, breached, reused, old, missing);
+  const findings = collectFindings(weak, breached, reused, old, missing, duplicates);
 
   return (
     <Panel className="mt-6" data-testid="checkup">
