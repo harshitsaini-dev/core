@@ -157,7 +157,9 @@ cp apps/web/.dev.vars.example apps/web/.dev.vars       # then add a local AUTH_P
 pnpm dev
 ```
 
-Then connect the repository to Cloudflare Pages and add your own domain.
+Then deploy. This is a Workers deploy rather than Pages, and the build does
+not run on Windows — `docs/self-hosting.md` covers both, along with the API
+token permission the Cloudflare template leaves out.
 
 ## Development
 

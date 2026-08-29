@@ -1,9 +1,10 @@
 # Core — Self-Hosting Guide
 
-> **This guide is written ahead of the code.** Steps marked _(planned)_ describe
-> the intended flow and will be verified against a clean fork before v1.0.0 is
-> tagged. Until then, treat this as the design of the deployment story rather
-> than a working recipe.
+> **These steps were followed on 2026-08-29 to deploy the instance at
+> `core.harshitsaini.in`.** They are written from what actually happened,
+> including the two places it went wrong, rather than from what was intended.
+> What has not been done is a run-through on a _clean fork_ — so treat the
+> numbers and screens as accurate and the ordering as tested once.
 
 Core is built so that running your own instance costs nothing and takes about
 fifteen minutes. Everything below fits inside free tiers.
@@ -137,20 +138,97 @@ pnpm dev
 
 Open <http://localhost:3000>.
 
-## 8. Deploy _(planned)_
+## 8. Deploy
 
-1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**.
-2. Select your fork.
-3. Build command `pnpm build`.
-4. Under **Settings → Functions → Bindings**, bind the D1 database as `DB` and
-   the KV namespace as `RATE_LIMIT`.
-5. Deploy. Every push to `main` redeploys automatically.
+This is a **Workers** deploy, not Pages. `@opennextjs/cloudflare` produces a
+Worker, and the bindings come from `wrangler.toml` rather than from a dashboard
+form.
 
-## 9. Custom domain _(planned)_
+### Deploy from CI, not from your machine
 
-Pages project → **Custom domains** → add your subdomain. If the zone is already
-on Cloudflare the DNS record is created for you. Then set SSL/TLS to
-**Full (strict)**, enable **Always Use HTTPS**, and turn on **HSTS**.
+The build does not run on Windows. pnpm links `react`, `react-dom` and
+`styled-jsx` into the build output as symlinks and esbuild on Windows cannot
+follow them — you get `Access is denied` for each, then
+`Could not resolve "styled-jsx"`. OpenNext warns about this itself. On macOS or
+Linux `pnpm build:cf && pnpm deploy` works directly; on Windows use WSL or the
+included workflow.
+
+The workflow is `.github/workflows/deploy.yml`. It is manual-only and asks you
+to type `deploy`, because a password manager should not go out because somebody
+merged a README change.
+
+### The API token needs D1, and the Workers template does not include it
+
+Create a token at **My Profile → API Tokens** from the **Edit Cloudflare
+Workers** template, then **add one more permission**:
+
+| Permission                                | Why                                                  |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `Account` · `Workers Scripts` · `Edit`    | the deploy itself                                    |
+| `Account` · `Workers KV Storage` · `Edit` | the rate-limit namespace                             |
+| `Account` · `D1` · `Edit`                 | **not in the template** — migrations fail without it |
+
+Without D1, the deploy fails at the migration step with
+`The given account is not valid or is not authorized to access this service
+[code: 7403]`, which does not mention D1 at all.
+
+### Repository settings
+
+On your fork, **Settings → Secrets and variables → Actions**:
+
+| Name                    | Kind         | Value                           |
+| ----------------------- | ------------ | ------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | secret       | the token above                 |
+| `CLOUDFLARE_ACCOUNT_ID` | secret       | from any zone's overview page   |
+| `DEPLOY_URL`            | **variable** | the address you will serve from |
+
+`DEPLOY_URL` is required, not decorative. `NEXT_PUBLIC_APP_URL` is inlined at
+build time, so an unset value does not fail — it ships `http://localhost:3000`
+as the site's canonical URL and in every Open Graph tag. The workflow now stops
+rather than building that.
+
+### Run it
+
+**Actions → Deploy → Run workflow**, type `deploy`. The order is deliberate:
+typecheck, lint, tests, build, **migrations, then the code**. A column the new
+code reads has to exist before that code serves; the other order is a window
+where every request fails.
+
+## 9. Custom domain
+
+**Compute (Workers & Pages) → your worker → Settings → Domains & Routes → Add →
+Custom Domain.** Cloudflare creates the DNS record itself if the zone is on the
+same account.
+
+Then, on the **zone** — not the Worker; this is the step people look for in the
+wrong place — **SSL/TLS**:
+
+- **Overview** → **Full (strict)**
+- **Edge Certificates** → **Always Use HTTPS**
+
+Always Use HTTPS matters more here than on an ordinary site. Web Crypto and
+service workers both require a secure context, so over plain HTTP the app loads
+and its cryptography does not.
+
+Cloudflare's own **HSTS** toggle is optional: the app already sends
+`Strict-Transport-Security` with a two-year max-age. The toggle applies to the
+whole zone including every subdomain, so enabling `includeSubDomains` there will
+break any sibling subdomain that is not on HTTPS. Leave **preload** off until
+you are sure — it is hard to undo.
+
+### Two things to do after the domain answers
+
+1. Set `DEPLOY_URL` to the new address and **deploy again**. The old one is
+   baked into the build.
+2. Set `workers_dev = false` in `wrangler.toml` and deploy once more. Two
+   addresses serving one vault is two places a session cookie can live, two
+   origins a service worker can register against, and a second official-looking
+   name to imitate.
+
+`preview_urls = false` is already set and is worth understanding: Cloudflare
+otherwise gives every deployment a permanent public URL bound to the same live
+database, so every build you ever shipped stays reachable and serving real
+data.
 
 ---
 
