@@ -189,11 +189,32 @@ export default function LoginPage() {
                 actually locked, so offering it here costs nothing.
               */}
               {unlockSent ? (
-                <p className="text-muted font-mono text-xs" data-testid="unlock-sent">
-                  <span aria-hidden="true">&gt; </span>
-                  If that address has an account and it is locked, a link is on its way. It lifts
-                  the lock only — you will still need your master password.
-                </p>
+                <div data-testid="unlock-sent">
+                  <p className="text-muted font-mono text-xs leading-relaxed">
+                    <span aria-hidden="true">&gt; </span>
+                    If that address has an account and it is locked, a link is on its way. It lifts
+                    the lock only — you will still need your master password.
+                  </p>
+                  {/*
+                    The reassurance that actually matters, and the first version
+                    of this screen left it out: a lockout is not a state anybody
+                    can be stranded in. It clears itself, so a mail that never
+                    arrives costs a wait rather than an account.
+                  */}
+                  <p className="text-muted mt-2 font-mono text-xs leading-relaxed">
+                    <span aria-hidden="true">&gt; </span>
+                    If it does not arrive, check spam — and either way the lock expires on its own
+                    within fifteen minutes. Nobody is ever locked out for good.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setUnlockSent(false)}
+                    className="text-accent-dim hover:text-accent mt-2 font-mono text-xs"
+                    data-testid="request-unlock-again"
+                  >
+                    &gt; send it again
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"

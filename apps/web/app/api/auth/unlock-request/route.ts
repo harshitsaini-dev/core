@@ -112,7 +112,14 @@ export async function POST(request: NextRequest): Promise<Response> {
         'It does not sign you in and it does not open your vault — you will ' +
         'still need your master password. Nobody here can open it for you.\n\n' +
         'If it was not you, do nothing. The lock expires by itself in fifteen ' +
-        'minutes, and whoever was guessing did not get in.\n\n— Core\n',
+        'minutes, and whoever was guessing did not get in.
+
+' +
+        'Either way you are not locked out for good: the lock clears itself. ' +
+        'This link only saves the wait.
+
+— Core
+',
     });
   } catch {
     // Same answer as every other path. An error here must not become the one

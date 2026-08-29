@@ -78,6 +78,7 @@ function Unlock() {
               <span aria-hidden="true">&gt; </span>
               Links work once and expire after fifteen minutes. If this one was already used, or is
               older than that, the lock will have expired by itself anyway — sign in as usual.
+              Nobody is ever locked out for good.
             </p>
           </>
         )}
