@@ -304,6 +304,41 @@ export async function clearPinMaterial(): Promise<void> {
   await db().secrets.delete('pin');
 }
 
+/**
+ * What a passkey unlock needs.
+ *
+ * The Account Key wrapped under the key the authenticator derives, plus the
+ * credential id to ask for. Sealed under the device key like everything else in
+ * this table — though unlike the PIN, that outer layer is not what makes this
+ * safe. The wrapping key never exists outside the authenticator's hardware and
+ * cannot be guessed, so a copied profile yields a blob with no attack against
+ * it at all.
+ *
+ * No attempt counter, for the same reason.
+ */
+export interface PasskeyRow {
+  readonly email: string;
+  readonly credentialId: string;
+  readonly accountKeyWrapped: string;
+}
+
+export async function writePasskeyMaterial(material: PasskeyRow): Promise<void> {
+  if (!isSupported()) return;
+  await db().secrets.put({ id: 'passkey', ...(await seal(material)) });
+}
+
+export async function readPasskeyMaterial(): Promise<PasskeyRow | null> {
+  if (!isSupported()) return null;
+
+  const row = await db().secrets.get('passkey');
+  return row ? open<PasskeyRow>(row) : null;
+}
+
+export async function clearPasskeyMaterial(): Promise<void> {
+  if (!isSupported()) return;
+  await db().secrets.delete('passkey');
+}
+
 // ---------------------------------------------------------------------------
 // The sync cursor
 // ---------------------------------------------------------------------------

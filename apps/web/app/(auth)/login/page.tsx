@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { LoginFailed, login, unlockOffline } from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
+import { passkeyStatus } from '@/lib/client/passkey';
 import { pinStatus } from '@/lib/client/pin';
 import { PinUnlock } from './pin-unlock';
 
@@ -38,7 +39,12 @@ export default function LoginPage() {
   const [pinDismissed, setPinDismissed] = useState(false);
 
   useEffect(() => {
-    void pinStatus().then((status) => setPinEmail(status.enabled ? status.email : null));
+    void Promise.all([pinStatus(), passkeyStatus()]).then(([pin, passkey]) => {
+      // Either one puts the quick-unlock screen up. They share it: the passkey
+      // is a button at the top and the PIN pad is below, and neither is the
+      // only way in.
+      setPinEmail(pin.enabled ? pin.email : passkey.enabled ? passkey.email : null);
+    });
   }, []);
 
   const router = useRouter();

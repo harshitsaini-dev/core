@@ -3,7 +3,8 @@
 import type { AccountKeys } from '@core/crypto';
 import { MAX_PIN_LENGTH, MIN_PIN_LENGTH } from '@core/crypto';
 import { Button, Field, Input, Panel } from '@core/ui';
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { passkeyStatus, unlockWithPasskey } from '@/lib/client/passkey';
 import { PinRejected, unlockWithPin } from '@/lib/client/pin';
 
 /**
@@ -28,6 +29,29 @@ export function PinUnlock({
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [hasPasskey, setHasPasskey] = useState(false);
+
+  useEffect(() => {
+    void passkeyStatus().then((status) => setHasPasskey(status.enabled));
+  }, []);
+
+  /**
+   * Unlock with the authenticator.
+   *
+   * Offered above the PIN pad where both exist, because it is the better of the
+   * two: a secret in hardware rather than six digits, and nothing to watch
+   * somebody type.
+   */
+  const usePasskey = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      onUnlocked(await unlockWithPasskey());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'That did not work.');
+      setBusy(false);
+    }
+  }, [onUnlocked]);
 
   const submit = useCallback(
     async (event: React.FormEvent) => {
@@ -66,6 +90,18 @@ export function PinUnlock({
         <span aria-hidden="true">&gt; </span>
         {email}
       </p>
+
+      {hasPasskey ? (
+        <Button
+          type="button"
+          onClick={() => void usePasskey()}
+          disabled={busy}
+          className="mt-8 w-full"
+          data-testid="passkey-unlock"
+        >
+          unlock with a passkey
+        </Button>
+      ) : null}
 
       <form onSubmit={submit} className="mt-8 space-y-6" noValidate>
         <Field label="pin" htmlFor={pinId}>

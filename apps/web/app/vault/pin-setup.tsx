@@ -3,6 +3,13 @@
 import { MAX_PIN_LENGTH, MIN_PIN_LENGTH, isValidPin } from '@core/crypto';
 import { Button, Field, Input, Panel, Warning } from '@core/ui';
 import { useEffect, useId, useState } from 'react';
+import {
+  PasskeyUnsupported,
+  disablePasskey,
+  enablePasskey,
+  passkeyStatus,
+  passkeysPossible,
+} from '@/lib/client/passkey';
 import { PIN_ATTEMPT_LIMIT, disablePin, enablePin, pinStatus } from '@/lib/client/pin';
 import { toast } from '@/lib/client/toast-store';
 
@@ -182,6 +189,8 @@ export function PinSetupPanel({ onBack }: { readonly onBack: () => void }) {
         </form>
       ) : null}
 
+      <Passkeys />
+
       <Button
         type="button"
         variant="ghost"
@@ -192,5 +201,129 @@ export function PinSetupPanel({ onBack }: { readonly onBack: () => void }) {
         back
       </Button>
     </Panel>
+  );
+}
+
+/**
+ * Unlocking with a fingerprint.
+ *
+ * Alongside the PIN because they answer the same question — open this vault on
+ * this device without typing the master password — and differ in what they cost.
+ * A PIN is six digits and needs an attempt limit. A passkey is a secret held in
+ * hardware that cannot be guessed, so it needs none, and it is the better
+ * choice wherever the browser can derive a key from one.
+ *
+ * Offered only where that derivation is possible. A passkey that can sign but
+ * not derive would mean checking a signature in the page and then handing over
+ * the vault key — an `if` statement in front of a secret, which is not a
+ * security feature no matter how it is labelled.
+ */
+function Passkeys() {
+  const emailId = useId();
+  const passwordId = useId();
+
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    void passkeyStatus().then((status) => setEnabled(status.enabled));
+  }, []);
+
+  if (!passkeysPossible()) return null;
+
+  async function add(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (busy || email === '' || password === '') return;
+
+    setBusy(true);
+    setError('');
+    try {
+      await enablePasskey(email, password);
+      setEnabled(true);
+      setPassword('');
+      toast('This device can now unlock with a passkey.');
+    } catch (cause) {
+      setError(
+        cause instanceof PasskeyUnsupported || cause instanceof Error
+          ? cause.message
+          : 'Could not add a passkey.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-line mt-8 border-t pt-6" data-testid="passkey-section">
+      <h3 className="text-accent-dim mb-2 font-mono text-xs tracking-widest uppercase">
+        or a passkey
+      </h3>
+      <p className="text-muted mb-4 font-mono text-xs leading-relaxed">
+        <span aria-hidden="true">&gt; </span>A fingerprint or face, instead of digits. The key comes
+        from the authenticator itself and never reaches this page or the server — which is what
+        makes it possible here at all, and why it is offered only where the hardware can do it.
+      </p>
+
+      {enabled === true ? (
+        <>
+          <p className="text-accent font-mono text-sm" data-testid="passkey-enabled">
+            <span aria-hidden="true">&gt; </span>A passkey can open this vault on this device.
+          </p>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => {
+              void disablePasskey().then(() => {
+                setEnabled(false);
+                toast('Passkey unlock is off for this device.');
+              });
+            }}
+            className="mt-4"
+            data-testid="passkey-disable"
+          >
+            turn it off
+          </Button>
+        </>
+      ) : enabled === false ? (
+        <form onSubmit={(event) => void add(event)} className="space-y-4" noValidate>
+          <Field label="email" htmlFor={emailId}>
+            <Input
+              id={emailId}
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={busy}
+              data-testid="passkey-email"
+            />
+          </Field>
+          <Field label="master password" htmlFor={passwordId}>
+            <Input
+              id={passwordId}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              disabled={busy}
+              data-testid="passkey-password"
+            />
+          </Field>
+
+          {error ? (
+            <p role="alert" className="text-danger font-mono text-xs" data-testid="passkey-error">
+              <span aria-hidden="true">! </span>
+              {error}
+            </p>
+          ) : null}
+
+          <Button type="submit" disabled={busy || !email || !password} data-testid="passkey-add">
+            {busy ? '... asking the device' : 'add a passkey'}
+          </Button>
+        </form>
+      ) : null}
+    </div>
   );
 }
