@@ -846,3 +846,32 @@ Anything unreadable yields an empty list rather than a throw, and the screen
 turns that into the sentence naming the menu the right code lives behind. A
 plain `otpauth://` link is the thing people try first, and "nothing happened" is
 the worst possible answer to it.
+
+## ADR-033 — The backup reminder is checked on open, not scheduled
+
+**Status.** Accepted. Supersedes the wording of IO-06, which said "scheduled".
+
+Nothing here can be scheduled. The server holds ciphertext and cannot tell
+whether a backup was ever taken, so it has nothing to schedule *from*. A push
+notification would need a subscription tied to an account and a server willing
+to say "you have not backed up" — which is a statement about a vault's history,
+sent by the one party this product keeps a vault's history from.
+
+**Decision.** Check when the vault is opened, which is the only moment the app
+is running and the only moment the reminder can be acted on anyway.
+
+The date is a number in `localStorage`, on the device that took the backup, and
+it never leaves. Putting it on the server would tell that server exactly when
+somebody is carrying a copy of their vault around, which is the week to try
+stealing it.
+
+The cost is that it is per-device: a backup on a laptop does not quiet the
+reminder on a phone. Wrong in a small way, right in a larger one, and the
+feature row was renamed rather than left claiming a schedule that does not
+exist.
+
+Not dismissible, and not a modal. A modal on open is one people learn to close
+without reading inside a week, and a dismiss button lets somebody silence the
+reminder while still having no backup — the exact state it exists to catch. A
+stored date in the future is treated as no backup at all, because trusting it
+produces a reminder that never appears again.

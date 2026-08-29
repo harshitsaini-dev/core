@@ -21,13 +21,20 @@ import type { Layout } from '@/lib/client/view-store';
 import { Button, Checkbox, Input, Panel, Select, Warning } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchItemHistory } from '@/lib/client/vault-api';
 import type { ItemVersion } from '@/lib/client/vault-api';
 import { usePullToRefresh, useSwipe } from '@/lib/client/gestures';
 import { PasswordChangeRejected, changeMasterPassword } from '@/lib/client/auth';
 import { BackupPasswordWrong, buildBackup, restoreBackup } from '@/lib/client/backup';
+import {
+  BACKUP_INTERVAL_DAYS,
+  backupState,
+  lastBackupAt,
+  recordBackup,
+  subscribeToBackupDate,
+} from '@/lib/client/backup-reminder';
 import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { toast } from '@/lib/client/toast-store';
@@ -378,6 +385,8 @@ export default function VaultPage() {
           </p>
         </div>
       </header>
+
+      <BackupReminder onOpen={() => setView({ kind: 'backup' })} />
 
       {view.kind === 'list' ? (
         <>
@@ -1642,6 +1651,62 @@ const IMPORT_FIELDS: { field: ImportField; label: string }[] = [
   { field: 'totp', label: 'one-time code' },
 ];
 
+/**
+ * A line saying the vault has not been backed up in a while.
+ *
+ * Deliberately not a modal and deliberately not dismissible. A modal on open is
+ * something people learn to close without reading inside a week, and a dismiss
+ * button turns the reminder into one somebody can silence permanently while
+ * still having no backup — which is the state it exists to catch.
+ *
+ * It is quiet instead. One line, the same weight as the rest of the header, and
+ * it disappears the moment a backup is made.
+ *
+ * Rendered only after mount. The check reads `localStorage`, which the server
+ * does not have, so rendering it during SSR would put "back up your vault" into
+ * the markup of a vault that was backed up yesterday, and React would then
+ * correct it on screen.
+ */
+function BackupReminder({ onOpen }: { readonly onOpen: () => void }) {
+  const items = useItems((store) => store.items);
+  const [state, setState] = useState<{ due: boolean; days: number | null } | null>(null);
+
+  const live = items.filter((item) => item.deletedAt === null).length;
+
+  // The date lives in `localStorage`, and writing it re-renders nothing on its
+  // own. Without this subscription the reminder stayed up immediately after a
+  // backup was taken, which is worse than no reminder: it says the thing you
+  // just did did not work.
+  const recorded = useSyncExternalStore(
+    subscribeToBackupDate,
+    () => lastBackupAt(),
+    () => null,
+  );
+
+  useEffect(() => {
+    setState(backupState(live));
+  }, [live, recorded]);
+
+  if (!state?.due) return null;
+
+  return (
+    <p className="text-warning mt-4 font-mono text-xs" data-testid="backup-reminder">
+      <span aria-hidden="true">! </span>
+      {state.days === null
+        ? 'This vault has never been backed up. If you lose your master password there is no one to ask.'
+        : `Last backup was ${state.days} days ago, and this reminder starts after ${BACKUP_INTERVAL_DAYS}.`}{' '}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="text-accent underline underline-offset-2"
+        data-testid="backup-reminder-open"
+      >
+        back up now
+      </button>
+    </p>
+  );
+}
+
 function ImportPanel({ onBack }: { onBack: () => void }) {
   const save = useItems((store) => store.save);
 
@@ -1980,6 +2045,7 @@ function BackupPanel({ onBack }: { onBack: () => void }) {
       anchor.click();
       URL.revokeObjectURL(url);
 
+      recordBackup();
       toast('Backup downloaded. It is worth what your master password is worth.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not build a backup.');

@@ -229,3 +229,76 @@ test('a restore into a fresh account renumbers what it writes', async ({ page, b
 
   await context.close();
 });
+
+/** A stored backup date, put in place before any script on the page runs. */
+async function seedBackupDate(page: Page, daysFromNow: number): Promise<void> {
+  await page.addInitScript((days: number) => {
+    localStorage.setItem('core.lastBackupAt', String(Date.now() + days * 86_400_000));
+  }, daysFromNow);
+}
+
+test.describe('the reminder', () => {
+  test.slow();
+
+  test('appears once there is something to lose, and not before', async ({ page }) => {
+    // A brand-new empty vault should not open with a warning about failing to
+    // back up the nothing it holds.
+    await signUp(page, 'reminder-empty');
+    await expect(page.getByTestId('backup-reminder')).toHaveCount(0);
+
+    await addItem(page, 'Something');
+    await expect(page.getByTestId('backup-reminder')).toBeVisible();
+    await expect(page.getByTestId('backup-reminder')).toContainText('never been backed up');
+  });
+
+  test('goes away after a backup is taken', async ({ page }) => {
+    // The only way to clear it, on purpose: there is no dismiss button, because
+    // a dismissable reminder can be silenced by somebody who still has no
+    // backup, which is the state it exists to catch.
+    await signUp(page, 'reminder-cleared');
+    await addItem(page, 'Something');
+    await expect(page.getByTestId('backup-reminder')).toBeVisible();
+
+    await takeBackup(page);
+    await page.getByTestId('backup-back').click();
+
+    await expect(page.getByTestId('backup-reminder')).toHaveCount(0);
+  });
+
+  test('clears the moment the backup is taken, without going anywhere', async ({ page }) => {
+    // Deliberately does not navigate. The date lives in localStorage and
+    // writing it re-renders nothing on its own, so anything that leaves this
+    // screen would re-render the reminder for an unrelated reason and this
+    // would pass with the subscription torn out — which is exactly what
+    // happened to the test above when it was mutated.
+    await signUp(page, 'reminder-live');
+    await addItem(page, 'Something');
+    await openPanel(page, 'open-backup');
+    await expect(page.getByTestId('backup-reminder')).toBeVisible();
+
+    await Promise.all([page.waitForEvent('download'), page.getByTestId('backup-download').click()]);
+
+    await expect(page.getByTestId('backup-reminder')).toHaveCount(0);
+  });
+
+  test('comes back when the stored date is old enough', async ({ page }) => {
+    // Seeded before the page loads rather than written and reloaded: a reload
+    // drops the in-memory keys and lands on the locked screen, where there is
+    // no reminder to look at because there is no vault yet.
+    await seedBackupDate(page, -45);
+    await signUp(page, 'reminder-stale');
+    await addItem(page, 'Something');
+
+    await expect(page.getByTestId('backup-reminder')).toContainText('45 days ago');
+  });
+
+  test('does not trust a date in the future', async ({ page }) => {
+    // A clock that moved, or somebody editing localStorage. Trusting it means a
+    // reminder that never appears again, which is the worse failure.
+    await seedBackupDate(page, 400);
+    await signUp(page, 'reminder-future');
+    await addItem(page, 'Something');
+
+    await expect(page.getByTestId('backup-reminder')).toBeVisible();
+  });
+});

@@ -197,7 +197,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | IO-03 | Import wizard with column mapping                         | P5    | DONE   |
 | IO-04 | Bitwarden import                                          | P5    | DONE   |
 | IO-05 | 1Password / Chrome / LastPass CSV import                  | P6    | DONE   |
-| IO-06 | Scheduled encrypted backup reminder                       | P6    | TODO   |
+| IO-06 | Backup reminder, checked when the vault opens             | P6    | DONE   |
 | IO-07 | Restore-from-backup flow                                  | P5    | DONE   |
 | IO-08 | Import 2FA secrets from a Google Authenticator export QR  | P6    | DONE   |
 
