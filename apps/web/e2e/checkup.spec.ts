@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * The security checkup.
@@ -31,7 +32,7 @@ async function makeLogin(page: Page, title: string, password: string): Promise<v
 }
 
 async function openCheckup(page: Page): Promise<void> {
-  await page.getByTestId('open-checkup').click();
+  await openPanel(page, 'open-checkup');
   await expect(page.getByTestId('checkup')).toBeVisible();
   // The weak-password pass loads roughly 800 KB of wordlists before it can say
   // anything, so every assertion below waits for the scan to finish first.

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openVault as openAccount } from './helpers/vault';
 
 /**
  * Mobile layout.
@@ -176,5 +177,64 @@ test.describe('glow', () => {
 
     expect(resting).toBe('none');
     expect(focused).toContain('rgba(0, 255, 65');
+  });
+});
+
+test.describe('nothing hangs out of its row', () => {
+  /*
+   * An item row carries six actions. Side by side with the title they came to
+   * about 450px, and a row on a 360px screen is 328px wide — so the group was
+   * pushed past the edge and clipped by the row's own `overflow-hidden`. The
+   * last button was cut in half and the title appeared to run underneath them.
+   *
+   * Measured rather than eyeballed, and at both widths, because the fix is a
+   * breakpoint and a breakpoint can be wrong on either side of itself.
+   *
+   * Two changes hold this up and either one is enough on its own: the row
+   * stacks below `sm`, and the action group is allowed to shrink. Reverting one
+   * leaves this passing — checked, both ways — and reverting both fails it. So
+   * it is a regression test for the layout rather than for one class name,
+   * which is what it should be, but worth saying rather than leaving somebody
+   * to discover that a mutation "did not break anything".
+   */
+
+  async function measure(page: Page): Promise<{ rowRight: number; actionsRight: number }> {
+    return page.evaluate(() => {
+      const row = document.querySelector('[data-testid="item-row"]');
+      const actions = row?.querySelector('[data-testid="copy-password"]')?.parentElement;
+
+      return {
+        rowRight: row ? row.getBoundingClientRect().right : 0,
+        actionsRight: actions ? actions.getBoundingClientRect().right : 0,
+      };
+    });
+  }
+
+  async function withOneItem(page: Page, label: string): Promise<void> {
+    await openAccount(page, label);
+    await page.getByTestId('new-item').click();
+    await page.getByTestId('item-title').fill('A login with a fairly long title here');
+    await page.getByTestId('item-username').fill('someone@example.com');
+    await page.getByTestId('item-password').fill('a-stored-secret');
+    await page.getByTestId('item-save').click();
+    await expect(page.getByTestId('item-list')).toContainText('A login');
+  }
+
+  test('the actions stay inside the row on a narrow phone', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await withOneItem(page, 'row-fit-narrow');
+
+    const { rowRight, actionsRight } = await measure(page);
+    expect(actionsRight, 'the actions run past the edge of their row').toBeLessThanOrEqual(
+      rowRight + 1,
+    );
+  });
+
+  test('and on a desktop, where they sit on one line', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await withOneItem(page, 'row-fit-wide');
+
+    const { rowRight, actionsRight } = await measure(page);
+    expect(actionsRight).toBeLessThanOrEqual(rowRight + 1);
   });
 });

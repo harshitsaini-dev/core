@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Exporting a vault in the clear.
@@ -28,7 +29,7 @@ async function makeLogin(page: Page, title: string, password: string): Promise<v
 }
 
 async function openExport(page: Page): Promise<void> {
-  await page.getByTestId('open-plaintext-export').click();
+  await openPanel(page, 'open-plaintext-export');
   await expect(page.getByTestId('plaintext-export')).toBeVisible();
 }
 

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Unlocking with a passkey.
@@ -47,7 +48,7 @@ async function addAuthenticator(page: Page, prf: boolean): Promise<CDPSession> {
 }
 
 async function openQuickUnlock(page: Page): Promise<void> {
-  await page.getByTestId('open-pin').click();
+  await openPanel(page, 'open-pin');
   await expect(page.getByTestId('pin-setup')).toBeVisible();
 }
 

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * The breach check.
@@ -58,7 +59,7 @@ async function stubBreachApi(page: Page, prefixes: string[]): Promise<void> {
 }
 
 async function openCheckup(page: Page): Promise<void> {
-  await page.getByTestId('open-checkup').click();
+  await openPanel(page, 'open-checkup');
   await expect(page.getByTestId('checkup')).toBeVisible();
   await expect(page.getByTestId('checkup-progress')).toHaveCount(0, { timeout: 60_000 });
 }

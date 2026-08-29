@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount, unlockVault } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * When the vault locks itself.
@@ -18,7 +19,7 @@ async function openVault(page: Page, label: string): Promise<string> {
 }
 
 async function openSettings(page: Page): Promise<void> {
-  await page.getByTestId('open-lock-settings').click();
+  await openPanel(page, 'open-lock-settings');
   await expect(page.getByTestId('lock-settings')).toBeVisible();
 }
 

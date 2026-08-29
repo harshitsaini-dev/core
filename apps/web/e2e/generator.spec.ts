@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * The generator.
@@ -21,7 +22,7 @@ async function openVault(page: Page, label: string): Promise<string> {
 }
 
 async function openGenerator(page: Page): Promise<void> {
-  await page.getByTestId('open-generator').click();
+  await openPanel(page, 'open-generator');
   await expect(page.getByTestId('generator')).toBeVisible();
 }
 

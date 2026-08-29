@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Changing the master password.
@@ -40,7 +41,7 @@ async function changePassword(
   current: string,
   next: string,
 ): Promise<void> {
-  await page.getByTestId('open-password').click();
+  await openPanel(page, 'open-password');
   await page.getByTestId('password-email').fill(email);
   await page.getByTestId('password-current').fill(current);
   await page.getByTestId('password-new').fill(next);
@@ -102,7 +103,7 @@ test.describe('changing the master password', () => {
   test('refuses two new passwords that do not match', async ({ page }) => {
     await signUp(page, 'pw-mismatch');
 
-    await page.getByTestId('open-password').click();
+    await openPanel(page, 'open-password');
     await page.getByTestId('password-new').fill('one-password-here');
     await page.getByTestId('password-confirm').fill('a-different-one');
 
@@ -132,7 +133,7 @@ test.describe('changing the master password', () => {
     // Somebody about to re-key a vault deserves to know that the items are not
     // being re-encrypted and that their other devices will be signed out.
     await signUp(page, 'pw-warning');
-    await page.getByTestId('open-password').click();
+    await openPanel(page, 'open-password');
 
     const note = page.getByRole('note');
     await expect(note).toContainText('not re-encrypted');

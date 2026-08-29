@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Backup and restore.
@@ -29,7 +30,7 @@ async function addItem(page: Page, title: string, password = 'a-stored-secret'):
 
 /** Download a backup and hand back its text. */
 async function takeBackup(page: Page): Promise<string> {
-  await page.getByTestId('open-backup').click();
+  await openPanel(page, 'open-backup');
 
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -44,7 +45,7 @@ async function takeBackup(page: Page): Promise<string> {
 }
 
 async function restoreInto(page: Page, text: string, password: string): Promise<void> {
-  await page.getByTestId('open-backup').click();
+  await openPanel(page, 'open-backup');
   await page.getByTestId('backup-file').setInputFiles({
     name: 'core-backup.json',
     mimeType: 'application/json',
@@ -156,7 +157,7 @@ test.describe('backup', () => {
     const text = await takeBackup(page);
     await page.getByTestId('backup-back').click();
 
-    await page.getByTestId('open-backup').click();
+    await openPanel(page, 'open-backup');
     await page.getByTestId('backup-file').setInputFiles({
       name: 'core-backup.json',
       mimeType: 'application/json',
@@ -171,7 +172,7 @@ test.describe('backup', () => {
     // open.
     await signUp(page, 'backup-garbage');
 
-    await page.getByTestId('open-backup').click();
+    await openPanel(page, 'open-backup');
     await page.getByTestId('backup-file').setInputFiles({
       name: 'holiday.txt',
       mimeType: 'text/plain',
@@ -183,7 +184,7 @@ test.describe('backup', () => {
 
   test('warns what the file is worth', async ({ page }) => {
     await signUp(page, 'backup-warning');
-    await page.getByTestId('open-backup').click();
+    await openPanel(page, 'open-backup');
 
     await expect(page.getByRole('note')).toContainText('master password');
   });

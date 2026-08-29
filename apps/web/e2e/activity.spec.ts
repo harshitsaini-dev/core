@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { buildAccount, uniqueEmail } from './helpers/account';
+import { openPanel } from './helpers/vault-nav';
 import { openVault as openAccount, unlockVault } from './helpers/vault';
 
 /**
@@ -19,7 +20,7 @@ async function openVault(page: Page, label: string): Promise<string> {
 }
 
 async function openActivity(page: Page): Promise<void> {
-  await page.getByTestId('open-activity').click();
+  await openPanel(page, 'open-activity');
   await expect(page.getByTestId('activity')).toBeVisible();
   await expect(page.getByTestId('activity-loading')).toHaveCount(0, { timeout: 30_000 });
 }
@@ -105,7 +106,7 @@ test.describe('account activity', () => {
     await openVault(page, 'activity-error');
     await page.route('**/api/auth/activity', (route) => route.fulfill({ status: 500, body: '' }));
 
-    await page.getByTestId('open-activity').click();
+    await openPanel(page, 'open-activity');
     await expect(page.getByTestId('activity')).toBeVisible();
 
     await expect(page.getByText('could not load it')).toBeVisible({ timeout: 30_000 });

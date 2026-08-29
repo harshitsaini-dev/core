@@ -20,6 +20,7 @@ import type { ColumnMapping, DecryptedFolder, DecryptedItem, ImportField } from 
 import type { Layout } from '@/lib/client/view-store';
 import { Button, Checkbox, Input, Panel, Select, Warning } from '@core/ui';
 import { useRouter } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearClipboardNow, copySecret, pulse } from '@/lib/client/clipboard';
 import { fetchItemHistory } from '@/lib/client/vault-api';
@@ -131,6 +132,10 @@ export default function VaultPage() {
   const selecting = useView((state) => state.selecting);
   const startSelecting = useView((state) => state.startSelecting);
   const stopSelecting = useView((state) => state.stopSelecting);
+
+  // Everything that is not one of the three frequent actions lives behind
+  // this. See the note on the footer.
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const blurred = usePrivacy((state) => state.blurred);
   const toggleBlur = usePrivacy((state) => state.toggle);
@@ -476,129 +481,180 @@ export default function VaultPage() {
             />
           </PullToRefresh>
 
-          <footer className="border-line mt-10 flex flex-wrap gap-3 border-t pt-6">
-            {/*
-              Duplicated by the bottom bar on a phone, so hidden there — except
-              panic, which stays. A destructive action does not belong in a
-              navigation bar where a thumb rests between taps.
-            */}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => lock(false)}
-              data-testid="lock"
-              className="hidden sm:inline-flex"
-            >
-              lock
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'folders' })}
-              data-testid="open-folders"
-              className="hidden sm:inline-flex"
-            >
-              folders
-            </Button>
-            {/*
-              router.push, not a link to a URL. The keys live in memory and a
-              full page load drops them, which would land on a locked env
-              screen a moment after leaving an unlocked vault.
-            */}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push('/env')}
-              data-testid="open-env"
-            >
-              env
-            </Button>
-            {trashed.length > 0 ? (
+          {/*
+            Three things you reach for, and a drawer for the rest.
+
+            This was thirteen buttons in a row, all the same weight, because
+            every feature added one and nobody looked at the whole again. The
+            result read as a debug menu: `checkup` beside `panic` beside
+            `import`, with nothing saying which of them ends your session and
+            which prints a list.
+
+            Grouped by what somebody is trying to do rather than by what was
+            built when. `panic` stays outside the drawer and stays red — the one
+            control reached for in a hurry should not be behind a disclosure.
+          */}
+          <footer className="border-line mt-10 border-t pt-6">
+            <div className="flex flex-wrap items-center gap-3">
+              {/*
+                Duplicated by the bottom bar on a phone, so hidden there —
+                except panic, which stays. A destructive action does not belong
+                in a navigation bar where a thumb rests between taps.
+              */}
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setView({ kind: 'trash' })}
-                data-testid="open-trash"
+                onClick={() => lock(false)}
+                data-testid="lock"
                 className="hidden sm:inline-flex"
               >
-                trash ({trashed.length})
+                lock
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setView({ kind: 'folders' })}
+                data-testid="open-folders"
+                className="hidden sm:inline-flex"
+              >
+                folders
+              </Button>
+              {/*
+                router.push, not a link to a URL. The keys live in memory and a
+                full page load drops them, which would land on a locked env
+                screen a moment after leaving an unlocked vault.
+              */}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push('/env')}
+                data-testid="open-env"
+              >
+                env
+              </Button>
+              {trashed.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setView({ kind: 'trash' })}
+                  data-testid="open-trash"
+                  className="hidden sm:inline-flex"
+                >
+                  trash ({trashed.length})
+                </Button>
+              ) : null}
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setMoreOpen((open) => !open)}
+                aria-expanded={moreOpen}
+                data-testid="open-more"
+              >
+                {moreOpen ? 'less' : 'more'}
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => void panic()}
+                data-testid="panic"
+                className="ml-auto"
+              >
+                panic
+              </Button>
+            </div>
+
+            {moreOpen ? (
+              <div className="mt-6 space-y-6" data-testid="more-actions">
+                <Drawer title="security">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'checkup' })}
+                    data-testid="open-checkup"
+                  >
+                    checkup
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'activity' })}
+                    data-testid="open-activity"
+                  >
+                    activity
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'lock-settings' })}
+                    data-testid="open-lock-settings"
+                  >
+                    auto-lock
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'pin' })}
+                    data-testid="open-pin"
+                  >
+                    quick unlock
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'password' })}
+                    data-testid="open-password"
+                  >
+                    master password
+                  </Button>
+                </Drawer>
+
+                <Drawer title="tools">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'generator' })}
+                    data-testid="open-generator"
+                  >
+                    generate
+                  </Button>
+                </Drawer>
+
+                <Drawer title="your data">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'backup' })}
+                    data-testid="open-backup"
+                  >
+                    backup
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'import' })}
+                    data-testid="open-csv-import"
+                  >
+                    import
+                  </Button>
+                  {/*
+                    Marked as what it is. It is the one item here that writes
+                    every password to a file in the clear, and it sat between
+                    `import` and `panic` looking exactly like them.
+                  */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setView({ kind: 'plaintext-export' })}
+                    data-testid="open-plaintext-export"
+                    className="text-warning"
+                  >
+                    export in the clear
+                  </Button>
+                </Drawer>
+              </div>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'generator' })}
-              data-testid="open-generator"
-            >
-              generate
-            </Button>{' '}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'checkup' })}
-              data-testid="open-checkup"
-            >
-              checkup
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'lock-settings' })}
-              data-testid="open-lock-settings"
-            >
-              auto-lock
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'pin' })}
-              data-testid="open-pin"
-            >
-              pin
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'activity' })}
-              data-testid="open-activity"
-            >
-              activity
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'backup' })}
-              data-testid="open-backup"
-            >
-              backup
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'password' })}
-              data-testid="open-password"
-            >
-              password
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'import' })}
-              data-testid="open-csv-import"
-            >
-              import
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setView({ kind: 'plaintext-export' })}
-              data-testid="open-plaintext-export"
-            >
-              export
-            </Button>
-            <Button type="button" variant="danger" onClick={() => void panic()} data-testid="panic">
-              panic
-            </Button>
           </footer>
         </>
       ) : null}
@@ -1354,7 +1410,16 @@ function ItemRow({
 
       <div
         className={
-          layout === 'grid' ? 'flex flex-col gap-3' : 'flex items-start justify-between gap-3'
+          layout === 'grid'
+            ? 'flex flex-col gap-3'
+            : // Stacked on a phone, side by side once there is room.
+              //
+              // Six actions are about 450px of buttons and a row on a 360px
+              // screen is 328px wide. Side by side, the group was pushed past
+              // the edge and clipped by the row's own `overflow-hidden` — the
+              // last button cut in half, and the title appearing to run
+              // underneath them.
+              'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'
         }
         style={
           swipe.offset === 0
@@ -1418,7 +1483,12 @@ function ItemRow({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        {/*
+          Allowed to wrap and to shrink. `shrink-0` was what kept this group at
+          its full width no matter how little the row had, which is what pushed
+          it off the edge rather than onto a second line.
+        */}
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           {fields?.username ? (
             <Button
               type="button"
@@ -2330,5 +2400,21 @@ function Trash({ items, onBack }: { items: readonly DecryptedItem[]; onBack: () 
         back
       </Button>
     </Panel>
+  );
+}
+
+/**
+ * A labelled group of secondary actions.
+ *
+ * The label is the point. Thirteen identical buttons said nothing about which
+ * of them ends a session and which prints a list; a heading over four of them
+ * does most of that work for free.
+ */
+function Drawer({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-accent-dim mb-3 font-mono text-xs tracking-widest uppercase">{title}</h3>
+      <div className="flex flex-wrap gap-3">{children}</div>
+    </div>
   );
 }

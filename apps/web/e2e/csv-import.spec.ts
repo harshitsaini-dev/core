@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Importing a CSV from another password manager.
@@ -19,7 +20,7 @@ async function openVault(page: Page, label: string): Promise<void> {
 }
 
 async function choose(page: Page, csv: string): Promise<void> {
-  await page.getByTestId('open-csv-import').click();
+  await openPanel(page, 'open-csv-import');
   await page.getByTestId('import-file').setInputFiles({
     name: 'export.csv',
     mimeType: 'text/csv',
@@ -106,7 +107,7 @@ test.describe('csv import', () => {
     // The export they just made needs no password at all, and saying so is the
     // only part of this flow that protects them afterwards.
     await openVault(page, 'csv-warning');
-    await page.getByTestId('open-csv-import').click();
+    await openPanel(page, 'open-csv-import');
 
     await expect(page.getByRole('note')).toContainText('unencrypted');
   });

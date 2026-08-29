@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { openVault as openAccount } from './helpers/vault';
+import { openPanel } from './helpers/vault-nav';
 
 /**
  * Quick unlock with a PIN.
@@ -21,7 +22,7 @@ async function openVault(page: Page, label: string): Promise<string> {
 }
 
 async function openPinPanel(page: Page): Promise<void> {
-  await page.getByTestId('open-pin').click();
+  await openPanel(page, 'open-pin');
   await expect(page.getByTestId('pin-setup')).toBeVisible();
 }
 
