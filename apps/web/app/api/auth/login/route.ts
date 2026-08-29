@@ -18,7 +18,7 @@ import { emailEnabled, send } from '@/lib/server/email';
 import { issueToken } from '@/lib/server/email-tokens';
 import { LOCKOUT_THRESHOLD, LOCKOUT_WINDOW_MS, windowInWords } from '@/lib/server/lockout';
 import { record } from '@/lib/server/audit';
-import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
+import { authFailure, badRequest, botCheckFailed, serverError, tooManyRequests } from '@/lib/server/responses';
 import { verifyTurnstile } from '@/lib/server/turnstile';
 import { emailDecrypt, emailIndex } from '@/lib/server/secrets';
 import { issueSession, sessionCookie } from '@/lib/server/session';
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   // After the limiter, before anything expensive. A refused token should cost
   // this server one HTTP call, not an Argon2id verification — and before the
   // constant-time block, so it cannot become a way to time the answer.
-  if (!(await verifyTurnstile(context.turnstile, request))) return badRequest();
+  if (!(await verifyTurnstile(context.turnstile, request))) return botCheckFailed();
 
   /**
    * Progressive delay (RL-03).

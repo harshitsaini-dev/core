@@ -8,7 +8,7 @@ import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { verifyTurnstile } from '@/lib/server/turnstile';
 import { checkLimit } from '@/lib/server/rate-limit';
-import { badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
+import { badRequest, botCheckFailed, ok, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailEncrypt, emailIndex } from '@/lib/server/secrets';
 import { constantTime } from '@/lib/server/timing';
 
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   // After the limiter, before anything expensive. A refused token should cost
   // this server one HTTP call, not an Argon2id verification.
-  if (!(await verifyTurnstile(context.turnstile, request))) return badRequest();
+  if (!(await verifyTurnstile(context.turnstile, request))) return botCheckFailed();
 
   const { db, pepper } = context;
 

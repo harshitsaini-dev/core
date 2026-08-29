@@ -142,6 +142,21 @@ export async function mountTurnstile(
     sitekey: key,
     theme: 'dark',
     size,
+    /*
+     * Shown only when it has something to ask.
+     *
+     * Turnstile decides most visitors are fine without any interaction, and
+     * with `always` it draws a box saying so — a grey-and-orange panel in the
+     * middle of a black-and-green terminal, which is the one thing on the
+     * screen that cannot be styled to match, because it is a cross-origin
+     * iframe.
+     *
+     * `interaction-only` runs the same check and renders nothing unless a
+     * person actually has to do something. When that happens the widget
+     * appears, which is honest: at that point there genuinely is a question to
+     * answer.
+     */
+    appearance: 'interaction-only',
     callback: (token) => onToken(token),
     // A widget that failed or expired must clear the token it gave earlier,
     // or the form stays enabled holding something the server will refuse.

@@ -34,3 +34,4 @@ export * from './pin.js';
 export * from './blind-index.js';
 export * from './sharing.js';
 export * from './totp.js';
+export * from './migration.js';

@@ -32,6 +32,35 @@ const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
  * would fail at the one moment the user cannot tell whether the secret or the
  * app is at fault.
  */
+/**
+ * Encode a secret the way a setup screen prints one.
+ *
+ * Needed because Google's export carries raw bytes while everything else in
+ * this codebase — the item field, the URI parser, the generator — speaks
+ * base32. Padded, since some services reject an unpadded secret and none
+ * rejects a padded one.
+ */
+export function base32Encode(bytes: Bytes): string {
+  let bits = 0;
+  let value = 0;
+  let output = '';
+
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+
+  if (bits > 0) output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  while (output.length % 8 !== 0) output += '=';
+
+  return output;
+}
+
 export function base32Decode(input: string): Bytes {
   const normalized = input.replace(/[\s-]/g, '').replace(/=+$/, '').toUpperCase();
 

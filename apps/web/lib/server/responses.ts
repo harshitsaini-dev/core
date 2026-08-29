@@ -36,6 +36,24 @@ export function badRequest(): NextResponse {
   );
 }
 
+/**
+ * The bot check was not satisfied.
+ *
+ * Distinct from a malformed request because the caller can do something about
+ * this one, and from a failed sign-in because their password was never looked
+ * at. Reported as its own thing so the screen can say what actually happened —
+ * a form that answers "those credentials did not work" to somebody who has not
+ * finished a checkbox is telling them the one thing that is not true.
+ *
+ * It leaks nothing: it describes this request, not the account.
+ */
+export function botCheckFailed(): NextResponse {
+  return NextResponse.json(
+    { error: 'bot_check', message: 'Complete the bot check and try again.' },
+    { status: 400, headers: NO_STORE },
+  );
+}
+
 export function tooManyRequests(retryAfterSeconds: number): NextResponse {
   return NextResponse.json(
     { error: 'rate_limited', message: 'Too many attempts. Try again later.' },

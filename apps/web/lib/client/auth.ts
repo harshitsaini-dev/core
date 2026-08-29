@@ -198,6 +198,30 @@ export class DeviceVerificationRequired extends Error {
   }
 }
 
+/**
+ * The bot check was not satisfied.
+ *
+ * Its own error because the password was never looked at. Reporting this as a
+ * failed sign-in tells somebody the one thing that is definitely not true, and
+ * leaves them retyping a password that was fine.
+ */
+export class BotCheckFailed extends Error {
+  constructor() {
+    super('Complete the bot check and try again.');
+    this.name = 'BotCheckFailed';
+  }
+}
+
+/** Whether a 400 was the bot check rather than a malformed body. */
+async function isBotCheck(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.clone().json()) as { error?: string };
+    return body.error === 'bot_check';
+  } catch {
+    return false;
+  }
+}
+
 export class LoginFailed extends Error {
   constructor() {
     super('Invalid credentials.');
@@ -244,6 +268,7 @@ export async function login(
   // A refusal by rate is not a refusal by password, and saying so is not a
   // leak: it describes this caller's request rate, not the account.
   if (response.status === 429) throw new RateLimited(retryAfter(response));
+  if (response.status === 400 && (await isBotCheck(response))) throw new BotCheckFailed();
   if (!response.ok) throw new LoginFailed();
 
   const body = (await response.json()) as LoginResponse & { status?: string };

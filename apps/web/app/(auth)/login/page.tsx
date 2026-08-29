@@ -5,6 +5,7 @@ import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
 import {
+  BotCheckFailed,
   DeviceVerificationRequired,
   LoginFailed,
   RateLimited,
@@ -128,13 +129,15 @@ export default function LoginPage() {
         }
 
         setError(
-          cause instanceof RateLimited
-            ? `Too many attempts from here. Try again in about ${Math.ceil(
-                cause.retryAfterSeconds / 60,
-              )} minute${cause.retryAfterSeconds > 90 ? 's' : ''}.`
-            : cause instanceof LoginFailed
-              ? 'Those credentials did not work.'
-              : 'Could not reach the vault. Check your connection and try again.',
+          cause instanceof BotCheckFailed
+            ? cause.message
+            : cause instanceof RateLimited
+              ? `Too many attempts from here. Try again in about ${Math.ceil(
+                  cause.retryAfterSeconds / 60,
+                )} minute${cause.retryAfterSeconds > 90 ? 's' : ''}.`
+              : cause instanceof LoginFailed
+                ? 'Those credentials did not work.'
+                : 'Could not reach the vault. Check your connection and try again.',
         );
         setBusy(false);
         setProgress('');
