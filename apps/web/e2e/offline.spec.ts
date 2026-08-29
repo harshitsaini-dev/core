@@ -336,6 +336,27 @@ test.describe('service worker freshness', () => {
     expect(served).not.toBe(POISON);
   });
 
+  test('falls back to the cached script when the server errors', async ({ page }) => {
+    /*
+     * Not only when the network is gone. A dev server mid-restart, or a Worker
+     * answering 500, reaches the browser as a bad *response* rather than as a
+     * thrown fetch — and handing that to the page is handing it a broken bundle
+     * while a working one sits in the cache.
+     *
+     * Driven by asking for a script that genuinely does not exist, rather than
+     * by intercepting one that does. `page.route` does not see the worker's own
+     * `fetch`, so the first version of this test stubbed a 500 the worker never
+     * received, got the real bundle, and failed — which is the right outcome
+     * for a test that was not testing what it said.
+     */
+    await loadedScript(page);
+
+    const missing = new URL('/_next/static/chunks/not-a-real-chunk.js', page.url()).href;
+    await poison(page, missing, POISON);
+
+    expect(await fetchThroughWorker(page, missing)).toBe(POISON);
+  });
+
   test('falls back to the cached script with no network', async ({ page, context }) => {
     // The other half. Network-first is only acceptable because the cache is
     // still underneath it — otherwise this change would have traded a stale

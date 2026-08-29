@@ -142,7 +142,18 @@ async function networkFirst(request, cacheName) {
     if (response.ok) {
       const cache = await caches.open(cacheName);
       await cache.put(request, response.clone());
+      return response;
     }
+
+    // Reached the server and got an error from it. A 500 or a 502 is not a
+    // reason to hand the page a broken bundle when a working one is sitting in
+    // the cache — that is the same "shipped a stale fix" argument running the
+    // other way, and it is what the offline branch below is already for.
+    //
+    // Falls through to it rather than returning: a server that is up and
+    // failing is, from here, indistinguishable from one that is not there.
+    const cached = await caches.match(request);
+    if (cached) return cached;
 
     return response;
   } catch {
