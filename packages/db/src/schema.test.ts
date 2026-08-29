@@ -111,6 +111,22 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     'expires_at',
     'created_at',
   ],
+  email_tokens: [
+    'id',
+    'user_id',
+    // Which of the two things this token is for, `unlock` or `device`. Neither
+    // opens a vault, so knowing which one a row is says nothing worth hiding.
+    'purpose',
+    // SHA-256 of the token, never the token. Same reasoning as
+    // `sessions.token_hash`: a database dump must not yield working links.
+    'token_hash',
+    // Server-owned lifecycle. The client has no say in any of these, and a
+    // reader learns only that somebody asked for a link and whether it was
+    // used — which is already in the audit log.
+    'expires_at',
+    'used_at',
+    'created_at',
+  ],
 };
 
 /**
