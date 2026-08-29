@@ -34,9 +34,11 @@ jobs:
   deploy:
     name: build and deploy to Cloudflare
     runs-on: ubuntu-latest
-    # Restricted so the API token is only readable by a run that an owner
-    # started, not by one a fork can trigger.
-    environment: production
+    # No `environment:` here. It would add a second place for the same two
+    # secrets to live and a second thing to get wrong, and it buys nothing
+    # unless it is configured with reviewers. What actually restricts this is
+    # the trigger: `workflow_dispatch` needs write access to the repository, so
+    # a fork cannot start it and neither can a pull request.
     steps:
       - name: Check the confirmation
         if: inputs.confirm != 'deploy'
