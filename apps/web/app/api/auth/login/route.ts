@@ -13,11 +13,14 @@ import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
 import { LIMITS, callerAddress, consume, failureDelayMs } from '@/lib/server/rate-limit';
 import { alert } from '@/lib/server/alerts';
-import { LOCKOUT_THRESHOLD, LOCKOUT_WINDOW_MS } from '@/lib/server/lockout';
+import { isKnownDevice } from '@/lib/server/devices';
+import { emailEnabled, send } from '@/lib/server/email';
+import { issueToken } from '@/lib/server/email-tokens';
+import { LOCKOUT_THRESHOLD, LOCKOUT_WINDOW_MS, windowInWords } from '@/lib/server/lockout';
 import { record } from '@/lib/server/audit';
 import { authFailure, badRequest, serverError, tooManyRequests } from '@/lib/server/responses';
 import { verifyTurnstile } from '@/lib/server/turnstile';
-import { emailIndex } from '@/lib/server/secrets';
+import { emailDecrypt, emailIndex } from '@/lib/server/secrets';
 import { issueSession, sessionCookie } from '@/lib/server/session';
 import { AUTH_RESPONSE_BUDGET_MS, constantTime } from '@/lib/server/timing';
 
@@ -102,6 +105,8 @@ const MAX_BODY_BYTES = 2 * 1024;
 interface LoginOutcome {
   readonly ok: boolean;
   readonly userId?: string;
+  /** Needed to email a code; never returned to the caller. */
+  readonly emailEnc?: string;
   /** This attempt is the one that crossed the threshold. */
   readonly lockedNow?: boolean;
   readonly keys?: {
@@ -174,6 +179,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         failedAttempts: users.failedAttempts,
         lockedUntil: users.lockedUntil,
         authVerifier: users.authVerifier,
+        emailEnc: users.emailEnc,
         accountKeyWrapped: users.accountKeyWrapped,
         publicKey: users.publicKey,
         privateKeyWrapped: users.privateKeyWrapped,
@@ -250,6 +256,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return {
       ok: true,
       userId: row.id,
+      emailEnc: row.emailEnc,
       keys: {
         accountKeyWrapped: row.accountKeyWrapped,
         publicKey: row.publicKey,
@@ -292,6 +299,51 @@ export async function POST(request: NextRequest): Promise<Response> {
     // One response for an unknown address and for a wrong password. Anything
     // else turns login into the enumeration oracle prelogin avoids being.
     return authFailure();
+  }
+
+  /*
+   * A correct password from a browser this account has never verified.
+   *
+   * Not the sign-in that matters — people buy laptops — but the first one from
+   * somewhere new, which is also what a stolen password looks like. So no
+   * session is issued and a six-digit code goes to the address on the account.
+   *
+   * The code does not open the vault and cannot. It gates the *session*; the
+   * master password was already required to get here and the keys are still
+   * derived in the browser. Anything else would make the mailbox a second way
+   * in, and this product's whole claim is that there is no second way in.
+   *
+   * Only reachable after a correct password, so answering differently here
+   * leaks nothing: whoever is asking has already proved the account exists.
+   *
+   * Skipped entirely where the instance cannot send mail. An unconfigured
+   * self-hosted copy must not be one where nobody can ever sign in.
+   */
+  if (emailEnabled(context.email) && !(await isKnownDevice(db, outcome.userId, request))) {
+    const code = await issueToken(db, outcome.userId, 'device');
+
+    await send(context.email, {
+      to: await emailDecrypt(pepper, outcome.emailEnc ?? ''),
+      subject: `${code} is your Core sign-in code`,
+      text:
+        `Somebody signed in to your Core vault with the right master password, from a ` +
+        `device this account has not seen before${
+          request.headers.get('cf-ipcountry') ? ` in ${request.headers.get('cf-ipcountry')}` : ''
+        }.\n\n` +
+        `The code is ${code}. It expires in ${windowInWords()} minutes and works once.\n\n` +
+        'If that was you, enter it and this browser will be remembered.\n\n' +
+        'If it was not, somebody has your master password. They cannot get in ' +
+        'without this code — but change that password now, from a device you ' +
+        'already use.\n\n— Core\n',
+    });
+
+    return new Response(JSON.stringify({ status: 'verify' }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
   }
 
   const issued = await issueSession(db, pepper, outcome.userId);

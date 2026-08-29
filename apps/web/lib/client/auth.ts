@@ -181,6 +181,23 @@ function retryAfter(response: Response): number {
   return Number.isFinite(header) && header > 0 ? header : 60;
 }
 
+/**
+ * The password was right and this browser is not recognised.
+ *
+ * Thrown rather than returned so a caller cannot forget to handle it: a
+ * `login()` that resolved with "actually, no keys" would be one that somebody
+ * eventually treats as success.
+ *
+ * Only reachable after a correct password, so it says nothing a caller has not
+ * already established.
+ */
+export class DeviceVerificationRequired extends Error {
+  constructor() {
+    super('Enter the code sent to your email.');
+    this.name = 'DeviceVerificationRequired';
+  }
+}
+
 export class LoginFailed extends Error {
   constructor() {
     super('Invalid credentials.');
@@ -229,7 +246,11 @@ export async function login(
   if (response.status === 429) throw new RateLimited(retryAfter(response));
   if (!response.ok) throw new LoginFailed();
 
-  const body = (await response.json()) as LoginResponse;
+  const body = (await response.json()) as LoginResponse & { status?: string };
+
+  // A correct password from a browser this account has not verified. No keys
+  // came back and no session was issued; the code completes the sign-in.
+  if (body.status === 'verify') throw new DeviceVerificationRequired();
 
   onProgress?.('unlocking vault');
   // If this throws, the server returned a wrapper this password cannot open —
@@ -478,4 +499,51 @@ export async function changeMasterPassword(
 
   wipe(older.authKey);
   wipe(fresh.authKey);
+}
+
+/**
+ * Finish a sign-in with the code emailed to the account.
+ *
+ * The same unwrap as an ordinary sign-in, from the same wrapped material. The
+ * code released a session; the master password is what opens the vault, and
+ * this still derives the Master Key from it here in the browser.
+ */
+export async function verifyDevice(
+  email: string,
+  masterPassword: string,
+  code: string,
+  onProgress?: (step: string) => void,
+): Promise<AccountKeys> {
+  onProgress?.('fetching parameters');
+  const pre = await postJson('/api/auth/prelogin', { email });
+  if (pre.status === 429) throw new RateLimited(retryAfter(pre));
+  if (!pre.ok) throw new LoginFailed();
+  const { kdfSalt, kdfParams } = (await pre.json()) as PreloginResponse;
+
+  onProgress?.('checking the code');
+  const response = await postJson('/api/auth/verify-device', { email, code });
+  if (response.status === 429) throw new RateLimited(retryAfter(response));
+  if (!response.ok) throw new LoginFailed();
+
+  const body = (await response.json()) as LoginResponse;
+
+  onProgress?.('deriving keys');
+  const { authKey, masterKey } = await deriveKeys(
+    masterPassword,
+    base64UrlToBytes(kdfSalt),
+    kdfParams,
+  );
+  wipe(authKey);
+
+  onProgress?.('unlocking vault');
+  const keys = await unwrapAccountKeys(masterKey, body.accountKeyWrapped);
+
+  await offline.writeUnlockMaterial({
+    email: normalise(email),
+    kdfSalt,
+    kdfParams,
+    accountKeyWrapped: body.accountKeyWrapped,
+  });
+
+  return keys;
 }

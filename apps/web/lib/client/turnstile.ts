@@ -48,6 +48,7 @@ interface TurnstileApi {
       'error-callback'?: () => void;
       'expired-callback'?: () => void;
       theme?: 'dark' | 'light' | 'auto';
+      size?: 'normal' | 'flexible' | 'compact';
       appearance?: 'always' | 'execute' | 'interaction-only';
     },
   ) => string;
@@ -91,6 +92,22 @@ function load(): Promise<TurnstileApi> {
 }
 
 /**
+ * Which widget fits the space there is.
+ *
+ * `flexible` fills its container and needs 300px to do it. `compact` is 150px
+ * wide and fits anywhere. The default, `normal`, is a fixed 300px iframe — on a
+ * phone the login panel is narrower than that (262px of content on a 360px
+ * screen) so the default spilled out of the box it was in.
+ *
+ * Decided from the element's measured width rather than the viewport, because
+ * what matters is the space this widget actually has and the padding around it
+ * can change without this file knowing.
+ */
+export function widgetSize(available: number): 'flexible' | 'compact' {
+  return available >= 300 ? 'flexible' : 'compact';
+}
+
+/**
  * Render a widget into an element and resolve tokens through a callback.
  *
  * Returns a reset function. A token is single-use: once a form has submitted
@@ -107,9 +124,24 @@ export async function mountTurnstile(
 
   const api = await load();
 
+  /*
+   * Sized to the space there actually is.
+   *
+   * The default widget is a fixed 300px iframe. A phone panel is narrower than
+   * that — 262px of content on a 360px screen — so the default spills out of
+   * the box it is in, which is what it did.
+   *
+   * `flexible` fills the container and needs 300px to do it; `compact` is
+   * 150px wide and fits anywhere. Measured rather than guessed from the
+   * viewport, because what matters is the element's own width and the padding
+   * around it can change without this file knowing.
+   */
+  const size = widgetSize(element.getBoundingClientRect().width);
+
   const id = api.render(element, {
     sitekey: key,
     theme: 'dark',
+    size,
     callback: (token) => onToken(token),
     // A widget that failed or expired must clear the token it gave earlier,
     // or the form stays enabled holding something the server will refuse.
