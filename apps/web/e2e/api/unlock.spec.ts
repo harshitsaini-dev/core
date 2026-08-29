@@ -69,6 +69,20 @@ test.describe('unlock requests', () => {
     expect(await notLocked.text()).toBe(await unknown.text());
   });
 
+  test('is reachable without a bot-check token', async ({ request }) => {
+    /*
+     * The offer sits next to a failed sign-in, and by then the widget's token
+     * is spent — it is single-use and the sign-in just used it. A Turnstile
+     * check here refused every request with a 400 the button never looked at,
+     * so the email simply never came. That is what this asserts against.
+     */
+    const response = await request.post('/api/auth/unlock-request', {
+      data: { email: uniqueEmail('no-token') },
+    });
+
+    expect(response.status()).toBe(200);
+  });
+
   test('rejects a malformed address', async ({ request }) => {
     expect((await request.post('/api/auth/unlock-request', { data: {} })).status()).toBe(400);
     expect(

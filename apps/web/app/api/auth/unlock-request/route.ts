@@ -8,7 +8,6 @@ import { issueToken } from '@/lib/server/email-tokens';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
 import { emailDecrypt, emailIndex } from '@/lib/server/secrets';
-import { verifyTurnstile } from '@/lib/server/turnstile';
 
 /**
  * Ask for a link that lifts a lockout.
@@ -49,7 +48,22 @@ export async function POST(request: NextRequest): Promise<Response> {
   );
   if (retryAfter !== null) return tooManyRequests(retryAfter);
 
-  if (!(await verifyTurnstile(context.turnstile, request))) return badRequest();
+  /*
+   * No Turnstile check here, deliberately.
+   *
+   * The first version had one, and it made the feature impossible to use: the
+   * offer appears next to a failed sign-in, by which point the widget's token
+   * is already spent — a token is single-use and the sign-in just used it. So
+   * every request arrived without one and was refused with a 400 nobody saw,
+   * because the button does not wait for an answer. The email simply never came.
+   *
+   * Leaving it off is defensible on its own terms rather than only convenient.
+   * Reaching this endpoint usefully requires an account that is already locked,
+   * which requires ten failed sign-ins, each of which *is* behind Turnstile and
+   * the rate limiter. The expensive gate is upstream. What is left here is
+   * capped by the same per-caller limiter above, sends only to an address that
+   * already exists, and produces a link that cannot open a vault.
+   */
 
   let input: z.infer<typeof schema>;
   try {
