@@ -133,8 +133,17 @@ Core instance costs nothing.
 
 ## Self-hosting
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/harshitsaini-dev/core)
+
+The button forks the repository, creates the D1 database and the KV namespace,
+and deploys. Two things it cannot do for you:
+
+- **Set `AUTH_PEPPER`** — 32 random bytes, added as a secret. Without it the
+  server has nothing to hash auth verifiers against, and it will not start.
+- **Run the migrations** — `pnpm db:migrate` against the new database.
+
 Detailed instructions land with v1 — see
-[`docs/self-hosting.md`](docs/self-hosting.md). The short version:
+[`docs/self-hosting.md`](docs/self-hosting.md). The short version, by hand:
 
 ```bash
 git clone https://github.com/harshitsaini-dev/core.git

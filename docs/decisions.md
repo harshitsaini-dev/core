@@ -751,3 +751,34 @@ what it can match, and anything the file does not mention is left alone —
 "restore the two items I lost" must not mean "replace everything with a file
 from March". Trash is restored as trash, since somebody who deleted something
 and then had to restore a backup did not ask for it back.
+
+## ADR-030 — Lighthouse CI is cut, not deferred
+
+**Status:** accepted, 2026-08-29
+
+**Context.** OSS-10 asked for a Lighthouse PWA score of 100 enforced in CI.
+
+**What was found on trying to build it.** Two things, either of which is enough
+on its own.
+
+Lighthouse removed the PWA category in v12. `installable-manifest`,
+`service-worker`, `maskable-icon`, `apple-touch-icon` and `themed-omnibox` are
+not audits that exist any more — a run against this app returns none of them.
+There is no PWA score to hold at 100, so the requirement names something that
+cannot be measured.
+
+And this app has no `next start`. The build output is for
+`@opennextjs/cloudflare`, and the production server is `pnpm preview`, which is
+workerd. A first attempt at the workflow used `next start`, which failed with
+`MODULE_NOT_FOUND` — and the Lighthouse run that appeared to work was measuring
+the _development_ server that happened to be on the same port. It reported
+accessibility 92 and eight failing audits, all of which were artifacts of a page
+whose stylesheet and chunks had 404'd.
+
+**Decision.** Cut it rather than ship a workflow that has never run correctly.
+The parts of it that were real are covered elsewhere and by things that do run:
+UI-11 asserts reduced motion, UI-12 asserts a focus ring on every control, and
+`smoke.spec.ts` asserts the manifest, the theme colour and the viewport.
+
+**Revisit** if a Lighthouse job is wanted against a deployed instance, where the
+server is the real one and the numbers mean something.

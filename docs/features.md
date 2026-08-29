@@ -122,20 +122,20 @@ P5 Hardening+Deploy · P6 Post-v1
 
 ## PWA — Progressive Web App & Mobile UX
 
-| ID     | Feature                                          | Phase | Status |
-| ------ | ------------------------------------------------ | ----- | ------ |
-| PWA-01 | Installable PWA with manifest and maskable icons | P3    | DONE   |
-| PWA-02 | Service worker with offline app shell            | P3    | DONE   |
-| PWA-03 | Dexie / IndexedDB encrypted offline vault        | P3    | DONE   |
-| PWA-04 | Offline read _and_ write with outbox queue       | P3    | DONE   |
-| PWA-05 | Offline / online indicator dot                   | P3    | DONE   |
-| PWA-06 | Bottom navigation bar on mobile                  | P3    | DONE   |
-| PWA-07 | Pull-to-refresh manual sync                      | P3    | DONE   |
-| PWA-08 | Swipe actions: copy username / copy password     | P3    | DONE   |
-| PWA-09 | Haptic feedback on copy (Vibration API)          | P3    | DONE   |
-| PWA-10 | Safe-area insets and one-handed reachability     | P3    | DONE   |
-| PWA-11 | Keyboard shortcuts across desktop                | P3    | DONE   |
-| PWA-12 | Prompt to reload when a new version has taken over | P5  | DONE   |
+| ID     | Feature                                            | Phase | Status |
+| ------ | -------------------------------------------------- | ----- | ------ |
+| PWA-01 | Installable PWA with manifest and maskable icons   | P3    | DONE   |
+| PWA-02 | Service worker with offline app shell              | P3    | DONE   |
+| PWA-03 | Dexie / IndexedDB encrypted offline vault          | P3    | DONE   |
+| PWA-04 | Offline read _and_ write with outbox queue         | P3    | DONE   |
+| PWA-05 | Offline / online indicator dot                     | P3    | DONE   |
+| PWA-06 | Bottom navigation bar on mobile                    | P3    | DONE   |
+| PWA-07 | Pull-to-refresh manual sync                        | P3    | DONE   |
+| PWA-08 | Swipe actions: copy username / copy password       | P3    | DONE   |
+| PWA-09 | Haptic feedback on copy (Vibration API)            | P3    | DONE   |
+| PWA-10 | Safe-area insets and one-handed reachability       | P3    | DONE   |
+| PWA-11 | Keyboard shortcuts across desktop                  | P3    | DONE   |
+| PWA-12 | Prompt to reload when a new version has taken over | P5    | DONE   |
 
 ## UI — Terminal Theme & Interaction
 
@@ -203,7 +203,7 @@ P5 Hardening+Deploy · P6 Post-v1
 
 | ID     | Feature                                                 | Phase | Status |
 | ------ | ------------------------------------------------------- | ----- | ------ |
-| OSS-01 | One-click Deploy to Cloudflare button                   | P5    | TODO   |
+| OSS-01 | One-click Deploy to Cloudflare button                   | P5    | DONE   |
 | OSS-02 | Docker single-container option for VPS self-hosters     | P6    | TODO   |
 | OSS-03 | `.env.example` with every variable documented           | P2    | DONE   |
 | OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2    | DONE   |
@@ -212,7 +212,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | OSS-07 | SECURITY.md with a responsible-disclosure policy        | P5    | DONE   |
 | OSS-08 | Self-hosting guide with screenshots                     | P5    | TODO   |
 | OSS-09 | MIT licence                                             | P0    | DONE   |
-| OSS-10 | Lighthouse PWA score 100 in CI                          | P5    | TODO   |
+| OSS-10 | Lighthouse PWA score 100 in CI                          | P5    | CUT    |
 
 ---
 
