@@ -139,4 +139,41 @@ test.describe('open sessions', () => {
 
     await other.close();
   });
+
+  test('keeps five and drops the oldest', async ({ page, request }) => {
+    /*
+     * An account with forty live sessions is not somebody with forty devices.
+     * It is somebody who signs in on public machines and never signs out, or
+     * somebody whose password is in more than one pair of hands.
+     *
+     * The oldest goes, not the newest: refusing the new sign-in would lock out
+     * the person actually standing at a keyboard.
+     */
+    const account = await buildAccount(uniqueEmail('sessions-limit'), PASSWORD);
+    expect((await request.post('/api/auth/signup', { data: account.payload })).status()).toBe(200);
+
+    // Seven sign-ins, each with its own cookie jar, so each is a real session.
+    const jars = [];
+    for (let n = 0; n < 7; n += 1) {
+      const jar = await page.context().browser()?.newContext();
+      if (!jar) throw new Error('no browser');
+      const signIn = await jar.request.post('/api/auth/login', {
+        data: { email: account.payload.email, authKey: account.payload.authKey },
+      });
+      expect(signIn.status()).toBe(200);
+      jars.push(jar);
+    }
+
+    const last = jars[jars.length - 1];
+    const listed = await last!.request.get('/api/auth/sessions');
+    const body = (await listed.json()) as { sessions: unknown[] };
+
+    expect(body.sessions).toHaveLength(5);
+
+    // And the first two are actually finished, not merely off the list.
+    expect((await jars[0]!.request.get('/api/auth/sessions')).status()).toBe(401);
+    expect((await jars[1]!.request.get('/api/auth/sessions')).status()).toBe(401);
+
+    for (const jar of jars) await jar.close();
+  });
 });

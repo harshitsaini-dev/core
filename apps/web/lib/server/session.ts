@@ -2,7 +2,7 @@ import { sessions } from '@core/db';
 import type { Database } from '@core/db';
 import { bytesToBase64Url, constantTimeEqual, randomBytes, utf8ToBytes } from '@core/crypto';
 import type { Bytes } from '@core/crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { deriveServerKey } from './secrets';
 
 /**
@@ -41,6 +41,21 @@ async function hashToken(pepper: Bytes, token: string): Promise<string> {
 }
 
 /** Create a session for a user. */
+/**
+ * How many browsers may hold a live session at once.
+ *
+ * A phone, a laptop, a desktop, a work machine, and one spare. Past that, an
+ * account with forty live sessions is not somebody with forty devices — it is
+ * somebody who signs in from public machines and never signs out, or somebody
+ * whose password is being used by more than one person. Both are better served
+ * by the oldest one falling off than by an unbounded list.
+ *
+ * The oldest goes, not the newest. Refusing the new sign-in would lock out the
+ * person actually standing at a keyboard, which is the wrong end of the
+ * problem to solve.
+ */
+export const MAX_LIVE_SESSIONS = 5;
+
 export async function issueSession(
   db: Database,
   pepper: Bytes,
@@ -59,7 +74,37 @@ export async function issueSession(
     expiresAt,
   });
 
+  await evictOldestSessions(db, userId);
+
   return { token, expiresAt };
+}
+
+/**
+ * Keep the newest `MAX_LIVE_SESSIONS` and revoke the rest.
+ *
+ * Run after the insert rather than before, so the count includes the session
+ * just issued and the limit is a limit rather than a limit-plus-one.
+ *
+ * Revoked rather than deleted: the row is what makes a replayed token
+ * recognisable as a replay instead of as an unknown token, and that difference
+ * is the whole of the reuse detection.
+ */
+async function evictOldestSessions(db: Database, userId: string): Promise<void> {
+  const live = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        isNull(sessions.revokedAt),
+        gt(sessions.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(sessions.createdAt));
+
+  for (const row of live.slice(MAX_LIVE_SESSIONS)) {
+    await revokeSession(db, row.id);
+  }
 }
 
 export interface ResolvedSession {

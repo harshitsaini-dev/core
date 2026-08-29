@@ -45,7 +45,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-09 | Device PIN quick-unlock backed by the device key             | P3    | DONE   |
 | AUTH-10 | Magic-link account unlock after lockout (Resend)             | P5    | TODO   |
 | AUTH-11 | New-device / new-country login approval via email OTP        | P5    | TODO   |
-| AUTH-12 | Concurrent session limit with oldest-session eviction        | P5    | TODO   |
+| AUTH-12 | Concurrent session limit with oldest-session eviction        | P5    | DONE   |
 | AUTH-13 | Open-session list with individual revoke                     | P5    | DONE   |
 | AUTH-14 | Inactivity auto-lock with configurable timeout               | P3    | DONE   |
 
