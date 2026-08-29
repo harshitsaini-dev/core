@@ -289,6 +289,101 @@ export function formatShellExport(vars: readonly ParsedVar[]): string {
 }
 
 /**
+ * Write the variables as Docker `--env` arguments, for one long command line.
+ *
+ * Quoted the same way as the `.env` file, because the string ends up in a
+ * shell either way and a value with a space in it silently becomes two
+ * arguments otherwise.
+ */
+export function formatDockerArgs(vars: readonly ParsedVar[]): string {
+  return vars.map((entry) => `--env ${entry.key}=${quote(entry.value)}`).join(' ') + '\n';
+}
+
+/**
+ * Write the `environment:` block of a `docker-compose.yml`.
+ *
+ * Every value is quoted and escaped whether it needs it or not. YAML has more
+ * ways to change the meaning of an unquoted scalar than anything else here:
+ * `true`, `no`, `8.30`, `null` and `2026-08-29` all stop being the string that
+ * was typed, and `no` turning into `false` in a feature flag is a bug nobody
+ * would think to look for in a quoting rule.
+ *
+ * Indented six spaces, which is where it goes under `services:` and a service
+ * name. Pasting a fragment that then has to be re-indented by hand is most of
+ * the work this is meant to save.
+ */
+export function formatComposeEnv(vars: readonly ParsedVar[]): string {
+  const lines = vars.map((entry) => {
+    const value = entry.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    return `      ${entry.key}: "${value}"`;
+  });
+
+  return ['    environment:', ...lines].join('\n') + '\n';
+}
+
+/**
+ * Values that are almost certainly not real.
+ *
+ * The way a `.env` goes wrong is not a typo, it is a copy: `.env.example`
+ * becomes `.env`, most of it gets filled in, and two lines do not. Nothing
+ * complains until a deploy authenticates as `your-api-key-here` and the error
+ * comes back from a service rather than from here.
+ *
+ * The list is short on purpose. Every entry is a string nobody would choose as
+ * a real value, and a check that guessed more widely would flag real secrets --
+ * a generated password can look like anything, including like a placeholder.
+ * Being quiet about a bad value is better than being wrong about a good one,
+ * because a warning nobody trusts is a warning nobody reads.
+ *
+ * An empty value is reported separately: it is often deliberate (a flag that is
+ * meant to be blank), so it is worth naming and not worth calling a mistake.
+ */
+const PLACEHOLDERS = [
+  'changeme',
+  'change-me',
+  'yourapikey',
+  'your-api-key',
+  'yourapikeyhere',
+  'apikey',
+  'secret',
+  'password',
+  'todo',
+  'tbd',
+  'fixme',
+  'xxx',
+  'xxxx',
+  'placeholder',
+  'example',
+  'replaceme',
+  'insertkeyhere',
+  // `none`, `null` and `off` are not here. They read like placeholders and are
+  // real values people set on purpose -- `PROXY=none`, `LOG_LEVEL=off` -- and
+  // the rule above says to stay quiet rather than be wrong about a good value.
+];
+
+export type ValueProblem = 'empty' | 'placeholder';
+
+/**
+ * What is wrong with one value, or nothing.
+ *
+ * Angle brackets are their own case and the most common one of all: a line
+ * left as `<your-token>` was never edited at all.
+ */
+export function valueProblem(value: string): ValueProblem | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return 'empty';
+
+  if (/^<.*>$/.test(trimmed)) return 'placeholder';
+  // A run of dots or dashes standing in for something: `...`, `----`.
+  if (/^[.\-_]+$/.test(trimmed)) return 'placeholder';
+
+  const flattened = trimmed.toLowerCase().replace(/[^a-z]/g, '');
+  return PLACEHOLDERS.map((entry) => entry.replace(/[^a-z]/g, '')).includes(flattened)
+    ? 'placeholder'
+    : null;
+}
+
+/**
  * Merge an import into what is already there.
  *
  * Existing keys are updated and new ones added; nothing is removed. An import

@@ -6,6 +6,9 @@ import {
   maskValue,
   mergeVars,
   parseDotenv,
+  valueProblem,
+  formatDockerArgs,
+  formatComposeEnv,
 } from './env';
 import type { DecryptedEnvVar } from './env';
 
@@ -294,5 +297,85 @@ describe('comments', () => {
     const written = formatDotenv([{ key: 'A', value: '1', note: 'One.\nTwo.' }]);
     expect(written).toBe('# One. Two.\nA=1\n');
     expect(parseDotenv(written).vars[0]?.note).toBe('One. Two.');
+  });
+});
+
+describe('valueProblem', () => {
+  it('names an empty value without calling it a mistake', () => {
+    // Often deliberate: a flag meant to be blank. Worth naming, not worth
+    // treating as an error.
+    expect(valueProblem('')).toBe('empty');
+    expect(valueProblem('   ')).toBe('empty');
+  });
+
+  it('catches the line that was never edited', () => {
+    // The way a .env actually goes wrong: `.env.example` is copied, most of it
+    // filled in, and two lines are not.
+    expect(valueProblem('<your-token>')).toBe('placeholder');
+    expect(valueProblem('changeme')).toBe('placeholder');
+    expect(valueProblem('CHANGE_ME')).toBe('placeholder');
+    expect(valueProblem('your-api-key-here')).toBe('placeholder');
+    expect(valueProblem('TODO')).toBe('placeholder');
+    expect(valueProblem('...')).toBe('placeholder');
+  });
+
+  it('stays quiet about values that only look like placeholders', () => {
+    // A warning that fires on a real value is a warning nobody reads, and after
+    // that the real one is missed too. `PROXY=none` and `LOG_LEVEL=off` are
+    // things people set on purpose.
+    expect(valueProblem('none')).toBeNull();
+    expect(valueProblem('off')).toBeNull();
+    expect(valueProblem('0')).toBeNull();
+    expect(valueProblem('false')).toBeNull();
+  });
+
+  it('does not flag a generated secret', () => {
+    // The check must never touch a real value. A generated password can look
+    // like anything at all.
+    for (const value of [
+      'sk-proj-9Wz2mQx7Lr4TvB',
+      'xoxb-123456789012-abcdefgh',
+      'aG91c2Vob2xkLXNlY3JldA==',
+      'postgres://user:pw@localhost:5432/db',
+    ]) {
+      expect(valueProblem(value), value).toBeNull();
+    }
+  });
+});
+
+describe('formatDockerArgs and formatComposeEnv', () => {
+  const vars = [
+    { key: 'PORT', value: '3000', note: null },
+    { key: 'GREETING', value: 'hello world', note: null },
+    { key: 'FLAG', value: 'no', note: null },
+  ] as never;
+
+  it('quotes a value with a space so it stays one argument', () => {
+    // Unquoted, `--env GREETING=hello world` is two arguments and the second is
+    // read as the image name.
+    expect(formatDockerArgs(vars)).toContain('--env GREETING="hello world"');
+    expect(formatDockerArgs(vars)).toContain('--env PORT=3000');
+  });
+
+  it('quotes every compose value, including the ones that look safe', () => {
+    // YAML changes the meaning of unquoted scalars: `no` becomes false, `8.30`
+    // becomes a number, `2026-08-29` becomes a date. A feature flag that reads
+    // `no` and arrives as `false` is a bug nobody looks for in a quoting rule.
+    const out = formatComposeEnv(vars);
+    expect(out).toContain('FLAG: "no"');
+    expect(out).toContain('PORT: "3000"');
+  });
+
+  it('indents where the block actually goes', () => {
+    // Under `services:` and a service name. A fragment that has to be
+    // re-indented by hand is most of the work this saves.
+    const out = formatComposeEnv(vars);
+    expect(out.split('\n')[0]).toBe('    environment:');
+    expect(out.split('\n')[1]).toBe('      PORT: "3000"');
+  });
+
+  it('escapes a quote rather than ending the string early', () => {
+    const out = formatComposeEnv([{ key: 'MSG', value: 'say "hi"', note: null }] as never);
+    expect(out).toContain('MSG: "say \\"hi\\""');
   });
 });

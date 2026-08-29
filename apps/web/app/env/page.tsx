@@ -3,10 +3,13 @@
 import {
   countChanges,
   diffLines,
+  formatComposeEnv,
+  formatDockerArgs,
   formatDotenv,
   formatShellExport,
   isValidEnvKey,
   maskValue,
+  valueProblem,
   parseDotenv,
 } from '@core/shared';
 import type { DecryptedEnvVar, DecryptedEnvironment, DecryptedProject } from '@core/shared';
@@ -429,6 +432,24 @@ function VariableEditor({
         <Button
           type="button"
           variant="ghost"
+          onClick={() => void copyAll(formatDockerArgs(asParsed), 'docker --env flags')}
+          disabled={rows.length === 0}
+          data-testid="copy-docker"
+        >
+          copy --env
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => void copyAll(formatComposeEnv(asParsed), 'compose environment block')}
+          disabled={rows.length === 0}
+          data-testid="copy-compose"
+        >
+          copy compose
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
           onClick={() => download(`${environment.name}.env`, formatDotenv(asParsed))}
           disabled={rows.length === 0}
           data-testid="download-dotenv"
@@ -599,6 +620,7 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
   const [busy, setBusy] = useState(false);
 
   const visible = revealed || shown;
+  const problem = valueProblem(row.value);
 
   return (
     <li
@@ -608,6 +630,15 @@ function VariableRow({ row, revealed }: { row: DecryptedEnvVar; revealed: boolea
       <code className="text-accent secret shrink-0 font-mono text-xs" data-testid="var-row-key">
         {row.key}
       </code>
+
+      {problem !== null ? (
+        // Safe to say out loud: a value this fires on is by definition not a
+        // secret. It is the line somebody copied out of `.env.example` and
+        // never came back to.
+        <span className="text-warning shrink-0 font-mono text-xs" data-testid="var-row-problem">
+          {problem === 'empty' ? '! empty' : '! not filled in'}
+        </span>
+      ) : null}
 
       {editing ? (
         <>

@@ -655,3 +655,49 @@ test.describe('restoring a variable', () => {
     await expect(page.getByTestId('history-entry')).toHaveCount(2);
   });
 });
+
+test.describe('values that were never filled in', () => {
+  test.slow();
+
+  test('marks the line copied out of an example file', async ({ page }) => {
+    // The way a .env actually goes wrong: `.env.example` is copied, most of it
+    // filled in, and one line is not. Nothing complains until a deploy
+    // authenticates as `your-api-key-here`.
+    await openEnv(page, 'env-placeholder');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'STRIPE_KEY', '<your-api-key>');
+
+    const row = page.getByTestId('var-row').filter({ hasText: 'STRIPE_KEY' });
+    await expect(row.getByTestId('var-row-problem')).toContainText('not filled in');
+  });
+
+  test('says nothing about a real secret', async ({ page }) => {
+    // A warning that fires on a real value is one nobody reads, and after that
+    // the real one is missed too.
+    await openEnv(page, 'env-real-secret');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'STRIPE_KEY', 'sk-live-9Wz2mQx7Lr4TvB');
+
+    const row = page.getByTestId('var-row').filter({ hasText: 'STRIPE_KEY' });
+    await expect(row.getByTestId('var-row-problem')).toHaveCount(0);
+  });
+});
+
+test.describe('docker', () => {
+  test.slow();
+
+  test('copies the environment as compose yaml, quoted', async ({ page, context }) => {
+    // YAML turns an unquoted `no` into false. A feature flag that arrives as
+    // the wrong boolean is a bug nobody looks for in a quoting rule.
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openEnv(page, 'env-compose');
+    await makeProject(page, 'Checkout');
+    await addVar(page, 'FEATURE_NEW_CART', 'no');
+
+    await page.getByTestId('copy-compose').click();
+
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain('    environment:');
+    expect(copied).toContain('FEATURE_NEW_CART: "no"');
+  });
+});
