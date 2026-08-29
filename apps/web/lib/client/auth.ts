@@ -152,6 +152,35 @@ interface LoginResponse {
 }
 
 /** Thrown for any authentication failure. Deliberately undifferentiated. */
+/**
+ * The server refused because of how many requests arrived, not which.
+ *
+ * Distinguished from a failed sign-in on purpose, and it is not the leak that
+ * distinction usually is: a 429 describes the caller's own request rate and
+ * says nothing about whether an account exists or what its password is. It is
+ * the same answer a stranger gets for hammering an address that was never
+ * registered.
+ *
+ * Worth separating because the alternative is what this app used to do —
+ * report "those credentials did not work" to somebody whose credentials were
+ * never checked. Being told the wrong reason is worse than being told to wait.
+ */
+export class RateLimited extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super('Too many attempts from here. Try again shortly.');
+    this.name = 'RateLimited';
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+/** Read `Retry-After`, falling back to a minute when it is missing or odd. */
+function retryAfter(response: Response): number {
+  const header = Number(response.headers.get('Retry-After'));
+  return Number.isFinite(header) && header > 0 ? header : 60;
+}
+
 export class LoginFailed extends Error {
   constructor() {
     super('Invalid credentials.');
@@ -175,6 +204,7 @@ export async function login(
 ): Promise<AccountKeys> {
   onProgress?.('fetching parameters');
   const pre = await postJson('/api/auth/prelogin', { email });
+  if (pre.status === 429) throw new RateLimited(retryAfter(pre));
   if (!pre.ok) throw new LoginFailed();
   const { kdfSalt, kdfParams } = (await pre.json()) as PreloginResponse;
 
@@ -194,6 +224,9 @@ export async function login(
 
   wipe(authKey);
 
+  // A refusal by rate is not a refusal by password, and saying so is not a
+  // leak: it describes this caller's request rate, not the account.
+  if (response.status === 429) throw new RateLimited(retryAfter(response));
   if (!response.ok) throw new LoginFailed();
 
   const body = (await response.json()) as LoginResponse;

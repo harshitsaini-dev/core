@@ -4,7 +4,7 @@ import type { AccountKeys } from '@core/crypto';
 import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { LoginFailed, login, unlockOffline } from '@/lib/client/auth';
+import { LoginFailed, RateLimited, login, unlockOffline } from '@/lib/client/auth';
 import { useVault } from '@/lib/client/vault-store';
 import { passkeyStatus } from '@/lib/client/passkey';
 import { pinStatus } from '@/lib/client/pin';
@@ -99,10 +99,18 @@ export default function LoginPage() {
         // unwrap alike. The API refuses to distinguish those, and a UI that
         // helpfully guessed would hand back the enumeration oracle the server
         // was built to withhold.
+        // Three different things, and telling them apart matters. A rate
+        // limit is about this caller's request rate rather than the account,
+        // so saying so leaks nothing — and reporting it as "wrong credentials"
+        // told people the one thing that was definitely not true.
         setError(
-          cause instanceof LoginFailed
-            ? 'Those credentials did not work.'
-            : 'Could not reach the vault. Check your connection and try again.',
+          cause instanceof RateLimited
+            ? `Too many attempts from here. Try again in about ${Math.ceil(
+                cause.retryAfterSeconds / 60,
+              )} minute${cause.retryAfterSeconds > 90 ? 's' : ''}.`
+            : cause instanceof LoginFailed
+              ? 'Those credentials did not work.'
+              : 'Could not reach the vault. Check your connection and try again.',
         );
         setBusy(false);
         setProgress('');

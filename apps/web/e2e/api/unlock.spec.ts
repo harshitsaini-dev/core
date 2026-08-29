@@ -197,3 +197,36 @@ test.describe('redeeming an unlock token', () => {
     expect((await request.post('/api/auth/unlock', { data: { token: 42 } })).status()).toBe(400);
   });
 });
+
+test.describe('what a caller is told', () => {
+  test.slow();
+
+  test('a rate limit is not reported as a wrong password', async ({ request }) => {
+    /*
+     * These are different facts and the client used to conflate them: every
+     * non-ok answer became "those credentials did not work", including a 429.
+     * Somebody who had been refused for asking too often was told the one
+     * thing that was definitely not true about their password.
+     *
+     * Saying so leaks nothing. A 429 describes this caller's request rate, and
+     * an address that was never registered gets exactly the same one.
+     */
+    const email = uniqueEmail('rate-limited');
+
+    let sawRateLimit = false;
+    for (let attempt = 0; attempt < 12 && !sawRateLimit; attempt += 1) {
+      const response = await request.post('/api/auth/login', {
+        data: { email, authKey: WRONG_KEY },
+        // One caller for all of them, which is what exhausts a bucket.
+        headers: { 'x-core-caller': `burst-${email}` },
+      });
+
+      if (response.status() === 429) {
+        sawRateLimit = true;
+        expect(Number(response.headers()['retry-after'])).toBeGreaterThan(0);
+      }
+    }
+
+    expect(sawRateLimit, 'the limiter never refused a burst from one caller').toBe(true);
+  });
+});
