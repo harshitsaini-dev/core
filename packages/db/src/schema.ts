@@ -297,6 +297,17 @@ export const devices = sqliteTable(
     labelEnc: encrypted('label_enc'),
     /** Hashed, not stored raw — a user agent string is a fingerprint. */
     uaHash: text('ua_hash').notNull(),
+
+    /**
+     * SHA-256 of the cookie this device holds, never the cookie itself.
+     *
+     * What makes a device recognisable across sign-ins. A user agent string is
+     * not: millions share one, so trusting it would mean trusting anybody with
+     * the same browser version. A random value this device was given, and only
+     * this device has, is the thing worth checking — and it is stored hashed
+     * for the same reason session tokens are.
+     */
+    tokenHash: text('token_hash'),
     trusted: integer('trusted', { mode: 'boolean' }).notNull().default(false),
     firstSeenAt: createdAt(),
     lastSeenAt: timestamp('last_seen_at'),
@@ -410,6 +421,15 @@ export const emailTokens = sqliteTable(
     expiresAt: timestamp('expires_at').notNull(),
     /** Set the moment it is accepted, so a link works exactly once. */
     usedAt: timestamp('used_at'),
+    /**
+     * Wrong guesses so far.
+     *
+     * Only meaningful for the six-digit codes: a link carries 32 random bytes
+     * and nobody guesses those, but a code somebody can type is a code somebody
+     * can try. Counted here rather than in memory, because a counter that lives
+     * in a request is one an attacker resets by making another request.
+     */
+    attempts: integer('attempts').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [

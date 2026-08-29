@@ -1,5 +1,6 @@
 import { buttonClasses } from '@core/ui';
 import Link from 'next/link';
+import { InstallButton } from './install-button';
 import type { ReactNode } from 'react';
 
 /**
@@ -98,6 +99,13 @@ export default function Home() {
           <Link href="/login" className={buttonClasses('ghost')} data-testid="go-login">
             unlock
           </Link>
+          {/*
+            Appears only where the browser says it can install. See the note in
+            the component: a button that does nothing is worse than no button,
+            and on a password manager the first screen is the whole trust
+            budget.
+          */}
+          <InstallButton />
         </div>
 
         <div className="border-line bg-surface mt-10 border p-6 sm:p-8">

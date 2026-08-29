@@ -89,6 +89,9 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     'trusted',
     'created_at',
     'last_seen_at',
+    // SHA-256 of the cookie this device holds, never the cookie. The same
+    // reasoning as `sessions.token_hash`.
+    'token_hash',
   ],
   sessions: [
     'id',
@@ -125,6 +128,8 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     // used — which is already in the audit log.
     'expires_at',
     'used_at',
+    // Wrong guesses at a six-digit code. A count, not a secret.
+    'attempts',
     'created_at',
   ],
 };

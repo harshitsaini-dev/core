@@ -103,3 +103,53 @@ test.describe('landing page', () => {
     expect(headers['x-powered-by']).toBeUndefined();
   });
 });
+
+test.describe('installing it', () => {
+  /*
+   * The button appears only when the browser says the app can be installed.
+   *
+   * Chrome fires `beforeinstallprompt` when a page meets the installability
+   * criteria and is not already installed, so a button that waits for it is a
+   * button that is never a lie. The alternative — a permanent "Install app" —
+   * does nothing on Safari and offers to install something already installed
+   * everywhere else, and on the first screen of a password manager a control
+   * that does nothing is expensive.
+   */
+
+  test('is not offered until the browser offers it', async ({ page }) => {
+    // Playwright's Chromium does not fire the event, which is exactly the case
+    // this asserts: no event, no button.
+    await page.goto('/');
+    await expect(page.getByTestId('install-app')).toHaveCount(0);
+  });
+
+  test('appears when the browser fires the prompt', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const event = new Event('beforeinstallprompt') as Event & {
+        prompt?: () => Promise<void>;
+        userChoice?: Promise<{ outcome: string }>;
+      };
+      event.prompt = () => Promise.resolve();
+      event.userChoice = Promise.resolve({ outcome: 'accepted' });
+      window.dispatchEvent(event);
+    });
+
+    await expect(page.getByTestId('install-app')).toBeVisible();
+  });
+
+  test('goes away once the app is installed', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const event = new Event('beforeinstallprompt') as Event & { prompt?: () => Promise<void> };
+      event.prompt = () => Promise.resolve();
+      window.dispatchEvent(event);
+    });
+    await expect(page.getByTestId('install-app')).toBeVisible();
+
+    await page.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+    await expect(page.getByTestId('install-app')).toHaveCount(0);
+  });
+});
