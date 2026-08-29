@@ -19,21 +19,93 @@ import { buildAccount, uniqueEmail } from '../helpers/account';
 
 const PASSWORD = 'correct-horse-battery-staple-7391';
 
+/** Matches `LOCKOUT_THRESHOLD`, which is the login bucket's capacity. */
+const LOCKOUT_ATTEMPTS = 5;
+
+/**
+ * A well-formed auth key that is simply wrong.
+ *
+ * Thirty-two zero bytes. The earlier value here was a sentence, which passed
+ * the schema's base64url *alphabet* check and then failed to decode — and an
+ * undecodable key used to reach the route as an exception and come back as a
+ * 500 rather than a refusal.
+ */
+const WRONG_KEY = 'A'.repeat(43);
+
 async function makeAccount(request: APIRequestContext) {
   const account = await buildAccount(uniqueEmail('unlock'), PASSWORD);
   expect((await request.post('/api/auth/signup', { data: account.payload })).status()).toBe(200);
   return account;
 }
 
-/** Ten wrong passwords, which is what locks an account. */
+/**
+ * Enough wrong passwords to lock an account.
+ *
+ * A different caller each time, which is not a trick — it is the shape of the
+ * attack the lockout exists for. The rate limiter refuses one caller after five
+ * attempts a minute and a refusal never reaches the counter, so an attacker
+ * spread across addresses is precisely who can drive an account to its
+ * threshold. Somebody mistyping from one machine meets the limiter instead.
+ *
+ * The first version of this used one caller for all of them, so every attempt
+ * past the fifth came back 429 and the account was never locked at all. The
+ * tests below still passed, because they only compared two responses to each
+ * other.
+ */
 async function lockOut(request: APIRequestContext, email: string): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    await request.post('/api/auth/login', {
-      data: { email, authKey: 'not-the-right-auth-key-at-all' },
-      headers: { 'x-core-caller': `unlock-${email}` },
+  for (let attempt = 0; attempt < LOCKOUT_ATTEMPTS; attempt += 1) {
+    const response = await request.post('/api/auth/login', {
+      data: { email, authKey: WRONG_KEY },
+      headers: { 'x-core-caller': `unlock-${email}-${attempt}` },
     });
+
+    // Anything but a refused password means the account never got there.
+    expect(response.status(), `attempt ${attempt + 1} was not counted`).toBe(401);
   }
 }
+
+test.describe('the lockout itself', () => {
+  test.slow();
+
+  test('a run of failures actually locks the account', async ({ request }) => {
+    /*
+     * The test that was missing, and its absence hid the bug it now covers.
+     *
+     * The threshold was ten while the login limiter allowed five a minute, and
+     * a rate-limited request never reaches the counter — so a single caller
+     * could never drive an account to its threshold and the lockout almost
+     * never fired. Everything built on top of it, the alert and the emailed
+     * link, was unreachable in the same way.
+     *
+     * Asserted by trying the *correct* password afterwards. Nothing else
+     * distinguishes a locked account from the outside, which is deliberate:
+     * login answers the same for a wrong password, an unknown address and a
+     * locked account.
+     */
+    const account = await makeAccount(request);
+    await lockOut(request, account.payload.email);
+
+    const correct = await request.post('/api/auth/login', {
+      data: { email: account.payload.email, authKey: account.payload.authKey },
+      headers: { 'x-core-caller': `locked-${account.payload.email}` },
+    });
+
+    expect(correct.status(), 'the right password was accepted on a locked account').toBe(401);
+  });
+
+  test('an account that has not failed anything still opens', async ({ request }) => {
+    // The other half: the lockout must not be something a fresh account is
+    // already in.
+    const account = await makeAccount(request);
+
+    const correct = await request.post('/api/auth/login', {
+      data: { email: account.payload.email, authKey: account.payload.authKey },
+      headers: { 'x-core-caller': `fresh-${account.payload.email}` },
+    });
+
+    expect(correct.status()).toBe(200);
+  });
+});
 
 test.describe('unlock requests', () => {
   test.slow();

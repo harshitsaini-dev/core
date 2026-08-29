@@ -1,4 +1,6 @@
+import { SIZES } from '@core/shared';
 import { users } from '@core/db';
+import type { Bytes } from '@core/crypto';
 import {
   base64UrlToBytes,
   bytesToBase64Url,
@@ -70,7 +72,21 @@ async function bookkeeping(work: Promise<unknown>): Promise<void> {
  * enumeration oracle for a temporary inconvenience, which is the wrong way
  * round for a product whose entire claim is that the server knows nothing.
  */
-const LOCKOUT_THRESHOLD = 10;
+/**
+ * Failures before an account locks.
+ *
+ * Tied to `LIMITS.login.capacity`, and it has to be: the limiter refuses a
+ * caller after that many attempts in a minute, and a refusal never reaches this
+ * code — so a threshold above the bucket is a threshold a single caller can
+ * never reach. It was ten against a bucket of five, which meant the lockout
+ * fired only for an attacker spread across enough addresses to keep every
+ * bucket alive, and never for anybody else. The feature was there; almost
+ * nothing could trigger it.
+ *
+ * Raising one without the other puts it back in that state, which is why this
+ * reads the limit rather than restating it.
+ */
+const LOCKOUT_THRESHOLD = LIMITS.login.capacity;
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 
 /**
@@ -183,10 +199,29 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     const row = rows[0];
 
-    // Computed whether or not a row was found. Skipping the HMAC for unknown
-    // addresses would make "no such user" measurably cheaper than "wrong
-    // password", which is precisely the distinction this must not expose.
-    const submitted = await deriveAuthVerifier(base64UrlToBytes(input.authKey), pepper);
+    /*
+     * Computed whether or not a row was found. Skipping the HMAC for unknown
+     * addresses would make "no such user" measurably cheaper than "wrong
+     * password", which is precisely the distinction this must not expose.
+     *
+     * Decoded defensively. The schema checks the base64url *alphabet*, and a
+     * string can pass that and still be an impossible length — `encoding.ts`
+     * says so where it throws. Unhandled, that reached here as an exception and
+     * came back as a 500, which both crashes a request that should simply have
+     * failed and hands back a response shape a wrong password never produces.
+     *
+     * A value that cannot be decoded is a value that cannot be the right key,
+     * so it takes the same path as one that is merely wrong: hashed, compared,
+     * refused.
+     */
+    let submittedBytes: Bytes;
+    try {
+      submittedBytes = base64UrlToBytes(input.authKey);
+    } catch {
+      submittedBytes = new Uint8Array(SIZES.key) as Bytes;
+    }
+
+    const submitted = await deriveAuthVerifier(submittedBytes, pepper);
     const submittedEncoded = bytesToBase64Url(submitted);
 
     if (!row) {
