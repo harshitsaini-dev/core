@@ -85,6 +85,9 @@ jobs:
       # once with `wrangler secret put`, and a deploy that could rewrite it
       # could also lose it — which would lock every existing account out
       # permanently, since the verifier cannot be recomputed without it.
+      # A deploy that reports success and serves nothing is the failure worth
+      # catching, so this asks the running instance rather than trusting the
+      # step above.
       - name: Check the deployed instance answers
         run: |
           url="${{ vars.DEPLOY_URL }}"
@@ -92,6 +95,18 @@ jobs:
             echo "No DEPLOY_URL variable set; skipping the check."
             exit 0
           fi
-          code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
-          echo "$url -> $code"
-          test "$code" = "200"
+
+          # A scheme, if the variable was set without one. The first run failed
+          # here on `core.harshitsaini.in` — curl exited 6, could not resolve,
+          # and under `bash -e` that ended the step before the assertion below
+          # ever ran. `|| true` is what makes the comparison the thing that
+          # decides, rather than curl's own exit code.
+          case "$url" in https://*|http://*) ;; *) url="https://$url" ;; esac
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$url" || true)
+          echo "$url -> ${code:-no answer}"
+
+          if [ "$code" != "200" ]; then
+            echo "The deploy succeeded but the instance did not answer with 200."
+            exit 1
+          fi

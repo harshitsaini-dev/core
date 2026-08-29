@@ -18,6 +18,25 @@ compatibility_date = "2026-08-26"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------------------------------------------------------------------------
+# Preview URLs, off.
+#
+# Cloudflare gives every deployment its own permanent public URL unless told
+# not to. For most projects that is a convenience. Here it means every build
+# ever deployed stays reachable by anybody who has the link, bound to the same
+# live D1 — so a bug fixed in one deploy is still being served, against real
+# data, at an address nobody is watching.
+#
+# The first deployment turned these on by default and said so in a warning.
+# ---------------------------------------------------------------------------
+preview_urls = false
+
+# The `*.workers.dev` address stays on for now: it is the only way to reach
+# this instance until a custom domain is pointed at it. Worth turning off once
+# one is, so there is a single origin — two addresses for a password manager is
+# two places for a session cookie to exist and one more thing to imitate.
+workers_dev = true
+
+# ---------------------------------------------------------------------------
 # D1 — the encrypted vault.
 #
 # Every user-data column in this database holds ciphertext. If a query ever
