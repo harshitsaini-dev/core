@@ -3,7 +3,8 @@
 import type { AccountKeys } from '@core/crypto';
 import { Button, Field, Input, Panel } from '@core/ui';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { turnstileEnabled, waitForToken } from '@/lib/client/turnstile';
 import {
   BotCheckFailed,
   DeviceVerificationRequired,
@@ -49,8 +50,11 @@ export default function LoginPage() {
   const [pinDismissed, setPinDismissed] = useState(false);
   // Held here rather than read from the DOM at submit time: a token is
   // single-use, so the form has to know when it no longer holds a good one.
-  const [botToken, setBotToken] = useState<string | null>(null);
   const [botReset, setBotReset] = useState(0);
+  // Read through a ref as well as state: the submit handler is created before
+  // the token arrives, and a closure over the state value would still be null
+  // when it does.
+  const botTokenRef = useRef<string | null>(null);
   const [unlockSent, setUnlockSent] = useState(false);
   // Set when the password was right and this browser is not recognised. The
   // password is kept because the code releases a session and the password is
@@ -94,9 +98,27 @@ export default function LoginPage() {
       setBusy(true);
 
       try {
+        /*
+         * Give the bot check the moment it needs.
+         *
+         * The widget is hidden until it has something to ask, so there is
+         * nothing on screen saying a check is running — and somebody pressing
+         * the button a second after the page loads used to submit without a
+         * token and be told to complete a check they could not see.
+         *
+         * Bounded, because a blocked script means no token is ever coming and
+         * the server fails open for that case. Waiting past that would make a
+         * check designed to get out of the way into the thing in the way.
+         */
+        let token = botTokenRef.current;
+        if (!token && turnstileEnabled()) {
+          setProgress('checking you are human');
+          token = await waitForToken(() => botTokenRef.current);
+        }
+
         let keys;
         try {
-          keys = await login(email, password, setProgress, botToken ?? undefined);
+          keys = await login(email, password, setProgress, token ?? undefined);
         } catch (failure) {
           /*
            * Only an unreachable server is worth falling back for.
@@ -127,25 +149,31 @@ export default function LoginPage() {
 
         enter(keys);
       } catch (cause) {
-        // One message for a wrong password, an unknown address and a failed
-        // unwrap alike. The API refuses to distinguish those, and a UI that
-        // helpfully guessed would hand back the enumeration oracle the server
-        // was built to withhold.
-        // Three different things, and telling them apart matters. A rate
-        // limit is about this caller's request rate rather than the account,
-        // so saying so leaks nothing — and reporting it as "wrong credentials"
-        // told people the one thing that was definitely not true.
         if (cause instanceof DeviceVerificationRequired) {
           // Not a failure. The password was right; the browser is new.
           setNeedsCode(true);
           setError('');
           setBusy(false);
           setProgress('');
-          setBotToken(null);
+          botTokenRef.current = null;
           setBotReset((n) => n + 1);
           return;
         }
 
+        /*
+         * Four outcomes, and only one of them is "your password is wrong".
+         *
+         * A wrong password, an unknown address and a failed unwrap share a
+         * message, because the API refuses to distinguish them and a UI that
+         * helpfully guessed would hand back the enumeration oracle the server
+         * was built to withhold.
+         *
+         * The other two are not about the account at all. A rate limit and an
+         * unfinished bot check describe this request, so saying which one
+         * happened leaks nothing — and calling either of them "wrong
+         * credentials" tells somebody the one thing that is definitely untrue,
+         * which this screen did until today, twice.
+         */
         setError(
           cause instanceof BotCheckFailed
             ? cause.message
@@ -162,11 +190,11 @@ export default function LoginPage() {
         // A used token is spent, whether or not the sign-in worked. Without
         // this the next attempt sends the same one and fails verification in a
         // way that reads as the password being wrong.
-        setBotToken(null);
+        botTokenRef.current = null;
         setBotReset((n) => n + 1);
       }
     },
-    [botToken, busy, email, enter, password],
+    [busy, email, enter, password],
   );
 
   // Rendered instead of the password form, never above it: two credential
@@ -390,7 +418,15 @@ export default function LoginPage() {
             </>
           ) : null}
 
-          <TurnstileGate onToken={setBotToken} resetSignal={botReset} />
+          <TurnstileGate
+            onToken={(token) => {
+              // A ref, not state. Nothing on screen depends on whether a token
+              // is held — the widget draws itself — and the submit handler
+              // needs the current value rather than the one its closure saw.
+              botTokenRef.current = token;
+            }}
+            resetSignal={botReset}
+          />
 
           <Button
             type="submit"

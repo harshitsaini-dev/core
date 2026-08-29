@@ -169,3 +169,35 @@ export async function mountTurnstile(
     api.reset(id);
   };
 }
+
+/**
+ * Wait for a token that is on its way.
+ *
+ * With the widget hidden until it has something to ask, there is nothing on
+ * screen saying a check is running — so somebody who presses the button a
+ * second after the page loads submits without a token and is told to complete
+ * a check they cannot see. That happened.
+ *
+ * Polled rather than wired through a promise the gate hands out, because the
+ * token can arrive, be spent, and arrive again; a one-shot promise would be
+ * resolved once and useless on the second attempt.
+ *
+ * The timeout is the important part. If the script was blocked — an ad
+ * blocker, a filtered network — no token is ever coming, and the server fails
+ * open for exactly that case. Waiting forever would turn a check that is
+ * designed to get out of the way into the thing standing in the way.
+ */
+export async function waitForToken(
+  read: () => string | null,
+  timeoutMs = 8000,
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const token = read();
+    if (token) return token;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return null;
+}
