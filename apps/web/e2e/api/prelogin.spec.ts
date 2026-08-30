@@ -169,6 +169,18 @@ test.describe('prelogin timing', () => {
     // machine `noise` is ~0 and this stays as tight as the old 5 ms bound; on a
     // loaded one it widens honestly. A real leak is systematic and would clear
     // the control's own spread, which is exactly what this refuses to let pass.
+    //
+    // It can still fail under a full parallel run, and the reason is worth
+    // knowing before either panicking or dismissing it. The padding holds the
+    // answer to a fixed duration, which only works while the work fits inside
+    // that duration. With four workers saturating one dev server the lookup
+    // that finds a row can overrun the pad and the difference becomes real —
+    // seen once at 493ms against 360ms with a 46ms control spread.
+    //
+    // That is a statement about this machine under this suite, not about the
+    // deployed handler: run alone it passes, and it was checked three times
+    // before that was written down. If it fails alone, the padding is genuinely
+    // not covering the work any more and that is a finding, not noise.
     expect(
       signal,
       `known ${knownMedian}ms vs unknown ${unknownMedian}ms, control spread ${noise}ms`,
