@@ -42,6 +42,15 @@ test.describe('one-time codes', () => {
     // that never generates a working code.
     await page.addInitScript(() => {
       class FakeDetector {
+        // Asked before anything is offered: the capability check reads the
+        // supported formats rather than trusting that the constructor exists,
+        // because on Windows and Linux desktop Chrome it exists and does not
+        // work. A stub without this is a browser that cannot scan, and the
+        // buttons are correctly not rendered.
+        static async getSupportedFormats(): Promise<string[]> {
+          return ['qr_code'];
+        }
+
         async detect(source: Blob): Promise<{ rawValue: string }[]> {
           return [{ rawValue: await source.text() }];
         }
