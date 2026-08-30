@@ -875,3 +875,71 @@ without reading inside a week, and a dismiss button lets somebody silence the
 reminder while still having no backup — the exact state it exists to catch. A
 stored date in the future is treated as no backup at all, because trusting it
 produces a reminder that never appears again.
+
+## ADR-034 — No Docker image, because it would be a second application
+
+**Status.** Accepted. OSS-02 is cut.
+
+A "single container for VPS self-hosters" sounds like a Dockerfile. It is not.
+
+This app builds through `@opennextjs/cloudflare` into a Worker that runs on
+workerd. There is no `next start` here — an early attempt at one failed with
+`MODULE_NOT_FOUND`, which is recorded in ADR-030. A container would need the
+ordinary Node build instead, and then:
+
+- **D1 replaced.** `createDatabase(env.DB)` is one line, but D1 is SQLite over a
+  Cloudflare binding. In a container it becomes a file or a Postgres server,
+  with its own migration runner and its own connection handling.
+- **KV replaced.** Rate limiting is a token bucket in Workers KV. In a container
+  that is Redis, or a table, with different expiry semantics — and rate limiting
+  that behaves differently is rate limiting nobody has tested.
+- **`CF-Connecting-IP` replaced.** Eleven places read it. Behind Cloudflare it
+  is a header a client cannot forge; behind an arbitrary reverse proxy
+  `X-Forwarded-For` is a header a client *can* forge, and reading it the same
+  way turns per-IP limits into no limits at all.
+- **Turnstile.** Optional already, and off in a container that has no
+  Cloudflare account — so the bot protection is gone too.
+
+That is not a packaging job. It is a second deployment target with a second
+database driver, a second rate-limit store, a different trust boundary at the
+edge, and a second CI job to prove any of it works.
+
+**Decision.** Cut it, rather than commit a Dockerfile that has never been run
+and cannot be proven by anything in CI. An untested Dockerfile in a password
+manager is worse than none: somebody would run it, get a build with unforgeable
+headers now forgeable, and have no way to know.
+
+`docs/self-hosting.md` stays, and is honest about what it describes — a
+Cloudflare deploy with the free tiers this project already runs on.
+
+**Revisit** if there is ever a reason to maintain a Node target, at which point
+the work above is the actual scope and the CI job comes first, not last.
+
+## ADR-035 — No light theme
+
+**Status.** Accepted. UI-13 is cut.
+
+"Inverted terminal" reads like swapping two tokens. The palette is tokenised —
+`--color-bg`, `--color-accent` and the rest live in one `@theme` block — so that
+part is genuinely one edit. The rest is not.
+
+- **The glow is the theme.** `--shadow-glow` is green light bleeding into black.
+  On white it is a smear. Every `text-glow` and `shadow-glow-soft` would need to
+  become something else, and "something else" is a design decision, not a value.
+- **Contrast inverts, not mirrors.** `#00FF41` on black passes; the same green on
+  white is unreadable. A light theme needs its own accent, its own dim, its own
+  muted — a second palette designed against white, not the first one flipped.
+- **The tests assume one.** `theme.spec.ts` asserts pure black, the zero-radius
+  rule and the accent, 22 tests across two viewports. They would each need to
+  know which theme is on, which doubles them and halves what any one of them
+  says.
+- **Four places do not use the tokens at all**, deliberately: `global-error.tsx`
+  renders when the app has failed and cannot depend on its own stylesheet, and
+  the email template renders in clients that never see this CSS.
+
+**Decision.** Cut it. This is a second visual language, and the product has one
+on purpose.
+
+**Revisit** if somebody needs it for a reason the OS cannot already answer —
+and note that `prefers-reduced-motion` is honoured (UI-11) and the contrast on
+black is already above AA, so the accessibility case is not what is missing.

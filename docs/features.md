@@ -154,7 +154,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | UI-10 | True OLED black for battery saving                      | P1    | DONE   |
 | UI-11 | Reduced-motion support                                  | P5    | DONE   |
 | UI-12 | Full keyboard navigation and visible focus rings        | P5    | DONE   |
-| UI-13 | Optional light theme (inverted terminal)                | P6    | TODO   |
+| UI-13 | Optional light theme (inverted terminal)                | P6    | CUT    |
 
 ## SEC — Security Features (user-facing)
 
@@ -206,7 +206,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | ID     | Feature                                                 | Phase | Status |
 | ------ | ------------------------------------------------------- | ----- | ------ |
 | OSS-01 | One-click Deploy to Cloudflare button                   | P5    | DONE   |
-| OSS-02 | Docker single-container option for VPS self-hosters     | P6    | TODO   |
+| OSS-02 | Docker single-container option for VPS self-hosters     | P6    | CUT    |
 | OSS-03 | `.env.example` with every variable documented           | P2    | DONE   |
 | OSS-04 | Automated migrations via `wrangler d1 migrations apply` | P2    | DONE   |
 | OSS-05 | GitHub Actions CI: typecheck, lint, unit, e2e           | P2    | DONE   |
