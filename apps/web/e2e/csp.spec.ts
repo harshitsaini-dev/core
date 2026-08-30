@@ -101,8 +101,36 @@ test.describe('policy shape', () => {
     expect(headers['x-content-type-options']).toBe('nosniff');
     expect(headers['referrer-policy']).toBe('no-referrer');
     expect(headers['cross-origin-opener-policy']).toBe('same-origin');
-    expect(headers['permissions-policy']).toContain('camera=()');
     expect(headers['x-powered-by']).toBeUndefined();
+  });
+
+  test('allows the camera to this origin and nothing else', async ({ page }) => {
+    /*
+     * This assertion used to read `toContain('camera=()')` — the camera denied
+     * outright — and it passed for as long as QR scanning was broken, which is
+     * how the bug survived. The header was written before there was a scanner
+     * and was never revisited when one arrived, and the test agreed with it.
+     *
+     * A denied permission is invisible from inside the page: `getUserMedia`
+     * rejects exactly as it does when somebody clicks block, so the scan button
+     * opened nothing and could not say why.
+     *
+     * `camera=(self)` and not `camera=*`: an embedded frame has no business
+     * reaching the camera through this document.
+     */
+    const response = await page.goto('/');
+    const policy = response?.headers()['permissions-policy'] ?? '';
+
+    expect(policy).toContain('camera=(self)');
+    expect(policy).not.toContain('camera=()');
+    expect(policy).not.toContain('camera=*');
+
+    // The others stay shut. A vault is a poor place to leave these open to
+    // injected script, and widening one of them is exactly the kind of change
+    // that rides along unnoticed with a fix like this.
+    for (const denied of ['microphone=()', 'geolocation=()', 'payment=()', 'usb=()']) {
+      expect(policy, denied).toContain(denied);
+    }
   });
 });
 

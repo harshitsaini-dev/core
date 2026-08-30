@@ -17,6 +17,13 @@ import type { Scanner } from '@/lib/client/qr';
  * Nothing leaves the page. The frame and the file are decoded here and dropped,
  * because a photograph of a QR code for a 2FA secret is a 2FA secret.
  */
+/**
+ * Said in one place, because it is shown from two: before anything is tried,
+ * and after a browser that claimed it could decode turned out not to.
+ */
+const UNSUPPORTED =
+  'This browser cannot read QR codes — Safari and Firefox have no decoder, and Chrome on Windows and Linux only pretends to. Paste the code instead; it works the same.';
+
 export function ScanQr({
   onScanned,
   label = 'scan a qr code',
@@ -28,6 +35,10 @@ export function ScanQr({
   const scanner = useRef<Scanner | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
+  // `null` while the answer is still being fetched. Rendering the buttons
+  // optimistically and withdrawing them a frame later is worse than a moment
+  // with nothing in it.
+  const [canScan, setCanScan] = useState<boolean | null>(null);
 
   const close = useCallback(() => {
     scanner.current?.stop();
@@ -39,6 +50,16 @@ export function ScanQr({
   // pressed. A stream left running behind a closed panel is a camera light
   // somebody notices an hour later and cannot explain.
   useEffect(() => () => scanner.current?.stop(), []);
+
+  useEffect(() => {
+    let live = true;
+    void qrScanningPossible().then((possible) => {
+      if (live) setCanScan(possible);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   async function start(): Promise<void> {
     setError('');
@@ -55,24 +76,40 @@ export function ScanQr({
       started.video.className = 'border-line w-full border';
     } catch {
       setOpen(false);
-      setError('Could not open the camera. Use an image, or paste the code instead.');
+      // Deliberately does not guess which. A refused permission, a camera
+      // another app is holding, and a browser policy that blocked it all arrive
+      // here as the same rejection, and naming the wrong one sends somebody to
+      // change a setting that was never the problem.
+      setError(
+        'Could not open the camera — it may be in use, or permission was refused. Choose an image instead, or paste the code.',
+      );
     }
   }
 
   async function fromFile(file: File): Promise<void> {
     setError('');
-    const value = await readQrFromFile(file);
+    const scan = await readQrFromFile(file);
 
-    if (value) onScanned(value);
-    else setError('No QR code found in that image.');
+    if (scan.status === 'found') {
+      onScanned(scan.value);
+      return;
+    }
+
+    setError(
+      scan.status === 'none'
+        ? 'No QR code found in that image. A screenshot of the whole screen usually works better than a photograph.'
+        : UNSUPPORTED,
+    );
+    setCanScan(false);
   }
 
-  if (!qrScanningPossible()) {
+  if (canScan === null) return null;
+
+  if (!canScan) {
     return (
       <p className="text-muted font-mono text-xs leading-relaxed" data-testid="qr-unsupported">
         <span aria-hidden="true">&gt; </span>
-        This browser cannot read QR codes. Paste the code the site shows under &quot;can&apos;t scan
-        the code?&quot; instead — it works the same.
+        {UNSUPPORTED}
       </p>
     );
   }

@@ -144,6 +144,41 @@ chain attack on a build-time dependency remains a real risk for any web app.
 
 ---
 
+### Two surfaces that deserve naming
+
+**Attachments.** The file body is encrypted in the browser under a key generated
+for that one file, which is then wrapped by the Account Key. What R2 holds is
+ciphertext under a random object name; what D1 holds beside it is a wrapped key,
+an encrypted filename, an encrypted MIME type and a size. The operator has the
+same nothing they have for a vault item.
+
+The size is in the clear, deliberately: a quota has to be enforced by something
+that cannot read the file, and anybody counting bytes on the wire has it anyway.
+So an operator can see that an account stores four files and roughly how large
+each one is. That is the whole of what leaks.
+
+**Share links, which are different in kind.** Everything else in Core is
+encrypted so that only you can read it. A share link exists to let somebody else
+read one thing, so it steps outside that property on purpose, and it is worth
+being exact about where it lands.
+
+The link is `/s/<token>#<key>`. The token reaches the server, which stores only
+its SHA-256; the key never leaves a browser, because no browser sends the part
+after a `#`. So the operator holds a ciphertext they cannot open — the zero-
+knowledge property survives intact on their side.
+
+What changes is the threat model around the *link itself*. Anyone holding the
+whole link can open the secret once. It is therefore exactly as sensitive as the
+password inside it, and should travel the way that password would. Core narrows
+the window rather than pretending it is closed: one view, one day, no extension,
+and the row is deleted rather than marked spent. Opening is a `POST` behind a
+click, so a chat client's preview crawler cannot consume the view before the
+recipient sees it.
+
+What Core cannot do is know who opened it. If a link is intercepted in transit,
+the recipient finds it already spent — which is the alarm, and the only one
+available.
+
 ## 3. Cryptography summary
 
 | Purpose            | Primitive                                            |

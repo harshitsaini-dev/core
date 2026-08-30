@@ -28,6 +28,32 @@ numbers as ordering, not as a contract.
 
 ---
 
+## What actually happened
+
+Everything above shipped between **26 and 30 August 2026** — five days against a
+nine-week plan. The timeline is left in place because it is a record of what was
+believed at the start, and the gap is the interesting part of it.
+
+Two things the estimate got wrong in opposite directions. Building the features
+took far less time than nine weeks, because the design decisions were made once
+and written down rather than re-argued. And the hardening did expand exactly as
+predicted, just inside days rather than weeks: the rate limiter, the lockout,
+the timing padding and the CSP each took longer than the feature they protected.
+
+What the plan did not have a row for, and what took the largest single share of
+the time, was **finding out that something marked done did not work**. The
+account lockout could never fire. The generator's keyboard shortcuts had been
+ticked off while unreachable. A service worker served stale code behind a
+comment claiming it could not. Several tests passed against deliberately broken
+code and had to be rewritten until they failed. Those are recorded in
+[`decisions.md`](decisions.md) rather than smoothed over, because the honest
+version of this timeline is that writing the feature was never the slow part.
+
+Three planned features were cut rather than shipped half-built: a light theme, a
+Docker image, and a Lighthouse CI job. Each has an ADR saying why.
+
+---
+
 ## Milestones
 
 ### M0 — Repository live
@@ -62,6 +88,10 @@ _Signal: no loose `.env` files in the projects folder outside of git ignores._
 
 Deployed at `core.harshitsaini.in`, self-hosting guide verified from a clean
 fork, security headers grade A, tagged release.
+
+_Reached 30 August 2026, with one caveat stated rather than quietly dropped: the
+self-hosting guide has not been run from a clean fork by anyone other than its
+author, so "verified" means verified against this account and no other._
 
 ---
 

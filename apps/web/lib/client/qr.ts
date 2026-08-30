@@ -29,12 +29,48 @@ interface BarcodeDetectorApi {
 
 declare global {
   interface Window {
-    BarcodeDetector?: new (options?: { formats?: string[] }) => BarcodeDetectorApi;
+    BarcodeDetector?: {
+      new (options?: { formats?: string[] }): BarcodeDetectorApi;
+      getSupportedFormats: () => Promise<string[]>;
+    };
   }
 }
 
-export function qrScanningPossible(): boolean {
-  return typeof window !== 'undefined' && typeof window.BarcodeDetector === 'function';
+/**
+ * Whether this browser can actually decode a QR code.
+ *
+ * The obvious check is `typeof window.BarcodeDetector === 'function'`, and that
+ * is what this was. It is wrong, and wrong in the worst direction: on Windows
+ * and Linux desktop Chrome the constructor exists while the platform service
+ * behind it does not, so the check passed, the buttons rendered, the camera
+ * opened onto nothing and a chosen image reported "no QR code found" — which
+ * reads as a bad photograph rather than a browser that was never going to
+ * work.
+ *
+ * `getSupportedFormats` is the question actually worth asking, and it is a
+ * promise, which is why the shortcut was tempting. The answer does not change
+ * during a page's life, so it is asked once and remembered.
+ */
+let supported: Promise<boolean> | null = null;
+
+export function qrScanningPossible(): Promise<boolean> {
+  supported ??= (async () => {
+    if (typeof window === 'undefined') return false;
+
+    const Detector = window.BarcodeDetector;
+    if (typeof Detector !== 'function') return false;
+
+    try {
+      const formats = await Detector.getSupportedFormats();
+      return formats.includes('qr_code');
+    } catch {
+      // Present but unusable. Same answer as absent, from the point of view of
+      // somebody holding a phone with a QR code on it.
+      return false;
+    }
+  })();
+
+  return supported;
 }
 
 function detector(): BarcodeDetectorApi {
@@ -43,13 +79,28 @@ function detector(): BarcodeDetectorApi {
   return new Detector({ formats: ['qr_code'] });
 }
 
-/** Read a QR code out of a chosen image. */
-export async function readQrFromFile(file: Blob): Promise<string | null> {
+export type FileScan =
+  | { readonly status: 'found'; readonly value: string }
+  | { readonly status: 'none' }
+  | { readonly status: 'unsupported' };
+
+/**
+ * Read a QR code out of a chosen image.
+ *
+ * Three outcomes and not two. "Nothing in this image" and "this browser cannot
+ * look" are different problems with different next steps, and collapsing them
+ * into `null` sent people back to take a better photograph of a code their
+ * browser was never going to read.
+ */
+export async function readQrFromFile(file: Blob): Promise<FileScan> {
+  if (!(await qrScanningPossible())) return { status: 'unsupported' };
+
   try {
     const found = await detector().detect(file);
-    return found[0]?.rawValue ?? null;
+    const value = found[0]?.rawValue;
+    return value === undefined ? { status: 'none' } : { status: 'found', value };
   } catch {
-    return null;
+    return { status: 'unsupported' };
   }
 }
 

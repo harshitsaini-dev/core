@@ -2,7 +2,7 @@
 
 import { parseGoogleMigration } from '@core/crypto';
 import type { MigratedAccount } from '@core/crypto';
-import { Button } from '@core/ui';
+import { Button, Input } from '@core/ui';
 import { useState } from 'react';
 import { useItems } from '@/lib/client/items-store';
 import { toast } from '@/lib/client/toast-store';
@@ -29,6 +29,7 @@ export function GoogleImport({ onDone }: { readonly onDone: () => void }) {
   const save = useItems((store) => store.save);
 
   const [found, setFound] = useState<readonly MigratedAccount[]>([]);
+  const [pasted, setPasted] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -102,6 +103,46 @@ export function GoogleImport({ onDone }: { readonly onDone: () => void }) {
       </p>
 
       <ScanQr onScanned={onScanned} label="scan the export code" />
+
+      {/*
+        The way in when scanning is not available at all, which is most desktop
+        browsers. Without it this screen was a dead end on any machine that
+        could not decode: the item form has always taken a pasted `otpauth://`
+        link, but Google's export is a different scheme and had nowhere to go.
+
+        The realistic route is still a phone — Chrome on Android decodes, so
+        opening Core there and scanning is fewer steps than extracting this
+        text. Said below rather than left to be worked out.
+      */}
+      <form
+        className="mt-4 flex flex-wrap items-center gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onScanned(pasted.trim());
+          setPasted('');
+        }}
+      >
+        <Input
+          value={pasted}
+          onChange={(event) => setPasted(event.target.value)}
+          placeholder="otpauth-migration://offline?data=..."
+          aria-label="paste the export link"
+          autoComplete="off"
+          spellCheck={false}
+          className="min-w-0 flex-1"
+          data-testid="google-paste"
+        />
+        <Button type="submit" disabled={pasted.trim() === ''} data-testid="google-paste-read">
+          read it
+        </Button>
+      </form>
+
+      <p className="text-muted mt-3 font-mono text-xs leading-relaxed">
+        <span aria-hidden="true">&gt; </span>
+        If this browser cannot scan, open Core on an Android phone and scan there — the codes land
+        in the same vault. Pasting the <code>otpauth-migration://</code> link works too, if you have
+        a way to read one.
+      </p>
 
       {error !== '' ? (
         <p role="alert" className="text-danger mt-4 font-mono text-xs" data-testid="google-error">

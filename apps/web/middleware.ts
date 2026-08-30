@@ -130,9 +130,22 @@ export function middleware(request: NextRequest): NextResponse {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set(
     'Permissions-Policy',
-    // Nothing here needs a camera, a microphone or a location, and a vault is
-    // a poor place to leave those available to injected script.
-    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+    /*
+     * The camera is allowed to this origin and to nothing else.
+     *
+     * It was `camera=()` — denied outright — and the comment here said nothing
+     * needed one. That stopped being true the moment QR scanning was added and
+     * the header was not revisited, so the scan button opened nothing and said
+     * nothing about why. A denied permission is invisible from inside the page:
+     * `getUserMedia` rejects the same way it does when somebody clicks block.
+     *
+     * `self` and not `*`: an embedded frame has no business reaching the camera
+     * through this document, and nothing here embeds anything anyway.
+     *
+     * The rest stay denied. A vault is a poor place to leave a microphone or a
+     * location available to injected script.
+     */
+    'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
   );
 
   // Isolates this origin from other windows, so a page that opens Core cannot

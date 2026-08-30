@@ -28,6 +28,10 @@ const BATCH_ONE_AGAIN =
 async function stubDetector(page: Page): Promise<void> {
   await page.addInitScript(() => {
     class FakeDetector {
+      static async getSupportedFormats(): Promise<string[]> {
+        return ['qr_code'];
+      }
+
       async detect(source: Blob): Promise<{ rawValue: string }[]> {
         const text = await source.text();
         return text.startsWith('otpauth') ? [{ rawValue: text }] : [];
@@ -35,6 +39,29 @@ async function stubDetector(page: Page): Promise<void> {
     }
 
     Object.defineProperty(window, 'BarcodeDetector', { value: FakeDetector, writable: true });
+  });
+}
+
+/**
+ * A browser that has the constructor and cannot decode.
+ *
+ * Chrome on Windows and Linux, which is what shipped the bug this replaces: the
+ * old check saw a function and rendered buttons that opened a camera onto
+ * nothing.
+ */
+async function stubBrokenDetector(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    class BrokenDetector {
+      static async getSupportedFormats(): Promise<string[]> {
+        return [];
+      }
+
+      async detect(): Promise<{ rawValue: string }[]> {
+        throw new Error('Barcode detection service unavailable');
+      }
+    }
+
+    Object.defineProperty(window, 'BarcodeDetector', { value: BrokenDetector, writable: true });
   });
 }
 
@@ -136,5 +163,52 @@ test.describe('google authenticator import', () => {
 
     await expect(page.getByTestId('google-error')).toContainText('Transfer accounts');
     await expect(page.getByTestId('google-preview')).toHaveCount(0);
+  });
+});
+
+test.describe('when this browser cannot decode', () => {
+  test.slow();
+
+  test('says so instead of offering a scan that cannot work', async ({ page }) => {
+    // Chrome on Windows and Linux exposes `BarcodeDetector` and cannot use it.
+    // The old check tested for the constructor, so it rendered a scan button
+    // that opened the camera onto nothing and a file picker that reported "no
+    // QR code found" — which reads as a bad photograph.
+    await stubBrokenDetector(page);
+    await openVault(page, 'gauth-no-decoder');
+    await openImport(page);
+
+    await expect(page.getByTestId('qr-unsupported')).toBeVisible();
+    await expect(page.getByTestId('scan-start')).toHaveCount(0);
+    await expect(page.getByTestId('scan-file')).toHaveCount(0);
+  });
+
+  test('still has a way in', async ({ page }) => {
+    // Without this the screen is a dead end on every desktop browser: the item
+    // form takes a pasted otpauth:// link, but Google's export is a different
+    // scheme and had nowhere to go.
+    await stubBrokenDetector(page);
+    await openVault(page, 'gauth-paste');
+    await openImport(page);
+
+    await page.getByTestId('google-paste').fill(BATCH_ONE);
+    await page.getByTestId('google-paste-read').click();
+
+    await expect(page.getByTestId('google-summary')).toContainText('1 code(s) to import');
+    await page.getByTestId('google-run').click();
+    await expect(page.getByTestId('item-list')).toContainText('GitHub', { timeout: 30_000 });
+  });
+
+  test('a pasted link that is not an export says which mistake it was', async ({ page }) => {
+    await stubBrokenDetector(page);
+    await openVault(page, 'gauth-paste-wrong');
+    await openImport(page);
+
+    await page
+      .getByTestId('google-paste')
+      .fill('otpauth://totp/GitHub:kaya?secret=JBSWY3DPEHPK3PXP');
+    await page.getByTestId('google-paste-read').click();
+
+    await expect(page.getByTestId('google-error')).toContainText('Transfer accounts');
   });
 });
