@@ -986,3 +986,49 @@ apart would make this an oracle for whether a guessed token was ever real.
 **The link is shown once and not stored.** A list of live shares would be a list
 of keys, which would put the readable secret back on the device and, through
 sync, back on the server.
+
+## ADR-037 — An attachment is encrypted under its own key
+
+**Status.** Accepted.
+
+The obvious design is to encrypt a file under the Account Key, the way item
+contents are. This does something slightly different: a fresh AES-256 key per
+file, used on the body, then wrapped by the Account Key and stored beside the
+row.
+
+Two reasons.
+
+**One leaked object is one leaked file.** R2 objects are the part of this system
+most likely to be handled by something else — a lifecycle rule, a backup, a
+misconfigured bucket policy. A per-file key bounds what any one of them costs.
+
+**Listing stays cheap.** The wrapped key is 60-odd bytes and comes down with the
+row, so a list of ten attachments is one request. The bodies stay in R2 until
+somebody opens one.
+
+**What the operator holds.** This is the question people actually ask, so it is
+worth stating exactly: an R2 object under a random key containing
+`v1.<iv>.<ciphertext>`, a wrapped key that needs the Account Key to open, an
+encrypted filename, an encrypted MIME type, and a size. Not the contents, not
+the name, not the type. Someone with the database and the bucket and root on the
+machine has the same nothing as someone with neither, because the Account Key is
+derived from a master password that never leaves a browser.
+
+There is a test for that sentence rather than only the sentence. It uploads a
+file with a marker in its name and contents, then walks `.wrangler/state` —
+which is miniflare's R2 objects and D1 database, the same two things a
+Cloudflare account holds — and searches every byte of every file. Deleting the
+body encryption makes it fail and names the blob it found the plaintext in.
+
+**Size is in the clear**, deliberately. The quota has to be enforced by
+something that cannot read the file, and R2 bills on it. Anybody counting bytes
+on the wire has it already.
+
+**The row has no `user_id`.** An attachment belongs to an item and the item
+knows whose it is, so every check joins through that rather than trusting a
+denormalised copy — a copy is a thing that can disagree with the truth, and here
+the disagreement is somebody reading somebody else's file.
+
+**50 MB per account.** Not about cost: R2's free tier is 10 GB. It is about a
+bucket nobody is watching, on a service where an account is free, and where
+without a cap the storage bill is set by whoever signs up.

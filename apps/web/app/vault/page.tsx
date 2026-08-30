@@ -53,6 +53,7 @@ import { pinFavourites, search, sortItems } from '@/lib/client/search';
 import { startAutoLock, useVault } from '@/lib/client/vault-store';
 import { ActivityPanel } from './activity';
 import { CheckupPanel } from './checkup';
+import { Attachments } from './attachments';
 import { GeneratorPanel } from './generator';
 import { GoogleImport } from './google-import';
 import { LockSettingsPanel } from './lock-settings';
@@ -1563,6 +1564,7 @@ function ItemRow({
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const save = useItems((store) => store.save);
 
@@ -1778,6 +1780,15 @@ function ItemRow({
           <Button
             type="button"
             variant="ghost"
+            onClick={() => setFilesOpen((current) => !current)}
+            aria-pressed={filesOpen}
+            data-testid="item-files"
+          >
+            files
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => {
               void remove(item.id);
               toast('Moved to trash.', {
@@ -1821,6 +1832,8 @@ function ItemRow({
       ) : null}
 
       {historyOpen ? <ItemHistory item={item} /> : null}
+
+      {filesOpen ? <Attachments itemId={item.id} /> : null}
 
       {sharing && fields?.password ? (
         <ShareLink

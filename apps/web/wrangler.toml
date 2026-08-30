@@ -62,5 +62,20 @@ migrations_dir = "../../packages/db/migrations"
 binding = "RATE_LIMIT"
 id = "ce6dfdbbd41a4e74af8c90e30360bafe"
 
+# ---------------------------------------------------------------------------
+# Attachments.
+#
+# Every object here is ciphertext under a per-file key, stored under a random
+# name that says nothing about what it is or who it belongs to. The bucket has
+# no public access and no custom domain: a browser reaching an object directly
+# is a browser that did not need a session to reach it.
+#
+# A self-hoster creates their own and replaces the name. R2's free tier covers
+# 10 GB and charges nothing for egress.
+# ---------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "core-attachments"
+
 [observability]
 enabled = true

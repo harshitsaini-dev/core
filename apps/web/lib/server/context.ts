@@ -18,6 +18,8 @@ import type { TurnstileConfig } from './turnstile';
 export interface RequestContext {
   readonly db: Database;
   readonly kv: KVNamespace;
+  /** Object storage for attachments. Ciphertext under random names. */
+  readonly files: R2Bucket;
   readonly pepper: Bytes;
   /**
    * Whether the rate limiter should take its caller identity from a header.
@@ -57,6 +59,7 @@ export function getRequestContext(): RequestContext {
   return {
     db: createDatabase(env.DB),
     kv: env.RATE_LIMIT,
+    files: env.ATTACHMENTS,
     pepper: parsePepper(env.AUTH_PEPPER),
     rateLimitTestMode: env.RATE_LIMIT_TEST_MODE === '1',
     email: { apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL },
