@@ -86,7 +86,29 @@ export default defineConfig({
   forbidOnly: isCI,
 
   timeout: headed ? 120_000 : 60_000,
-  expect: { timeout: headed ? 15_000 : 10_000 },
+
+  /*
+   * Assertions wait twice as long as Playwright's default, for the same reason
+   * the action timeout is generous: what they are waiting on is a single
+   * `next dev` process shared by every worker.
+   *
+   * This was 10s and it was the wrong number, found the hard way. A full run
+   * produced fifty-odd failures spread across unrelated specs — `toHaveURL`
+   * after a `router.push`, an element count after a round trip — none of which
+   * reproduced. Each failing spec passed alone, and `env.spec.ts` passed 39 of
+   * 39 on mobile at four workers when it was the only thing running. What made
+   * them fail was the rest of the suite competing for the same server, and a
+   * ten-second assertion in that state measures the dev server's queue rather
+   * than the application.
+   *
+   * Raising it does not hide a broken navigation: one that never happens still
+   * fails, ten seconds later. The test timeout is 60s, so there is room.
+   *
+   * The alternative was fewer workers. That trades an hour of wall clock for
+   * the same answer, and the config already says the ceiling here is the dev
+   * server rather than the CPU — this machine has sixteen cores.
+   */
+  expect: { timeout: 20_000 },
 
   reporter: isCI
     ? [['github'], ['html', { open: 'never' }]]

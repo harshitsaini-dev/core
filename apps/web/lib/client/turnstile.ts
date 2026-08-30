@@ -138,6 +138,20 @@ export async function mountTurnstile(
    */
   const size = widgetSize(element.getBoundingClientRect().width);
 
+  /*
+   * Clear whatever is in the container before rendering into it.
+   *
+   * Turnstile refuses a second widget in the same element — "Turnstile has
+   * already been rendered in this container. The render attempt was rejected"
+   * — and returns nothing, leaving a caller holding an id that is not one.
+   *
+   * It happens whenever the effect runs twice against the same node, which
+   * React does on purpose in development and which a re-render can do at any
+   * time. Emptying the element first makes the second attempt the only one that
+   * matters, rather than the one that silently does nothing.
+   */
+  element.replaceChildren();
+
   const id = api.render(element, {
     sitekey: key,
     theme: 'dark',
@@ -164,9 +178,41 @@ export async function mountTurnstile(
     'expired-callback': () => onToken(null),
   });
 
+  /*
+   * `render` hands back nothing when it declined the container, so there is no
+   * widget and nothing to reset.
+   *
+   * Not load-bearing, and said so rather than left looking like it is: the
+   * `try` below already swallows what `reset(undefined)` throws, and removing
+   * this line breaks no test. It stays because "there was never a widget" is a
+   * known state rather than an exception, and treating it as one would mean the
+   * ordinary case ran through a catch block.
+   */
+  if (id === undefined || id === null) return () => onToken(null);
+
   return () => {
     onToken(null);
-    api.reset(id);
+
+    /*
+     * `reset` throws, and the throw was killing the whole application.
+     *
+     * Turnstile raises `TurnstileError: Nothing to reset found for provided
+     * container` when the widget is not where it expects — the element has
+     * already been unmounted, or the widget never rendered because the script
+     * refused the domain, or React ran the effect twice in development and the
+     * second render was rejected. Nothing here is exceptional; all of them mean
+     * "there is nothing to reset", which is exactly the state a teardown wants.
+     *
+     * Uncaught, it reached React as an error during an effect and the root
+     * boundary replaced the page with "core could not start". That is how it
+     * was found: intermittent 500 screens in the suite with no matching 500 in
+     * the dev server log, because the server was never involved.
+     */
+    try {
+      api.reset(id);
+    } catch {
+      // Already gone. That is the outcome this function wanted.
+    }
   };
 }
 

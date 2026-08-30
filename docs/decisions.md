@@ -1032,3 +1032,49 @@ the disagreement is somebody reading somebody else's file.
 **50 MB per account.** Not about cost: R2's free tier is 10 GB. It is about a
 bucket nobody is watching, on a service where an account is free, and where
 without a cap the storage bill is set by whoever signs up.
+
+## ADR-038 — A capability is something you ask about, not something you look for
+
+**Status.** Accepted. Written after shipping the opposite.
+
+QR scanning went out with this check:
+
+```ts
+typeof window.BarcodeDetector === 'function';
+```
+
+It is wrong on Chrome for Windows and Linux, where the constructor exists and
+the platform service behind it does not. So the check passed, the scan buttons
+rendered, the camera opened onto nothing, and a chosen image came back with "no
+QR code found in that image" — which reads as a bad photograph rather than as a
+browser that was never going to work. Reported by the first person to use it.
+
+The real question is `BarcodeDetector.getSupportedFormats()`, which returns a
+promise. That is the whole reason the shortcut was tempting: a synchronous
+`typeof` fits in a render and an async answer does not. The component holds a
+third state now — unknown, while the answer is in flight — and renders nothing
+until it has one, because offering buttons and withdrawing them a frame later is
+worse than a moment with nothing in it.
+
+**Decision.** Feature detection asks the API whether it can do the thing. The
+presence of a symbol is not an answer.
+
+Two things came out of the same report and belong with it.
+
+**A permission that is denied is invisible from inside the page.** The
+`Permissions-Policy` header said `camera=()`, with a comment explaining that
+nothing here needed a camera. That was true when it was written and stopped
+being true when the scanner was added; the header was not revisited.
+`getUserMedia` rejects for a header-level denial exactly as it does when
+somebody clicks block, so there was nothing to distinguish them and nothing to
+say.
+
+**A test was holding it in place.** `csp.spec.ts` asserted
+`toContain('camera=()')` and passed for as long as the feature was broken. A
+test that agrees with a stale header is not a check on it.
+
+**Corollary, and the reason this is written down rather than fixed quietly.**
+Every fallback in this codebase is now suspect in the same way: it is only ever
+exercised when the fallback path is taken, and the branch that decides is the
+one least likely to be tested. Where a capability gates a feature, there is a
+test that stubs the *broken* browser, not only the working one.
