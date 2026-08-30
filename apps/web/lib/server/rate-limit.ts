@@ -55,6 +55,15 @@ export const LIMITS = {
   prelogin: { capacity: 20, refillPerSecond: 20 / 60 },
   recover: { capacity: 3, refillPerSecond: 3 / 900 },
   sync: { capacity: 100, refillPerSecond: 100 / 60 },
+  /*
+   * Shares, both making them and opening them.
+   *
+   * Tighter than sync because the open side takes no session: a token is 32
+   * random bytes and nobody guesses those, but the limit is what stops somebody
+   * finding that out by trying, and it is the only thing standing in front of
+   * this route at all.
+   */
+  share: { capacity: 20, refillPerSecond: 20 / 300 },
 } as const satisfies Record<string, Limit>;
 
 export type Endpoint = keyof typeof LIMITS;

@@ -943,3 +943,46 @@ on purpose.
 **Revisit** if somebody needs it for a reason the OS cannot already answer —
 and note that `prefers-reduced-motion` is honoured (UI-11) and the contrast on
 black is already above AA, so the accessibility case is not what is missing.
+
+## ADR-036 — A share link keeps its key after the `#`
+
+**Status.** Accepted.
+
+Sharing a password with somebody who has no account here needs the secret to
+travel. The question is what the server sees while it does.
+
+**Decision.** `https://.../s/<token>#<key>`.
+
+The token goes to the server, which stores only its SHA-256 and looks the row up
+by that — the same shape as the email tokens, so a database dump yields no
+working links. The key is after the `#`, and no browser has ever sent a fragment
+in a request. So the server holds a ciphertext, an identifier for it, and
+nothing that would open it: not in the database, not in a request log, not in a
+CDN cache, not in a `Referer` header.
+
+A fresh 256-bit key per share rather than one derived from the vault. Deriving
+would tie every share ever made to the vault key, and the point is to hand over
+exactly one thing.
+
+**`GET` looks, `POST` spends.** This is the part that is easy to get wrong.
+A one-time link pasted into a chat is fetched by the preview bot before the
+recipient ever sees it — Slack, WhatsApp and iMessage all do — and a link that
+burned on `GET` would give its only view to a crawler and show the person it was
+meant for an empty page with no way to tell why.
+
+**The count is checked and incremented in one statement.** Reading the row and
+then writing the count is a race that two requests a millisecond apart win, and
+"one-time" that becomes twice under load is not a property. The row is then
+deleted rather than marked spent: a row left behind is a ciphertext somebody can
+still steal, and its only remaining purpose is to record that a share existed.
+
+**One day, with no option to extend.** A share is a password being handed over
+now. Anything still valid next week is a second copy of the secret living
+somewhere with no master password in front of it.
+
+**Never existed, already opened and expired all answer the same.** Telling them
+apart would make this an oracle for whether a guessed token was ever real.
+
+**The link is shown once and not stored.** A list of live shares would be a list
+of keys, which would put the readable secret back on the device and, through
+sync, back on the server.

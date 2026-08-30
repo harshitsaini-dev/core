@@ -39,6 +39,7 @@ import { activeProjects, useEnv } from '@/lib/client/env-store';
 import { usePrivacy } from '@/lib/client/privacy-store';
 import { readSavedViews, writeSavedViews } from '@/lib/client/offline-db';
 import type { SavedView } from '@/lib/client/offline-db';
+import { sealShare } from '@/lib/client/share';
 import { toast } from '@/lib/client/toast-store';
 import { useView } from '@/lib/client/view-store';
 import {
@@ -1561,6 +1562,7 @@ function ItemRow({
   const restore = useItems((store) => store.restore);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const save = useItems((store) => store.save);
 
@@ -1763,6 +1765,16 @@ function ItemRow({
           >
             history
           </Button>
+          {fields?.password ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setSharing(true)}
+              data-testid="share-item"
+            >
+              share
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -1809,6 +1821,14 @@ function ItemRow({
       ) : null}
 
       {historyOpen ? <ItemHistory item={item} /> : null}
+
+      {sharing && fields?.password ? (
+        <ShareLink
+          secret={fields.password}
+          title={item.data.fields.title}
+          onClose={() => setSharing(false)}
+        />
+      ) : null}
 
       {fields?.password ? (
         <p className="text-muted mt-2 font-mono text-[10px]" data-testid="item-password-age">
@@ -2477,6 +2497,121 @@ function LinkedProject({ projectId }: { projectId: string }) {
  * Restoring is an ordinary save, so the version it replaces is recorded in turn
  * and going back is undoable.
  */
+/**
+ * Handing one password to somebody who does not have an account here.
+ *
+ * The link is `/s/<token>#<key>`. The token goes to the server and identifies a
+ * row; the key never leaves the browser, because no browser sends the part
+ * after a `#`. So the server stores a ciphertext it cannot read and can only
+ * say that one exists.
+ *
+ * The link is shown once, here, and is not stored. Keeping a list of live
+ * shares would mean keeping the keys, which would put the readable secret back
+ * on the device and, through sync, back on the server.
+ */
+function ShareLink({
+  secret,
+  title,
+  onClose,
+}: {
+  secret: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function make(): Promise<void> {
+    setBusy(true);
+    setError('');
+    try {
+      const sealed = await sealShare(secret);
+
+      const response = await fetch('/api/vault/share', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ payload: sealed.payload }),
+      });
+
+      if (!response.ok) {
+        setError(
+          response.status === 429
+            ? 'Too many links made just now. Wait a few minutes.'
+            : 'The link could not be made.',
+        );
+        return;
+      }
+
+      const body = (await response.json()) as { token: string };
+      setLink(`${location.origin}/s/${body.token}#${sealed.key}`);
+    } catch {
+      setError('The link could not be made.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-line mt-3 border p-4" data-testid="share-panel">
+      <p className="text-muted font-mono text-xs leading-relaxed">
+        <span aria-hidden="true">&gt; </span>A link that opens the password for{' '}
+        <span className="text-fg">{title}</span> exactly once, and stops working after a day.
+        Whoever holds the link can open it, so send it the way you would send the password itself.
+      </p>
+
+      {link === '' ? (
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Button onClick={() => void make()} disabled={busy} data-testid="share-create">
+            {busy ? 'making...' : 'make a link'}
+          </Button>
+          <Button variant="ghost" onClick={onClose} data-testid="share-cancel">
+            cancel
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p
+            className="border-line text-fg secret mt-4 border p-3 font-mono text-xs break-all"
+            data-testid="share-link"
+          >
+            {link}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button
+              onClick={() => {
+                void copySecret(link).then((copied) => {
+                  toast(copied ? 'Link copied.' : 'The browser refused clipboard access.', {
+                    ...(copied ? {} : { tone: 'danger' as const }),
+                  });
+                });
+              }}
+              data-testid="share-copy-link"
+            >
+              copy the link
+            </Button>
+            <Button variant="ghost" onClick={onClose} data-testid="share-done">
+              done
+            </Button>
+          </div>
+          <p className="text-warning mt-4 font-mono text-xs leading-relaxed">
+            <span aria-hidden="true">! </span>
+            Copy it now. This is not stored anywhere — the key is in the part after the{' '}
+            <code>#</code>, and closing this is the last time it exists.
+          </p>
+        </>
+      )}
+
+      {error !== '' ? (
+        <p role="alert" className="text-danger mt-4 font-mono text-xs" data-testid="share-error">
+          <span aria-hidden="true">! </span>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ItemHistory({ item }: { item: DecryptedItem }) {
   const keys = useVault((vault) => vault.keys);
   const recent = useItems((store) => store.recentVersions[item.id]);

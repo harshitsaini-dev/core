@@ -169,7 +169,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | SEC-07 | Emergency Kit PDF with recovery key                    | P2    | DONE   |
 | SEC-08 | Master-password change with Account Key re-wrap        | P5    | DONE   |
 | SEC-09 | Suspicious-activity email alerts                       | P5    | DONE   |
-| SEC-10 | One-time self-destructing share links                  | P6    | TODO   |
+| SEC-10 | One-time self-destructing share links                  | P6    | DONE   |
 | SEC-11 | Auto-lock on tab blur (optional)                       | P3    | DONE   |
 | SEC-12 | Local security self-check page (CSP, HTTPS, SW status) | P5    | WIP    |
 
