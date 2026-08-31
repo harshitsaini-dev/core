@@ -46,6 +46,7 @@ P5 Hardening+Deploy · P6 Post-v1
 | AUTH-10 | Emailed link that lifts a lockout — never a sign-in          | P5    | DONE   |
 | AUTH-11 | New-device sign-in approval by emailed code                  | P5    | DONE   |
 | AUTH-12 | Concurrent session limit with oldest-session eviction        | P5    | DONE   |
+| AUTH-13 | Emailed code proves the address before the account exists   | P5    | DONE   |
 | AUTH-13 | Open-session list with individual revoke                     | P5    | DONE   |
 | AUTH-14 | Inactivity auto-lock with configurable timeout               | P3    | DONE   |
 

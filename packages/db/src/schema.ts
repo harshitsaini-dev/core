@@ -439,6 +439,50 @@ export const emailTokens = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Proving an address before an account exists
+// ---------------------------------------------------------------------------
+
+/**
+ * A pending signup verification.
+ *
+ * Separate from `email_tokens`, which hangs off a user row. The whole point of
+ * this one is that there is no user yet: an account is created only after
+ * somebody has shown they can read mail at the address, so that a vault cannot
+ * be created on an address its owner does not control.
+ *
+ * The address is stored the way it is everywhere else — a blind index the
+ * server can match and cannot read back. Nothing here says which address a
+ * pending code is for.
+ */
+export const signupCodes = sqliteTable(
+  'signup_codes',
+  {
+    id: text('id').primaryKey(),
+
+    /** HMAC of the normalised address, keyed by the server pepper. */
+    emailBlindIndex: text('email_blind_index').notNull(),
+
+    /**
+     * SHA-256 of the six-digit code, never the code.
+     *
+     * The same reasoning as `email_tokens.token_hash`: a database dump must not
+     * hand somebody a working verification for an address they are trying to
+     * take.
+     */
+    codeHash: text('code_hash').notNull(),
+
+    /** Wrong guesses so far. Six digits is a million, and a million is not many. */
+    attempts: integer('attempts').notNull().default(0),
+
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  // One pending code per address: issuing a second replaces the first, so an
+  // address cannot accumulate live codes somebody else is guessing against.
+  (table) => [uniqueIndex('signup_codes_email_idx').on(table.emailBlindIndex)],
+);
+
+// ---------------------------------------------------------------------------
 // Sharing
 // ---------------------------------------------------------------------------
 
@@ -482,3 +526,4 @@ export type Session = typeof sessions.$inferSelect;
 export type Device = typeof devices.$inferSelect;
 export type AuditEvent = typeof auditLog.$inferSelect;
 export type Share = typeof shares.$inferSelect;
+export type SignupCode = typeof signupCodes.$inferSelect;

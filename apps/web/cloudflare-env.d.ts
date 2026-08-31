@@ -12,6 +12,7 @@ interface __BaseEnv_Env {
   TURNSTILE_SECRET_KEY?: string;
   NEXT_PUBLIC_APP_URL: string;
   RATE_LIMIT_TEST_MODE?: string;
+  SIGNUP_CODE_TEST_MODE?: string;
 }
 declare namespace Cloudflare {
   interface Env extends __BaseEnv_Env {}

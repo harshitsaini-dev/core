@@ -29,6 +29,13 @@ export interface RequestContext {
    */
   readonly rateLimitTestMode: boolean;
   /**
+   * Whether the signup-verification test header is honoured.
+   *
+   * Same rules as `rateLimitTestMode`: `.dev.vars` and the CI workflows, and
+   * nowhere else. See `SIGNUP_TEST_HEADER`.
+   */
+  readonly signupCodeTestMode: boolean;
+  /**
    * How to send email, if this instance can.
    *
    * Optional by design. An instance without it is a working instance with three
@@ -62,6 +69,7 @@ export function getRequestContext(): RequestContext {
     files: env.ATTACHMENTS,
     pepper: parsePepper(env.AUTH_PEPPER),
     rateLimitTestMode: env.RATE_LIMIT_TEST_MODE === '1',
+    signupCodeTestMode: env.SIGNUP_CODE_TEST_MODE === '1',
     email: { apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL },
     turnstile: { secretKey: env.TURNSTILE_SECRET_KEY },
   };

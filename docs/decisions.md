@@ -1123,3 +1123,63 @@ immediately.
 **A purge takes the attachment rows and the R2 objects with it.** The blob keys
 are read before anything is deleted, because once the row is gone the key is
 gone and the bytes become unreachable, uncounted and permanent.
+
+## ADR-040 — The address is proved before the account exists
+
+**Status.** Accepted.
+
+Signup took an email and created a vault. The address had to be well-formed and
+nothing else, so a vault could be created on any address at all — including one
+belonging to somebody else.
+
+Two things follow, and the second is worse than the first.
+
+**An address can be taken by somebody who does not own it.** And because signup
+reports success either way — deliberately, so that it cannot be used to test
+whether an address has a vault — the real owner is never told. They come to sign
+up, get the same cheerful answer, and quietly have no account.
+
+**Recovery runs through that address.** There is no password reset here; the
+emailed unlock link is the one thing that survives a lockout. A vault whose
+owner cannot read the mail for it is a vault with no way back at all. Verifying
+the address is not a formality, it is the only thing that makes the recovery
+story true.
+
+**Decision.** `signup/start` sends a six-digit code; `signup` requires it; the
+account is written only after the code is spent. Nothing goes into `users`
+before that.
+
+Details that matter more than they look:
+
+- **The code lives in its own table, not `email_tokens`.** That one hangs off a
+  user row, and the whole point here is that there is no user yet.
+- **The address is a blind index**, as everywhere else. A pending row does not
+  say which address it is for.
+- **An address that already has an account gets no code**, and its owner is
+  emailed to say somebody tried. The signup route has always claimed in a
+  comment that "a real owner of the address finds out via email"; nothing sent
+  that email until now. Only the inbox owner sees it, so it gives away nothing.
+- **One answer for wrong, expired, spent and never-issued.** Distinguishing them
+  would say whether a code is outstanding for an address, which is a question
+  about somebody else's inbox.
+- **Three attempts per code.** Six digits is a million, and a million is not
+  many when a guess costs one request.
+
+**Where there is no mail provider, there is no code.** An instance that cannot
+send mail cannot verify an address, and refusing every signup there would be a
+working instance nobody can create an account on. Self-hosters who want this
+must configure email — which is now a stronger reason to than the three
+notifications were.
+
+**On the test mode.** The suite has no mail provider on purpose: eight hundred
+signups each making an HTTPS call to somebody else's service is not a suite. So
+verification would have been the one path in this app with no test at all.
+`SIGNUP_CODE_TEST_MODE` makes a header meaningful, and that header makes the
+route behave as if mail were configured and return the code instead of sending
+it. Same shape as the rate limiter's test mode, same rules: the variable lives
+in `.dev.vars` and the CI workflows and nowhere else, and production never reads
+the header.
+
+The rule is two small functions rather than an `if` in a route, and both are
+unit-tested in both directions — because the danger of a flag like this is not
+what it does when it is on, it is being on when nobody meant it to be.

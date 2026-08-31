@@ -8,8 +8,20 @@ import { record } from '@/lib/server/audit';
 import { getRequestContext } from '@/lib/server/context';
 import { verifyTurnstile } from '@/lib/server/turnstile';
 import { checkLimit } from '@/lib/server/rate-limit';
-import { badRequest, botCheckFailed, ok, serverError, tooManyRequests } from '@/lib/server/responses';
+import {
+  badRequest,
+  botCheckFailed,
+  ok,
+  serverError,
+  tooManyRequests,
+} from '@/lib/server/responses';
+import { emailEnabled } from '@/lib/server/email';
 import { emailEncrypt, emailIndex } from '@/lib/server/secrets';
+import {
+  SIGNUP_TEST_HEADER,
+  redeemSignupCode,
+  verificationRequired,
+} from '@/lib/server/signup-codes';
 import { constantTime } from '@/lib/server/timing';
 
 /**
@@ -49,6 +61,19 @@ const envelope = z
 
 const signupSchema = z.object({
   email: z.email().max(320),
+
+  /**
+   * The six digits sent to that address by `signup/start`.
+   *
+   * Optional in the schema and required in the handler, and only when this
+   * instance can send mail. A self-hosted instance with no mail provider has no
+   * way to deliver a code, and refusing every signup there would be a working
+   * instance nobody can create an account on.
+   */
+  code: z
+    .string()
+    .regex(/^[0-9]{6}$/)
+    .optional(),
 
   /** Derived client-side from the master password. Never the password itself. */
   authKey: base64Url.max(128),
@@ -127,6 +152,32 @@ export async function POST(request: NextRequest): Promise<Response> {
       emailIndex(pepper, input.email),
       emailEncrypt(pepper, input.email),
     ]);
+
+    /*
+     * The address has to be proved before an account is written for it.
+     *
+     * Without this a vault could be created on any well-formed address at all.
+     * Two things follow, and the second is worse than the first: somebody takes
+     * an address they do not own, and — because this route reports success
+     * either way to avoid becoming an enumeration oracle — the real owner is
+     * never told, and simply finds their own address unavailable with no
+     * explanation.
+     *
+     * The failure is reported as `created: false`, the same answer an address
+     * that is already taken gets. A caller who never asked for a code learns
+     * nothing they could not have worked out, and a caller guessing codes
+     * learns nothing about whether the address was real.
+     */
+    const required = verificationRequired(
+      emailEnabled(context.email),
+      context.signupCodeTestMode,
+      request.headers.get(SIGNUP_TEST_HEADER),
+    );
+
+    if (required) {
+      if (!input.code) return { created: false };
+      if (!(await redeemSignupCode(db, index, input.code))) return { created: false };
+    }
 
     const existing = await db
       .select({ id: users.id })

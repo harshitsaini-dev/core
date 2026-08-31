@@ -97,11 +97,30 @@ async function postJson(path: string, body: unknown, botToken?: string): Promise
  * Argon2id and then running it costs a second or more on a phone, and a UI that
  * simply freezes reads as broken rather than as careful.
  */
+/**
+ * Ask for a code to be sent to an address.
+ *
+ * Returns whether this instance actually requires one. An instance with no mail
+ * provider cannot send a code and does not ask for one — refusing every signup
+ * there would be a working instance nobody can create an account on.
+ *
+ * The answer is the same whether or not the address already has an account, so
+ * nothing here tells a caller anything about somebody else's inbox.
+ */
+export async function startSignup(email: string, botToken?: string): Promise<boolean> {
+  const response = await postJson('/api/auth/signup/start', { email }, botToken);
+  if (!response.ok) throw new Error('Could not send the code.');
+
+  const body = (await response.json()) as { verificationRequired?: boolean };
+  return body.verificationRequired === true;
+}
+
 export async function signup(
   email: string,
   masterPassword: string,
   onProgress?: (step: string) => void,
   botToken?: string,
+  code?: string,
 ): Promise<SignupResult> {
   onProgress?.('calibrating key derivation');
   const params = await chooseKdfParams();
@@ -120,6 +139,7 @@ export async function signup(
     '/api/auth/signup',
     {
       email,
+      ...(code ? { code } : {}),
       authKey: bytesToBase64Url(authKey),
       kdfSalt: bytesToBase64Url(salt),
       kdfParams: params,

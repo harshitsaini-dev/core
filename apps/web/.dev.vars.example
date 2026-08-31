@@ -49,3 +49,9 @@ TURNSTILE_SECRET_KEY=
 #
 # Never set this in production. There, the header is not read at all.
 RATE_LIMIT_TEST_MODE=1
+
+# Lets the e2e suite exercise signup verification without a mail provider:
+# `/api/auth/signup/start` honours a test header and returns the code instead of
+# mailing it. Local and CI only — production never sets this, and without it the
+# header is never read.
+SIGNUP_CODE_TEST_MODE=1

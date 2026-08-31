@@ -48,6 +48,7 @@ jobs:
             # not limit a request that omits one — so the rate-limit spec gets
             # real buckets and nothing else in the run is throttled.
             echo "RATE_LIMIT_TEST_MODE=1"
+            echo "SIGNUP_CODE_TEST_MODE=1"
           } > apps/web/.dev.vars
 
       - name: Make key derivation cheap for the test run

@@ -105,6 +105,17 @@ const PLAINTEXT_ALLOWED: Record<string, readonly string[]> = {
     'created_at',
   ],
   audit_log: ['id', 'user_id', 'event', 'ip_hash', 'geo_country', 'ua_hash', 'created_at'],
+  signup_codes: [
+    'id',
+    // A blind index of the address, not the address. The server matches it and
+    // cannot read it back.
+    'email_blind_index',
+    // SHA-256 of the six digits, never the digits.
+    'code_hash',
+    'attempts',
+    'expires_at',
+    'created_at',
+  ],
   shares: [
     'id',
     'sender_id',

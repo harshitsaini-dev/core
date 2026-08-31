@@ -144,6 +144,17 @@ chain attack on a build-time dependency remains a real risk for any web app.
 
 ---
 
+**Signup requires the address.** An account is created only after a six-digit
+code sent to the address is returned, so a vault cannot be created on an inbox
+somebody does not control. This matters beyond squatting: the emailed unlock
+link is the only thing that survives a lockout, and there is no password reset,
+so an unverified address would be a vault with no way back.
+
+An instance with no mail provider cannot send a code and therefore does not ask
+for one. That is stated rather than hidden: on such an instance, signup is as
+open as it was before, and the trade is the one a self-hoster makes when they
+skip configuring email.
+
 ### Two surfaces that deserve naming
 
 **Attachments.** The file body is encrypted in the browser under a key generated

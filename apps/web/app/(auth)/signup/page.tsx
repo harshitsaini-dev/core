@@ -3,7 +3,7 @@
 import { Button, Field, Input, Panel, Warning } from '@core/ui';
 import { TurnstileGate } from '../turnstile-gate';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { signup } from '@/lib/client/auth';
+import { signup, startSignup } from '@/lib/client/auth';
 import { MINIMUM_SCORE, estimate } from '@/lib/client/strength';
 import type { Strength } from '@/lib/client/strength';
 import { EmergencyKit } from './emergency-kit';
@@ -23,7 +23,16 @@ import { EmergencyKit } from './emergency-kit';
  *      everything, and a dismissible toast is not consent.
  */
 
-type Stage = 'form' | 'working' | 'kit';
+/**
+ * `code` sits between the form and the work.
+ *
+ * The address is proved before the account is written, so a vault cannot be
+ * created on somebody else's inbox. The password fields stay filled underneath
+ * — asking for them again after a detour to a mail client is how people end up
+ * typing a different master password from the one they meant, in the one place
+ * where that cannot be undone.
+ */
+type Stage = 'form' | 'sending' | 'code' | 'working' | 'kit';
 
 export default function SignupPage() {
   const emailId = useId();
@@ -35,6 +44,7 @@ export default function SignupPage() {
   const [confirm, setConfirm] = useState('');
   const [strength, setStrength] = useState<Strength | null>(null);
   const [stage, setStage] = useState<Stage>('form');
+  const [code, setCode] = useState('');
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [recoveryKey, setRecoveryKey] = useState('');
@@ -80,9 +90,20 @@ export default function SignupPage() {
       if (!canSubmit) return;
 
       setError('');
-      setStage('working');
+      setStage('sending');
 
       try {
+        // The address first. Nothing is derived and nothing is created until
+        // somebody has read the code, so an address that is not yours costs an
+        // email and produces no account.
+        const needsCode = await startSignup(email, botToken ?? undefined);
+
+        if (needsCode) {
+          setStage('code');
+          return;
+        }
+
+        setStage('working');
         const result = await signup(email, password, setProgress, botToken ?? undefined);
         setRecoveryKey(result.recoveryKey);
         setStage('kit');
@@ -103,8 +124,85 @@ export default function SignupPage() {
     [botToken, canSubmit, email, password],
   );
 
+  const onVerify = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    if (code.trim().length !== 6) return;
+
+    setError('');
+    setStage('working');
+
+    try {
+      const result = await signup(email, password, setProgress, undefined, code.trim());
+      setRecoveryKey(result.recoveryKey);
+      setStage('kit');
+    } catch {
+      // The server gives one answer to a wrong code, an expired one, and an
+      // address that already has an account. Inventing a distinction here would
+      // hand back the enumeration oracle the API refuses to be.
+      setError('That code did not work. Ask for another and try again.');
+      setStage('code');
+    } finally {
+      setProgress('');
+    }
+  };
+
   if (stage === 'kit') {
     return <EmergencyKit email={email} recoveryKey={recoveryKey} />;
+  }
+
+  if (stage === 'code') {
+    return (
+      <main
+        id="main"
+        className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-6 py-16"
+      >
+        <Panel>
+          <h1 className="text-accent text-glow text-xl font-bold tracking-tight">
+            <span className="cursor">core --verify-address</span>
+          </h1>
+          <p className="text-muted mt-2 text-sm">
+            A six-digit code is on its way to <span className="text-fg">{email}</span>. Nothing has
+            been created yet — the account is written once the address is proved.
+          </p>
+
+          <form onSubmit={(event) => void onVerify(event)} className="mt-8 space-y-6" noValidate>
+            <Field label="the code from your email" htmlFor="signup-code">
+              <Input
+                id="signup-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                data-testid="signup-code"
+              />
+            </Field>
+
+            <Button
+              type="submit"
+              disabled={code.trim().length !== 6}
+              className="w-full"
+              data-testid="signup-verify"
+            >
+              verify and create the vault
+            </Button>
+
+            {error !== '' ? (
+              <p role="alert" className="text-danger font-mono text-xs" data-testid="signup-error">
+                <span aria-hidden="true">! </span>
+                {error}
+              </p>
+            ) : null}
+
+            <p className="text-muted font-mono text-xs leading-relaxed">
+              <span aria-hidden="true">&gt; </span>
+              No code? Check the spam folder. If this address already has a vault, the mail says so
+              instead and there is no code to enter — sign in rather than signing up.
+            </p>
+          </form>
+        </Panel>
+      </main>
+    );
   }
 
   return (
@@ -186,7 +284,9 @@ export default function SignupPage() {
           <TurnstileGate onToken={setBotToken} resetSignal={botReset} />
 
           <Button type="submit" disabled={!canSubmit} className="w-full">
-            {stage === 'working' ? `... ${progress}` : 'create vault'}
+            {stage === 'working' || stage === 'sending'
+              ? `... ${progress || 'checking the address'}`
+              : 'create vault'}
           </Button>
 
           {stage === 'working' ? (
