@@ -1078,3 +1078,48 @@ Every fallback in this codebase is now suspect in the same way: it is only ever
 exercised when the fallback path is taken, and the branch that decides is the
 one least likely to be tested. Where a capability gates a feature, there is a
 test that stubs the *broken* browser, not only the working one.
+
+## ADR-039 — The trash keeps its own promise, and has a way out
+
+**Status.** Accepted.
+
+Two things were wrong with the trash, and one of them had been on screen since
+the day it was written.
+
+**"Deleted items stay here for 30 days" was not true.** `TRASH_RETENTION_DAYS`
+was 30 and nothing read it — the constant was exported and referenced nowhere.
+Items stayed for as long as the account did. That is a sentence about privacy
+that the database was not keeping: somebody who deleted a password in March
+still had its ciphertext on the server in December, and had been told otherwise.
+
+Swept on the account's own sync now, for the same reason the share sweep is
+there: no cron. An account that never syncs never sweeps, and an account that
+never syncs is not accumulating anything either.
+
+**There was no permanent delete.** Nothing could be removed before its 30 days,
+which meant the only way to get something off the server was to wait a month —
+and, before the sweep existed, there was no way at all.
+
+**Decision.** A purge operation in sync, two confirmations in front of it, and
+only against a row that is already in the trash.
+
+That last clause caused the interesting bug, and it is why this is written down.
+
+The client queues changes keyed by item id so that repeated edits coalesce. A
+purge queued behind an unsent delete therefore **replaced** it — the server
+received a purge for an item it still believed was live, refused it, and the
+trash looked emptied on screen while every row stayed on the server. A purge is
+queued under its own key now, and the server treats an item deleted earlier in
+the same batch as trashed.
+
+Chasing that turned up something worse, unrelated to the trash. `flush` read the
+outbox, sent it, cleared what it sent, and then set `pending: 0` — but anything
+queued while the request was in flight was still there. The retry poll only runs
+while `pending > 0`, so a change made during a sync was never sent and nothing
+would ever look again. It sat until the user happened to do something else. The
+count is what is actually left now, and a non-empty queue flushes again
+immediately.
+
+**A purge takes the attachment rows and the R2 objects with it.** The blob keys
+are read before anything is deleted, because once the row is gone the key is
+gone and the bytes become unreachable, uncounted and permanent.

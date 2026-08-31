@@ -75,6 +75,9 @@ interface ItemsState {
   markUsed: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   restore: (id: string) => Promise<void>;
+  /** Permanent. Takes the item's versions and attachments with it. */
+  purge: (id: string) => Promise<void>;
+  purgeMany: (ids: readonly string[]) => Promise<void>;
   flush: () => Promise<void>;
   setOnline: (online: boolean) => void;
   reset: () => void;
@@ -483,6 +486,35 @@ export const useItems = create<ItemsState>((set, get) => ({
     await commit(set, get, { op: 'restore', id });
   },
 
+  /**
+   * Gone for good, with its versions and its attachments.
+   *
+   * The one action in this store with no way back. Removed from local state
+   * immediately rather than marked, because there is no state left to be in:
+   * every other operation here leaves a row that a later sync can reconcile,
+   * and this one leaves nothing to reconcile with.
+   */
+  purge: async (id) => {
+    set({ items: get().items.filter((item) => item.id !== id) });
+    await commit(set, get, { op: 'purge', id });
+  },
+
+  purgeMany: async (ids) => {
+    const gone = new Set(ids);
+    set({ items: get().items.filter((item) => !gone.has(item.id)) });
+
+    // `commitMany`, not `commit` in a loop. `flush` returns immediately while a
+    // sync is already running, so the loop sent the first purge and left every
+    // one after it sitting in the outbox until something else happened to
+    // flush — emptying a trash of five deleted one item and looked like it had
+    // done all five.
+    await commitMany(
+      set,
+      get,
+      ids.map((id) => ({ op: 'purge' as const, id })),
+    );
+  },
+
   flush: async () => {
     if (get().syncing) return;
 
@@ -493,18 +525,40 @@ export const useItems = create<ItemsState>((set, get) => ({
     set({ syncing: true });
     try {
       const cursor = await push(queued.map((entry) => entry.operation));
-      await offline.clearOutbox(queued.map((entry) => entry.operation.id));
+      // By the key it was stored under: a purge is queued under its own, so
+      // clearing by item id would leave it in the outbox to be sent again.
+      await offline.clearOutbox(queued.map((entry) => offline.outboxKey(entry.operation)));
       await offline.writeCursor(Math.max(get().cursor, cursor));
+
+      /*
+       * What is left, not zero.
+       *
+       * `queued` is a snapshot taken before the request. Anything enqueued
+       * while it was in flight is still in the outbox, and declaring the queue
+       * empty here stopped the retry poll from ever looking again — it only
+       * runs while `pending > 0`. The change sat there until the user happened
+       * to do something else that flushed.
+       *
+       * It is not hypothetical: emptying the trash queues a purge while the
+       * delete before it is still being sent, and the purge was never
+       * delivered. The screen said the trash was empty and every row was still
+       * on the server.
+       */
+      const remaining = (await offline.readOutbox()).length;
 
       set({
         syncing: false,
-        pending: 0,
+        pending: remaining,
         error: null,
         online: true,
         cursor: Math.max(get().cursor, cursor),
       });
+
+      // Straight away rather than waiting for the poll. This terminates: each
+      // pass sends and clears what it read, so the queue strictly shrinks.
+      if (remaining > 0) await get().flush();
     } catch {
-      await offline.recordFailure(queued.map((entry) => entry.operation.id));
+      await offline.recordFailure(queued.map((entry) => offline.outboxKey(entry.operation)));
       set({
         syncing: false,
         online: false,

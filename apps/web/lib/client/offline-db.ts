@@ -414,11 +414,29 @@ export async function enqueueOperation(operation: Operation, attempts = 0): Prom
   if (!isSupported()) return;
 
   await db().outbox.put({
-    id: operation.id,
+    id: outboxKey(operation),
     ...(await seal(operation)),
     queuedAt: Date.now(),
     attempts,
   });
+}
+
+/**
+ * What a queued operation replaces.
+ *
+ * The item id for everything except a purge, which gets a key of its own.
+ *
+ * Coalescing by item id is right for edits — only the latest state matters —
+ * and wrong for a purge, because a purge queued behind an unsent delete would
+ * replace it. The server would then receive a purge for an item it still
+ * believes is live, refuse it, and the trash would look emptied on screen while
+ * every row stayed on the server. That is what emptying a trash of two did.
+ *
+ * With a separate key both travel, in the order they were queued, and the
+ * server sees the delete before the purge that depends on it.
+ */
+export function outboxKey(operation: Operation): string {
+  return operation.op === 'purge' ? `${operation.id}:purge` : operation.id;
 }
 
 export async function readOutbox(): Promise<QueuedOperation[]> {

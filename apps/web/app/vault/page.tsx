@@ -12,6 +12,7 @@ import {
   collectTags,
   describePasswordAge,
   itemSubtitle,
+  TRASH_RETENTION_DAYS,
   orderFolders,
   passwordAgeDays,
   readBackup,
@@ -2795,6 +2796,13 @@ function InlineRename({
 
 function Trash({ items, onBack }: { items: readonly DecryptedItem[]; onBack: () => void }) {
   const restore = useItems((store) => store.restore);
+  const purge = useItems((store) => store.purge);
+  const purgeMany = useItems((store) => store.purgeMany);
+
+  // Which row is asking. One at a time, and named: a confirmation that says
+  // "are you sure" with no subject is one people answer without reading.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [emptying, setEmptying] = useState(false);
 
   return (
     <Panel className="mt-6">
@@ -2803,27 +2811,109 @@ function Trash({ items, onBack }: { items: readonly DecryptedItem[]; onBack: () 
       </h2>
       <p className="text-muted mb-6 font-mono text-xs">
         <span aria-hidden="true">&gt; </span>
-        Deleted items stay here for 30 days.
+        Deleted items are removed after {TRASH_RETENTION_DAYS} days. Until then they are still
+        stored, still encrypted, and can be brought back.
       </p>
 
       <ul className="border-line border-t" data-testid="trash-list">
         {items.map((item) => (
-          <li
-            key={item.id}
-            className="border-line flex items-center justify-between gap-3 border-b py-4"
-          >
-            <span className="text-muted truncate font-mono text-sm">{item.data.fields.title}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void restore(item.id)}
-              data-testid="restore-item"
-            >
-              restore
-            </Button>
+          <li key={item.id} className="border-line border-b py-4" data-testid="trash-row">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-muted min-w-0 flex-1 truncate font-mono text-sm">
+                {item.data.fields.title}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void restore(item.id)}
+                  data-testid="restore-item"
+                >
+                  restore
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setConfirming(confirming === item.id ? null : item.id)}
+                  className="text-danger"
+                  data-testid="purge-item"
+                >
+                  delete forever
+                </Button>
+              </div>
+            </div>
+
+            {confirming === item.id ? (
+              <div className="border-danger mt-3 border p-3" data-testid="purge-confirm">
+                <p className="text-warning font-mono text-xs leading-relaxed">
+                  <span aria-hidden="true">! </span>
+                  Delete <span className="text-fg">{item.data.fields.title}</span> and everything
+                  attached to it, permanently. There is no undo and no copy on the server — this is
+                  a vault with no password reset, and nothing here can bring it back.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setConfirming(null);
+                      void purge(item.id);
+                      toast('Deleted permanently.', { tone: 'warning' });
+                    }}
+                    className="text-danger"
+                    data-testid="purge-confirm-yes"
+                  >
+                    delete it forever
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setConfirming(null)}>
+                    keep it
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
+
+      {items.length > 0 ? (
+        <div className="mt-6">
+          {emptying ? (
+            <div className="border-danger border p-3" data-testid="empty-trash-confirm">
+              <p className="text-warning font-mono text-xs leading-relaxed">
+                <span aria-hidden="true">! </span>
+                Delete all {items.length} item(s) in the trash, permanently, with their attachments.
+                There is no undo.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEmptying(false);
+                    void purgeMany(items.map((item) => item.id));
+                    toast(`Deleted ${items.length} item(s) permanently.`, { tone: 'warning' });
+                  }}
+                  className="text-danger"
+                  data-testid="empty-trash-yes"
+                >
+                  empty it
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setEmptying(false)}>
+                  cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEmptying(true)}
+              className="text-danger"
+              data-testid="empty-trash"
+            >
+              empty the trash
+            </Button>
+          )}
+        </div>
+      ) : null}
 
       <Button
         type="button"

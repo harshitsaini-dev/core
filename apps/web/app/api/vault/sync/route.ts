@@ -1,10 +1,11 @@
-import { folders, itemVersions, vaultItems } from '@core/db';
-import { ENVELOPE_PATTERN, unsafeAsEncrypted } from '@core/shared';
+import { attachments, folders, itemVersions, vaultItems } from '@core/db';
+import { ENVELOPE_PATTERN, TRASH_RETENTION_DAYS, unsafeAsEncrypted } from '@core/shared';
 import type { SyncedFolder, SyncedItem } from '@core/shared';
-import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { getRequestContext } from '@/lib/server/context';
+import type { RequestContext } from '@/lib/server/context';
 import { checkLimit } from '@/lib/server/rate-limit';
 import { authFailure, badRequest, ok, serverError, tooManyRequests } from '@/lib/server/responses';
 import { requireSession } from '@/lib/server/session-guard';
@@ -78,6 +79,23 @@ const restoreSchema = z.object({
 });
 
 /**
+ * Gone, rather than in the trash.
+ *
+ * Separate from `delete` on purpose. Everything else in this file is
+ * recoverable, and the trash exists because there is no password reset here and
+ * an accidental delete would be the second way to lose data for good. This is
+ * the one operation that removes that safety net, so it is its own verb and the
+ * screen that sends it asks twice.
+ *
+ * Only a row already in the trash can be purged. Skipping that check would let
+ * a bug — or a replayed request — take a live item straight out of the vault.
+ */
+const purgeSchema = z.object({
+  op: z.literal('purge'),
+  id: z.uuid(),
+});
+
+/**
  * The contents an edit replaced.
  *
  * Sent by the client alongside the change, because the server cannot read
@@ -97,6 +115,7 @@ const pushSchema = z.object({
         upsertSchema,
         deleteSchema,
         restoreSchema,
+        purgeSchema,
         versionSchema,
         folderUpsertSchema,
         folderDeleteSchema,
@@ -113,6 +132,105 @@ const pushSchema = z.object({
  * cannot use the vault as free storage.
  */
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Remove items and everything hanging off them.
+ *
+ * Order matters and the reason is storage rather than tidiness: the attachment
+ * rows are read before anything is deleted, because once the row is gone the
+ * object key is gone with it and the bytes in R2 become unreachable and
+ * uncounted — a file nobody can see, nobody can delete, and the quota does not
+ * know about.
+ *
+ * The objects go last. If that fails, what is left behind is storage; the other
+ * order leaves rows pointing at nothing, which is a file that appears to exist
+ * and cannot be opened.
+ */
+/**
+ * Drop what has been in the trash longer than it says it keeps things.
+ *
+ * The trash screen has always said "deleted items stay here for 30 days" and
+ * `TRASH_RETENTION_DAYS` has always been 30. Nothing read it. Items sat there
+ * for as long as the account existed, which made the sentence on screen a
+ * promise about privacy that the database was not keeping — somebody who
+ * deleted a password in March still had its ciphertext on the server in
+ * December.
+ *
+ * Run on the account's own sync rather than on a schedule, for the same reason
+ * the share sweep is: there is no cron here. An account that never syncs never
+ * sweeps, and an account that never syncs is not accumulating anything either.
+ */
+async function sweepTrash(
+  db: RequestContext['db'],
+  files: RequestContext['files'],
+  userId: string,
+  now: Date,
+): Promise<void> {
+  const cutoff = new Date(now.getTime() - TRASH_RETENTION_DAYS * 86_400_000);
+
+  const stale = await db
+    .select({ id: vaultItems.id })
+    .from(vaultItems)
+    .where(
+      and(
+        eq(vaultItems.userId, userId),
+        isNotNull(vaultItems.deletedAt),
+        lt(vaultItems.deletedAt, cutoff),
+      ),
+    );
+
+  await purgeItems(
+    db,
+    files,
+    userId,
+    stale.map((row) => row.id),
+  );
+}
+
+async function purgeItems(
+  db: RequestContext['db'],
+  files: RequestContext['files'],
+  userId: string,
+  ids: readonly string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+
+  const blobs = await db
+    .select({ blobKey: attachments.blobKey })
+    .from(attachments)
+    .where(inArray(attachments.itemId, [...ids]));
+
+  /*
+   * The children go explicitly as well as by cascade.
+   *
+   * Not load-bearing, and said so rather than left looking like it is: the
+   * schema declares `onDelete: cascade` on both, D1 and miniflare both enforce
+   * it, and deleting these two lines breaks no test — checked.
+   *
+   * They stay because of what the failure would look like if an environment
+   * ever did not enforce it. The blob keys were read above and the objects are
+   * deleted below from that list; an unenforced cascade leaves attachment rows
+   * pointing at objects this function has already removed, and a quota that
+   * counts files nobody can open. Silent, and only visible as a number that
+   * will not go down.
+   */
+  await db.delete(attachments).where(inArray(attachments.itemId, [...ids]));
+  await db.delete(itemVersions).where(inArray(itemVersions.itemId, [...ids]));
+
+  await db
+    .delete(vaultItems)
+    .where(and(inArray(vaultItems.id, [...ids]), eq(vaultItems.userId, userId)));
+
+  for (const blob of blobs) {
+    try {
+      await files.delete(blob.blobKey);
+    } catch {
+      // The row is already gone. A failure here leaves bytes in the bucket that
+      // nothing references, which is worth neither a 500 nor abandoning the
+      // rest of the batch.
+    }
+  }
+}
 
 function toWire(row: typeof vaultItems.$inferSelect): SyncedItem {
   return {
@@ -268,9 +386,12 @@ export async function POST(request: NextRequest): Promise<Response> {
     return badRequest();
   }
 
-  const { db } = context;
+  const { db, files } = context;
   const userId = current.session.userId;
   const now = new Date();
+
+  // Cheap, and this is the one route an active account is guaranteed to hit.
+  await sweepTrash(db, files, userId, now);
 
   // Which of the named ids this user actually owns, per table. Everything below
   // is filtered through these, so an operation naming another user's row is
@@ -296,7 +417,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     itemIds.length === 0
       ? Promise.resolve([])
       : db
-          .select({ id: vaultItems.id })
+          .select({ id: vaultItems.id, deletedAt: vaultItems.deletedAt })
           .from(vaultItems)
           .where(and(eq(vaultItems.userId, userId), inArray(vaultItems.id, itemIds))),
     folderIds.length === 0
@@ -308,6 +429,24 @@ export async function POST(request: NextRequest): Promise<Response> {
   ]);
 
   const owned = new Set(ownedItems.map((row) => row.id));
+
+  /*
+   * Which of them are in the trash.
+   *
+   * A purge is only allowed against one of these. The schema comment claimed
+   * this before the check existed, and a test written to hold it to that found
+   * a live item being deleted outright — no trash, no undo, from a single
+   * malformed or replayed request.
+   */
+  const trashed = new Set(ownedItems.filter((row) => row.deletedAt !== null).map((row) => row.id));
+
+  // An item deleted earlier in this same batch counts as trashed. The client
+  // queues the delete and the purge under separate keys and sends them
+  // together, so reading only the stored `deletedAt` would refuse a purge for a
+  // row this very request soft-deletes a few operations earlier.
+  for (const operation of operations) {
+    if (operation.op === 'delete') trashed.add(operation.id);
+  }
   const ownedFolderIds = new Set(ownedFolders.map((row) => row.id));
 
   for (const operation of operations) {
@@ -410,6 +549,15 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     if (!owned.has(operation.id)) continue;
+
+    if (operation.op === 'purge') {
+      // Silently, like every other operation here that names something the
+      // caller may not touch: refusing would confirm the id is real.
+      if (trashed.has(operation.id)) {
+        await purgeItems(db, files, userId, [operation.id]);
+      }
+      continue;
+    }
 
     await db
       .update(vaultItems)

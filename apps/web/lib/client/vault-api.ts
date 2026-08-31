@@ -265,6 +265,7 @@ export type Operation =
     }
   | { op: 'delete'; id: string }
   | { op: 'restore'; id: string }
+  | { op: 'purge'; id: string }
   | { op: 'version'; id: string; itemId: string; dataEnc: string };
 
 /** Encrypt an item into the operation that will store it. */
