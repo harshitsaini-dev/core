@@ -202,6 +202,19 @@ export async function writeCache(items: readonly SyncedItem[]): Promise<void> {
 // Cached folders
 // ---------------------------------------------------------------------------
 
+/**
+ * Forget cached items entirely.
+ *
+ * For a purge, which is the only operation with no resulting row. Everything
+ * else here leaves something behind that a later sync can reconcile; this one
+ * leaves nothing, and a cache entry that outlives the item is a copy of a
+ * secret somebody asked to be rid of.
+ */
+export async function forgetCached(ids: readonly string[]): Promise<void> {
+  if (!isSupported() || ids.length === 0) return;
+  await db().cache.bulkDelete([...ids]);
+}
+
 export async function readFolderCache(): Promise<SyncedFolder[]> {
   if (!isSupported()) return [];
 

@@ -140,6 +140,49 @@ test.describe('permanent delete', () => {
     await expect(page.getByTestId('attachment-quota')).toContainText('0 KB of');
   });
 
+  test('stays gone after a reload, not just on screen', async ({ page }) => {
+    /*
+     * The test the first version of this feature did not have, and the bug it
+     * would have caught.
+     *
+     * A purge is not an upsert and not a delete, so the code that turns an
+     * operation into a cached row treated it as a restore: it wrote the item
+     * back into IndexedDB with `deletedAt: null`. Permanently deleting a note
+     * removed it from the screen, removed it from the server, and left a
+     * healthy copy on the device that came back on the next load — restored,
+     * not even in the trash.
+     *
+     * Every earlier assertion here looked at the screen or the server within
+     * the same page. Neither could see it.
+     */
+    await openVault(page, 'trash-reload');
+    await makeItem(page, 'Doomed');
+    await trashItem(page, 'Doomed');
+    await openTrash(page);
+
+    await page.getByTestId('purge-item').click();
+    await page.getByTestId('purge-confirm-yes').click();
+    await expect(page.getByTestId('trash-row')).toHaveCount(0);
+
+    // Straight from IndexedDB, which is what a reload reads. A row here is the
+    // item coming back whatever the server says.
+    const cached = await page.evaluate(async () => {
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('core-vault');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      return new Promise<number>((resolve) => {
+        const count = database.transaction('cache').objectStore('cache').count();
+        count.onsuccess = () => resolve(count.result);
+        count.onerror = () => resolve(-1);
+      });
+    });
+
+    expect(cached, 'the purged item is still cached on the device').toBe(0);
+  });
+
   test('empties the whole trash at once', async ({ page }) => {
     await openVault(page, 'trash-empty');
     await makeItem(page, 'One');

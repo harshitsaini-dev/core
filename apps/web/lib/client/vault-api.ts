@@ -189,6 +189,23 @@ export function operationToSynced(operation: Operation, existing?: SyncedItem): 
   // ids ever collided.
   if (operation.op === 'version') return null;
 
+  /*
+   * A purge has no cached form, because there is nothing left to cache.
+   *
+   * Falling through to the branch below treated it as a restore — it is not an
+   * `upsert` and not a `delete`, so `deletedAt` was set to `null` and the row
+   * was written back to the offline cache as a live item. The result was that
+   * "delete forever" removed the item from the screen, deleted it on the
+   * server, and left a healthy copy in IndexedDB that came back on the next
+   * load. Notes deleted permanently reappeared, restored.
+   *
+   * The store short-circuits purges before calling this now, so removing the
+   * line below breaks no test — checked. It stays because the wrong answer here
+   * is not "nothing happens", it is "the item is restored", and that is a bad
+   * thing for a function to be one caller away from doing.
+   */
+  if (operation.op === 'purge') return null;
+
   if (operation.op !== 'upsert') {
     if (!existing) return null;
     return {

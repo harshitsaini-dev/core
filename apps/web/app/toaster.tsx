@@ -67,17 +67,24 @@ export function Toaster() {
             >
               {entry.action.label}
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => dismiss(entry.id)}
-              aria-label="dismiss"
-              data-testid="toast-dismiss"
-              className="shrink-0"
-            >
-              ×
-            </button>
-          )}
+          ) : null}
+
+          {/*
+            Always, including on a toast that offers an action.
+            It used to be the `else` of that branch, so `Moved to trash — undo`
+            had exactly two exits: undo the thing you meant to do, or reload the
+            page. Somebody who simply wanted the message gone had to reverse
+            their own delete to get rid of it.
+          */}
+          <button
+            type="button"
+            onClick={() => dismiss(entry.id)}
+            aria-label="dismiss"
+            data-testid="toast-dismiss"
+            className="shrink-0"
+          >
+            ×
+          </button>
         </div>
       ))}
     </div>

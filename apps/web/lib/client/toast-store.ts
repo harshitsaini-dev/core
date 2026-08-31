@@ -40,6 +40,14 @@ interface ToastState {
 /** How long a toast stays before it withdraws itself. */
 export const TOAST_LIFETIME_MS = 4000;
 
+/**
+ * Longer, for the ones offering a way back.
+ *
+ * Three times the plain lifetime: enough to read what happened, work out
+ * whether it was what you meant, and reach for `undo`.
+ */
+export const ACTION_TOAST_LIFETIME_MS = 12_000;
+
 /** How many are shown at once. Older ones are dropped, not queued. */
 const MAX_VISIBLE = 3;
 
@@ -55,12 +63,22 @@ export const useToasts = create<ToastState>((set, get) => ({
     // remembers what it refers to.
     set({ toasts: [...get().toasts, toast].slice(-MAX_VISIBLE) });
 
-    // A toast with an action stays until it is answered. Withdrawing an "undo"
-    // on a timer means the only way to reverse something disappears while the
-    // person is still reading what happened.
-    if (!options.action) {
-      setTimeout(() => get().dismiss(id), TOAST_LIFETIME_MS);
-    }
+    /*
+     * A toast with an action gets longer, not forever.
+     *
+     * Withdrawing an "undo" after four seconds means the only way to reverse
+     * something disappears while the person is still reading what happened,
+     * which is why it used to have no timer at all. But "no timer" turned out
+     * to mean "until the page is reloaded": the action toast shows its action
+     * and nothing else, so the only ways to clear `Moved to trash — undo` were
+     * to undo the thing you meant to do, or to refresh.
+     *
+     * Long enough to read, decide, and reach for it. Then gone, like the rest.
+     */
+    setTimeout(
+      () => get().dismiss(id),
+      options.action ? ACTION_TOAST_LIFETIME_MS : TOAST_LIFETIME_MS,
+    );
 
     return id;
   },

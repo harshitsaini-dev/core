@@ -68,6 +68,28 @@ test.describe('toasts', () => {
     await expect(page.getByTestId('toast')).toHaveCount(0);
   });
 
+  test('a toast offering undo can also just be closed', async ({ page }) => {
+    /*
+     * The dismiss button used to be the `else` of the action button, so a toast
+     * with an action had exactly one control. `Moved to trash — undo` could
+     * therefore be cleared in two ways: undo the thing you meant to do, or
+     * reload the page. It also had no timer, on the reasoning that withdrawing
+     * an undo while somebody is reading is worse — which is true, and which
+     * made "no timer" mean "forever".
+     */
+    await openVault(page, 'toast-undo-dismiss');
+    await makeLogin(page, 'Precious', { password: 'secret' });
+
+    await page.getByTestId('delete-item').click();
+    await expect(page.getByTestId('toast-action')).toBeVisible();
+
+    await page.getByTestId('toast-dismiss').click();
+    await expect(page.getByTestId('toast')).toHaveCount(0);
+
+    // Closing the message is not undoing the delete.
+    await expect(page.getByTestId('item-row').filter({ hasText: 'Precious' })).toHaveCount(0);
+  });
+
   test('offers undo after a delete, and the undo works', async ({ page }) => {
     await openVault(page, 'toast-undo');
     await makeLogin(page, 'Precious', { password: 'secret' });

@@ -589,6 +589,12 @@ async function commit(set: Setter, get: Getter, operation: Operation): Promise<v
       rawFolders.set(operation.id, cached);
       await offline.writeFolderCache([cached]);
     }
+  } else if (operation.op === 'purge') {
+    // Out of the in-memory map and out of IndexedDB. `operationToSynced`
+    // returns nothing for a purge, so without this the row simply stayed
+    // where it was and came back on the next load.
+    raw.delete(operation.id);
+    await offline.forgetCached([operation.id]);
   } else {
     const cached = operationToSynced(operation, raw.get(operation.id));
     if (cached) {
@@ -619,6 +625,11 @@ async function commitMany(set: Setter, get: Getter, operations: Operation[]): Pr
         rawFolders.set(operation.id, cached);
         await offline.writeFolderCache([cached]);
       }
+    } else if (operation.op === 'purge') {
+      // Same as the single path. Emptying the trash goes through here, and it
+      // is the one that put every purged item back on the next load.
+      raw.delete(operation.id);
+      await offline.forgetCached([operation.id]);
     } else {
       const cached = operationToSynced(operation, raw.get(operation.id));
       if (cached) {

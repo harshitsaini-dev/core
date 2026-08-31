@@ -1183,3 +1183,38 @@ the header.
 The rule is two small functions rather than an `if` in a route, and both are
 unit-tested in both directions — because the danger of a flag like this is not
 what it does when it is on, it is being on when nobody meant it to be.
+
+## ADR-041 — Two bugs the trash work shipped with
+
+**Status.** Accepted. Written because both were reported by the first person to
+use the feature, and both had tests around them that could not see them.
+
+**A permanently deleted item came back.** `operationToSynced` turns a queued
+operation into the row to cache. It handled `upsert` and then treated
+*everything else* as delete-or-restore: `deletedAt: op === 'delete' ? now :
+null`. A purge is neither, so it fell into the second branch and was written
+back into IndexedDB with `deletedAt: null` — a live item. "Delete forever"
+removed it from the screen, removed it from the server, and left a healthy copy
+on the device that reappeared on the next load, restored and not even in the
+trash.
+
+Six tests covered the purge and none of them saw it, because all six looked at
+either the screen or the server within one page. The new one reads IndexedDB
+directly, which is what a reload reads.
+
+The lesson generalises: a store with a local cache has three places a change can
+land, and a test that checks two of them proves nothing about the third.
+
+**A toast with an undo never went away.** It had no timer, deliberately —
+withdrawing an "undo" after four seconds means the only way back disappears
+while somebody is still reading. And the dismiss button was written as the
+`else` of the action button, so a toast with an action had exactly one control.
+
+Together those made `Moved to trash — undo` clearable in two ways: undo the
+thing you meant to do, or reload the page.
+
+Both halves were wrong in the same direction. Action toasts now last three times
+as long as the rest — long enough to read, decide, and reach for it — and then
+go, and the dismiss button is always there. The original reasoning was right
+about the four seconds and wrong to conclude "forever" from it.
+
